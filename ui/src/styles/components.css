@@ -3,7 +3,6 @@
  * CompactUI principles: 30% less whitespace than typical dashboards.
  */
 
-/* --- Layout --- */
 .pae-layout {
   display: grid;
   grid-template-columns: 240px 1fr;
@@ -35,7 +34,6 @@
   background: var(--bg-primary);
 }
 
-/* --- Cards --- */
 .pae-card {
   background: var(--bg-card);
   border: 1px solid var(--border-primary);
@@ -45,9 +43,7 @@
   transition: box-shadow var(--transition-fast);
 }
 
-.pae-card:hover {
-  box-shadow: var(--shadow-md);
-}
+.pae-card:hover { box-shadow: var(--shadow-md); }
 
 .pae-card-header {
   display: flex;
@@ -64,20 +60,10 @@
   letter-spacing: 0.05em;
 }
 
-/* --- Dashboard Grid --- */
-.pae-grid {
-  display: grid;
-  gap: var(--space-4);
-}
-
+.pae-grid { display: grid; gap: var(--space-4); }
 .pae-grid-2 { grid-template-columns: repeat(2, 1fr); }
 .pae-grid-3 { grid-template-columns: repeat(3, 1fr); }
 .pae-grid-4 { grid-template-columns: repeat(4, 1fr); }
-
-/* --- Metric Display --- */
-.pae-metric {
-  font-family: var(--font-sans);
-}
 
 .pae-metric-value {
   font-size: var(--font-size-2xl);
@@ -96,7 +82,6 @@
 .pae-metric-positive { color: var(--color-positive); }
 .pae-metric-negative { color: var(--color-negative); }
 
-/* --- Data Table --- */
 .pae-table {
   width: 100%;
   border-collapse: collapse;
@@ -118,19 +103,11 @@
 .pae-table td {
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--border-primary);
-  color: var(--text-primary);
 }
 
-.pae-table tr:hover td {
-  background: var(--bg-hover);
-}
+.pae-table tr:hover td { background: var(--bg-hover); }
+.pae-table td.numeric { text-align: right; font-variant-numeric: tabular-nums; }
 
-.pae-table td.numeric {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-/* --- Disclaimer --- */
 .pae-disclaimer {
   position: fixed;
   bottom: 0;
@@ -145,7 +122,6 @@
   z-index: var(--z-sticky);
 }
 
-/* --- Theme Toggle --- */
 .pae-theme-toggle {
   background: none;
   border: 1px solid var(--border-primary);
@@ -162,21 +138,12 @@
   color: var(--text-primary);
 }
 
-/* --- Responsive --- */
 @media (max-width: 1024px) {
-  .pae-layout {
-    grid-template-columns: 1fr;
-  }
-  .pae-sidebar {
-    display: none;
-  }
-  .pae-grid-3, .pae-grid-4 {
-    grid-template-columns: repeat(2, 1fr);
-  }
+  .pae-layout { grid-template-columns: 1fr; }
+  .pae-sidebar { display: none; }
+  .pae-grid-3, .pae-grid-4 { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 640px) {
-  .pae-grid-2, .pae-grid-3, .pae-grid-4 {
-    grid-template-columns: 1fr;
-  }
+  .pae-grid-2, .pae-grid-3, .pae-grid-4 { grid-template-columns: 1fr; }
 }
