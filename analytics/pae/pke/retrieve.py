@@ -11,7 +11,6 @@ from dataclasses import dataclass
 
 @dataclass
 class RetrievalResult:
-    """A passage retrieved from the knowledge base."""
     chunk_id: str
     source: str
     author: str
@@ -28,19 +27,8 @@ def retrieve_by_theme(
 
     Stub implementation. Full version uses sqlite-vec for
     vector similarity search with theme filtering.
-
-    Args:
-        theme: One of the PKE theme categories.
-        top_k: Number of passages to return.
-
-    Returns:
-        List of RetrievalResult sorted by relevance.
     """
     # TODO: Implement sqlite-vec vector search
-    # 1. Load user's embedded knowledge base
-    # 2. Filter by theme
-    # 3. Compute cosine similarity with context embedding
-    # 4. Return top-k results
     return []
 
 
@@ -53,20 +41,8 @@ def retrieve_by_context(
 
     Used by the Decision Intelligence Layer to surface relevant
     knowledge when the user is making decisions.
-
-    Args:
-        context_text: Description of current analytical context.
-        themes: Optional theme filter.
-        top_k: Number of passages to return.
-
-    Returns:
-        List of RetrievalResult sorted by relevance.
     """
     # TODO: Implement semantic search
-    # 1. Embed context_text using local model (all-MiniLM-L6-v2)
-    # 2. Search sqlite-vec for nearest neighbors
-    # 3. Optionally filter by themes
-    # 4. Return top-k
     return []
 
 
