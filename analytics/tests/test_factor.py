@@ -7,14 +7,12 @@ from pae.models.factor import decompose
 def test_decompose_basic():
     """Test basic factor decomposition with synthetic data."""
     np.random.seed(42)
-    n = 60  # 5 years of monthly data
+    n = 60
 
-    # Synthetic factor returns
     mkt = np.random.normal(0.008, 0.04, n)
     smb = np.random.normal(0.002, 0.03, n)
     hml = np.random.normal(0.003, 0.025, n)
 
-    # Portfolio returns = alpha + beta_mkt * MKT + beta_smb * SMB + noise
     alpha = 0.001
     portfolio = alpha + 1.2 * mkt + 0.3 * smb + 0.1 * hml + np.random.normal(0, 0.01, n)
 
