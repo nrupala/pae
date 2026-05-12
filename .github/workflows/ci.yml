@@ -1,1 +1,69 @@
- 
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  engine:
+    name: Rust Engine
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            engine/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('engine/Cargo.lock') }}
+
+      - name: Build
+        working-directory: engine
+        run: cargo build --release
+
+      - name: Test
+        working-directory: engine
+        run: cargo test
+
+      - name: Clippy
+        working-directory: engine
+        run: cargo clippy -- -D warnings
+analytics:
+    name: Python Analytics
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: analytics
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        working-directory: analytics
+        run: ruff check .
+
+      - name: Type check
+        working-directory: analytics
+        run: mypy pae/ --ignore-missing-imports
+
+      - name: Test
+        working-directory: analytics
+        run: pytest tests/ -v
+EOF
