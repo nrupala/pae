@@ -1,7 +1,6 @@
 /* PAE Design Tokens
  * CSS Custom Properties for theming.
  * Light mode is default. Dark mode via [data-theme="dark"] on <html>.
- * System preference detection in themes.css.
  * Total CSS target: < 50KB across all files.
  */
 
@@ -71,7 +70,6 @@
   --color-info: #2563eb;
 }
 
-/* Tabular numbers for financial data alignment */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
