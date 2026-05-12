@@ -27,7 +27,6 @@ class PaeDashboard extends HTMLElement {
           Portfolio Dashboard
         </h2>
 
-        <!-- Key Metrics Row -->
         <div class="pae-grid pae-grid-4" style="margin-bottom:var(--space-6)">
           <div class="pae-card">
             <div class="pae-metric">
@@ -55,7 +54,6 @@ class PaeDashboard extends HTMLElement {
           </div>
         </div>
 
-        <!-- Charts Row -->
         <div class="pae-grid pae-grid-2" style="margin-bottom:var(--space-6)">
           <div class="pae-card">
             <div class="pae-card-header">
@@ -71,7 +69,6 @@ class PaeDashboard extends HTMLElement {
           </div>
         </div>
 
-        <!-- Holdings Table -->
         <div class="pae-card">
           <div class="pae-card-header">
             <span class="pae-card-title">Holdings</span>
@@ -96,7 +93,6 @@ class PaeDashboard extends HTMLElement {
           </table>
         </div>
 
-        <!-- Carry Summary (for leveraged portfolios) -->
         <div class="pae-card" style="margin-top:var(--space-4)">
           <div class="pae-card-header">
             <span class="pae-card-title">Margin Carry Analysis</span>
