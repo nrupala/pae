@@ -1,6 +1,5 @@
 # PAE Local Development Stack
 # `docker compose up` for full local environment.
-# Uses host networking for easy Docker -> VM migration.
 
 services:
   engine:
@@ -17,7 +16,6 @@ services:
       - pae-data:/app/data
     restart: unless-stopped
 
-  # Lightweight static file server for UI during development
   ui:
     image: nginx:alpine
     ports:
