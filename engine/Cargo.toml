@@ -1,0 +1,59 @@
+[package]
+name = "pae-engine"
+version = "0.1.0"
+edition = "2021"
+authors = ["Nrupal Akolkar <nrupalakolkar@gmail.com>"]
+description = "PAE Risk Engine - High-performance portfolio analytics"
+license = "AGPL-3.0"
+repository = "https://github.com/nrupala/pae"
+
+[dependencies]
+# Web framework
+axum = { version = "0.8", features = ["json", "ws"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Cryptography
+argon2 = "0.5"
+aes-gcm = "0.10"
+rand = "0.8"
+sha2 = "0.10"
+base64 = "0.22"
+
+# Data
+arrow = { version = "53", features = ["json"] }
+parquet = "53"
+
+# Numerics
+ndarray = "0.16"
+ndarray-stats = "0.6"
+statrs = "0.17"
+
+# Utilities
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+thiserror = "2"
+anyhow = "1"
+dotenvy = "0.15"
+
+[dev-dependencies]
+axum-test = "16"
+tokio-test = "0.4"
+approx = "0.5"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[[bin]]
+name = "pae-engine"
+path = "src/main.rs"
