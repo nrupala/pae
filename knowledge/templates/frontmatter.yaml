@@ -1,0 +1,24 @@
+# PAE Personal Knowledge Engine - Document Frontmatter Template
+#
+# Add this YAML block to the top of each Markdown file before ingestion.
+# The PKE ingestion pipeline uses these fields for indexing and retrieval.
+#
+# Example:
+# ---
+# source: "Warren Buffett - 2008 Shareholder Letter"
+# author: "Warren Buffett"
+# date: "2009-02-27"
+# themes: [risk, regime, leverage, temperament]
+# ---
+
+# Required fields:
+source: ""        # Full name of the document
+author: ""        # Author name
+date: ""          # Publication or writing date (YYYY-MM-DD)
+
+# Optional fields:
+themes: []        # One or more of:
+                  #   risk, valuation, behavioral_bias, capital_allocation,
+                  #   regime_analysis, decision_framework, quantitative_method,
+                  #   macro_economics, leadership, general
+notes: ""         # Your personal annotation about this document
