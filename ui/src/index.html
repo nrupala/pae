@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PAE - Personal Analytics Engine</title>
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="styles/components.css">
+  <link rel="stylesheet" href="styles/themes.css">
+  <style>
+    /* Critical inline styles for instant first paint */
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <pae-app></pae-app>
+
+  <!-- Disclaimer: first-class UI component, cannot be permanently dismissed -->
+  <pae-disclaimer></pae-disclaimer>
+
+  <script type="module" src="components/pae-app.js"></script>
+  <script type="module" src="components/pae-disclaimer.js"></script>
+  <script type="module" src="components/pae-dashboard.js"></script>
+  <script type="module" src="components/pae-chart.js"></script>
+</body>
+</html>
