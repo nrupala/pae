@@ -1,0 +1,182 @@
+/* PAE Component Styles
+ * Minimal, purpose-built. No framework. < 50KB total CSS target.
+ * CompactUI principles: 30% less whitespace than typical dashboards.
+ */
+
+/* --- Layout --- */
+.pae-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  grid-template-rows: 56px 1fr;
+  min-height: 100vh;
+}
+
+.pae-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-6);
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-primary);
+  height: 56px;
+}
+
+.pae-sidebar {
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-primary);
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+.pae-main {
+  padding: var(--space-6);
+  overflow-y: auto;
+  background: var(--bg-primary);
+}
+
+/* --- Cards --- */
+.pae-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition-fast);
+}
+
+.pae-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.pae-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.pae-card-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* --- Dashboard Grid --- */
+.pae-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.pae-grid-2 { grid-template-columns: repeat(2, 1fr); }
+.pae-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.pae-grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+/* --- Metric Display --- */
+.pae-metric {
+  font-family: var(--font-sans);
+}
+
+.pae-metric-value {
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  line-height: var(--line-height-tight);
+}
+
+.pae-metric-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  margin-top: var(--space-1);
+}
+
+.pae-metric-positive { color: var(--color-positive); }
+.pae-metric-negative { color: var(--color-negative); }
+
+/* --- Data Table --- */
+.pae-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.pae-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 2px solid var(--border-primary);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pae-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-primary);
+  color: var(--text-primary);
+}
+
+.pae-table tr:hover td {
+  background: var(--bg-hover);
+}
+
+.pae-table td.numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Disclaimer --- */
+.pae-disclaimer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border-secondary);
+  padding: var(--space-2) var(--space-6);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  text-align: center;
+  z-index: var(--z-sticky);
+}
+
+/* --- Theme Toggle --- */
+.pae-theme-toggle {
+  background: none;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  transition: all var(--transition-fast);
+}
+
+.pae-theme-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* --- Responsive --- */
+@media (max-width: 1024px) {
+  .pae-layout {
+    grid-template-columns: 1fr;
+  }
+  .pae-sidebar {
+    display: none;
+  }
+  .pae-grid-3, .pae-grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .pae-grid-2, .pae-grid-3, .pae-grid-4 {
+    grid-template-columns: 1fr;
+  }
+}
