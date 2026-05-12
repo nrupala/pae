@@ -27,31 +27,21 @@ ENV APP_ROOT=/app
 ENV PAE_ENGINE_PORT=3001
 ENV PAE_UI_PORT=3000
 
-# Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR ${APP_ROOT}
 
-# Copy Rust binary
 COPY --from=engine-builder /build/engine/target/release/pae-engine ./bin/pae-engine
-
-# Copy Python analytics
 COPY --from=analytics /app/analytics ./analytics/
 COPY --from=analytics /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-
-# Copy UI static files
 COPY ui/src/ ./ui/
-
-# Copy knowledge templates
 COPY knowledge/ ./knowledge/
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl -f http://localhost:${PAE_ENGINE_PORT}/health || exit 1
 
 EXPOSE ${PAE_ENGINE_PORT} ${PAE_UI_PORT}
 
-# Start engine (UI served separately or via reverse proxy)
 CMD ["./bin/pae-engine"]
