@@ -1,0 +1,53 @@
+# Rust
+engine/target/
+**/*.rs.bk
+
+# Python
+analytics/__pycache__/
+analytics/**/__pycache__/
+analytics/.venv/
+analytics/*.egg-info/
+analytics/dist/
+analytics/build/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Node/TypeScript
+ui/node_modules/
+ui/dist/
+ui/.cache/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Data (user-generated, never committed)
+data/
+*.db
+*.sqlite
+*.parquet
+
+# Secrets
+*.pem
+*.key
+*.p12
+
+# Knowledge base (user content, never committed)
+knowledge/content/
