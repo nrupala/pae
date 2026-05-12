@@ -73,7 +73,6 @@ mod tests {
 
     #[test]
     fn test_encrypt_decrypt_roundtrip() {
-        // Generate a random 32-byte key for testing
         let mut key = [0u8; 32];
         OsRng.fill_bytes(&mut key);
         let key_b64 = B64.encode(key);
