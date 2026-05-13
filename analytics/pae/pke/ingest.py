@@ -29,6 +29,8 @@ THEMES = [
 
 @dataclass
 class KnowledgeChunk:
+    """A single passage from the user's knowledge base."""
+
     chunk_id: str
     source: str
     author: str
@@ -40,10 +42,13 @@ class KnowledgeChunk:
 
 @dataclass
 class IngestionResult:
+    """Result of ingesting a document."""
+
     source_file: str
     chunks_created: int
     themes_detected: list[str]
     errors: list[str]
+    chunks: list[KnowledgeChunk] = field(default_factory=list)
 
 
 def parse_frontmatter(text: str) -> tuple[dict, str]:
@@ -69,7 +74,7 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
     return metadata, body
 
 
-def chunk_text(text: str, max_tokens: int = 400, overlap: int = 50) -> list[str]:
+def chunk_text(text: str, max_tokens: int = 400) -> list[str]:
     """Split text into semantic chunks at paragraph boundaries."""
     paragraphs = re.split(r"\n\s*\n", text.strip())
     chunks: list[str] = []
@@ -112,6 +117,29 @@ def generate_chunk_id(source: str, text: str) -> str:
     return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 
+def classify_themes(text: str) -> list[str]:
+    """Auto-classify a chunk into themes based on keyword matching.
+
+    Stub implementation. Full version uses a local zero-shot classifier.
+    """
+    text_lower = text.lower()
+    detected = []
+    keyword_map = {
+        "risk": ["risk", "volatility", "drawdown", "var", "loss"],
+        "valuation": ["valuation", "price", "earnings", "p/e", "multiple"],
+        "behavioral_bias": ["bias", "anchoring", "overconfidence", "fear", "greed"],
+        "capital_allocation": ["allocation", "capital", "deploy", "dividend", "buyback"],
+        "regime_analysis": ["regime", "cycle", "recession", "expansion", "crisis"],
+        "decision_framework": ["decision", "framework", "process", "checklist"],
+        "quantitative_method": ["regression", "factor", "correlation", "monte carlo"],
+        "macro_economics": ["inflation", "interest rate", "gdp", "unemployment"],
+    }
+    for theme, keywords in keyword_map.items():
+        if any(kw in text_lower for kw in keywords):
+            detected.append(theme)
+    return detected if detected else ["general"]
+
+
 def ingest_markdown(file_path: Path) -> IngestionResult:
     """Ingest a Markdown file into knowledge chunks."""
     errors: list[str] = []
@@ -130,7 +158,7 @@ def ingest_markdown(file_path: Path) -> IngestionResult:
     source = metadata.get("source", file_path.stem)
     author = metadata.get("author", "Unknown")
     date = metadata.get("date", "")
-    themes = metadata.get("themes", ["general"])
+    themes = metadata.get("themes", [])
     if isinstance(themes, str):
         themes = [themes]
 
@@ -141,21 +169,27 @@ def ingest_markdown(file_path: Path) -> IngestionResult:
         if len(ct.split()) < 10:
             continue
 
+        chunk_themes = themes if themes else classify_themes(ct)
         chunk = KnowledgeChunk(
             chunk_id=generate_chunk_id(source, ct),
             source=source,
             author=author,
             date=date,
-            themes=themes,
+            themes=chunk_themes,
             text=ct,
         )
         chunks.append(chunk)
 
+    all_themes = set()
+    for c in chunks:
+        all_themes.update(c.themes)
+
     return IngestionResult(
         source_file=str(file_path),
         chunks_created=len(chunks),
-        themes_detected=list(set(themes)),
+        themes_detected=sorted(all_themes),
         errors=errors,
+        chunks=chunks,
     )
 
 
