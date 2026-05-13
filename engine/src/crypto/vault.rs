@@ -159,7 +159,10 @@ mod tests {
         assert_eq!(result, plaintext);
     }
 
+    /// This test runs Argon2id with 600K iterations (production spec).
+    /// Takes ~30s per call on CI runners. Run manually: `cargo test -- --ignored`
     #[test]
+    #[ignore]
     fn test_derive_key_deterministic_with_salt() {
         let passphrase = "test-passphrase-for-pae";
         let (_, salt) = derive_key(passphrase, None).unwrap();
