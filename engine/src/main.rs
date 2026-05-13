@@ -11,6 +11,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 mod api;
 mod crypto;
 mod risk;
+mod versioning;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -32,6 +33,10 @@ async fn main() -> Result<()> {
         .route("/api/v1/crypto/derive-key", post(api::crypto_api::derive_key))
         .route("/api/v1/crypto/encrypt", post(api::crypto_api::encrypt))
         .route("/api/v1/crypto/decrypt", post(api::crypto_api::decrypt))
+        .route("/api/v1/version", post(api::versioning_api::append_version))
+        .route("/api/v1/version/history", post(api::versioning_api::get_history))
+        .route("/api/v1/version/snapshot", post(api::versioning_api::get_snapshot))
+        .route("/api/v1/version/integrity/:entity_id", get(api::versioning_api::verify_integrity))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
 
