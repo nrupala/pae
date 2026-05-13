@@ -8,12 +8,14 @@ This is a data model and storage layer. No recommendations are generated.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 import uuid
 
 
 class EmotionalState(Enum):
+    """Emotional state at time of decision."""
+
     CALM = "calm"
     ANXIOUS = "anxious"
     EXCITED = "excited"
@@ -25,8 +27,10 @@ class EmotionalState(Enum):
 
 @dataclass
 class DecisionEntry:
+    """A single decision journal entry."""
+
     entry_id: str = field(default_factory=lambda: str(uuid.uuid4())[:12])
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     action: str = ""
     symbols_affected: list[str] = field(default_factory=list)
     rationale: str = ""
@@ -48,6 +52,8 @@ class DecisionEntry:
 
 @dataclass
 class CalibrationMetric:
+    """Confidence calibration for a bucket of decisions."""
+
     confidence_bucket: str
     total_decisions: int
     positive_outcomes: int
@@ -60,7 +66,7 @@ def compute_calibration(entries: list[DecisionEntry]) -> list[CalibrationMetric]
     Groups decisions by confidence level and compares stated confidence
     against actual outcomes. Pure behavioral observation, not advice.
     """
-    buckets: dict[str, dict] = {
+    buckets: dict[str, dict[str, int]] = {
         "8-10": {"total": 0, "positive": 0},
         "5-7": {"total": 0, "positive": 0},
         "1-4": {"total": 0, "positive": 0},
