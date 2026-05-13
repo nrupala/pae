@@ -67,4 +67,3 @@ jobs:
       - name: Test
         working-directory: analytics
         run: pytest tests/ -v
-CIEOF
