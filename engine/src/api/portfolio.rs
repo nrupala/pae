@@ -2,9 +2,90 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use crate::risk::{
-    correlation, metrics, montecarlo, stress,
-};
+use crate::risk::{correlation, metrics, montecarlo, stress};
+
+// --- Error Response ---
+
+/// Standard error response body for portfolio endpoints.
+#[derive(Serialize)]
+pub struct PortfolioErrorResponse {
+    pub error: String,
+    pub code: String,
+}
+
+/// Portfolio-level validation and processing errors.
+#[derive(Debug)]
+pub enum PortfolioError {
+    EmptyHoldings,
+    NegativeWeight { symbol: String },
+    NegativeMarketValue { symbol: String },
+    EmptySymbol,
+    NoReturnsData { symbol: String },
+    NanOrInfReturn { symbol: String, index: usize },
+    NanOrInfWeight { symbol: String },
+    InvalidAlpha,
+    InvalidSimulationCount,
+    InvalidTimeHorizon,
+    NegativeInitialValue,
+    ZeroInitialValue,
+    InvalidWindowDays,
+    ProcessingError(String),
+}
+
+impl PortfolioError {
+    fn status_code(&self) -> StatusCode {
+        match self {
+            PortfolioError::ProcessingError(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            _ => StatusCode::BAD_REQUEST,
+        }
+    }
+
+    fn error_code(&self) -> &'static str {
+        match self {
+            PortfolioError::EmptyHoldings => "EMPTY_HOLDINGS",
+            PortfolioError::NegativeWeight { .. } => "NEGATIVE_WEIGHT",
+            PortfolioError::NegativeMarketValue { .. } => "NEGATIVE_MARKET_VALUE",
+            PortfolioError::EmptySymbol => "EMPTY_SYMBOL",
+            PortfolioError::NoReturnsData { .. } => "NO_RETURNS_DATA",
+            PortfolioError::NanOrInfReturn { .. } => "NAN_INF_RETURN",
+            PortfolioError::NanOrInfWeight { .. } => "NAN_INF_WEIGHT",
+            PortfolioError::InvalidAlpha => "INVALID_ALPHA",
+            PortfolioError::InvalidSimulationCount => "INVALID_SIMULATION_COUNT",
+            PortfolioError::InvalidTimeHorizon => "INVALID_TIME_HORIZON",
+            PortfolioError::NegativeInitialValue => "NEGATIVE_INITIAL_VALUE",
+            PortfolioError::ZeroInitialValue => "ZERO_INITIAL_VALUE",
+            PortfolioError::InvalidWindowDays => "INVALID_WINDOW_DAYS",
+            PortfolioError::ProcessingError(_) => "PROCESSING_ERROR",
+        }
+    }
+
+    fn message(&self) -> String {
+        match self {
+            PortfolioError::EmptyHoldings => "Holdings array must not be empty".to_string(),
+            PortfolioError::NegativeWeight { symbol } => format!("Negative weight for symbol '{symbol}'"),
+            PortfolioError::NegativeMarketValue { symbol } => format!("Negative market_value for symbol '{symbol}'"),
+            PortfolioError::EmptySymbol => "Symbol must not be empty".to_string(),
+            PortfolioError::NoReturnsData { symbol } => format!("No returns data for symbol '{symbol}'"),
+            PortfolioError::NanOrInfReturn { symbol, index } => format!("NaN or Infinity in returns[{index}] for symbol '{symbol}'"),
+            PortfolioError::NanOrInfWeight { symbol } => format!("NaN or Infinity weight for symbol '{symbol}'"),
+            PortfolioError::InvalidAlpha => "Alpha must be between 0 and 1 exclusive".to_string(),
+            PortfolioError::InvalidSimulationCount => "num_simulations must be between 1 and 1_000_000".to_string(),
+            PortfolioError::InvalidTimeHorizon => "time_horizon_months must be between 1 and 600".to_string(),
+            PortfolioError::NegativeInitialValue => "initial_value must not be negative".to_string(),
+            PortfolioError::ZeroInitialValue => "initial_value must be greater than zero".to_string(),
+            PortfolioError::InvalidWindowDays => "window_days must be between 2 and 10_000".to_string(),
+            PortfolioError::ProcessingError(msg) => format!("Processing error: {msg}"),
+        }
+    }
+}
+
+fn into_error_response(err: PortfolioError) -> (StatusCode, Json<PortfolioErrorResponse>) {
+    let status = err.status_code();
+    (status, Json(PortfolioErrorResponse {
+        error: err.message(),
+        code: err.error_code().to_string(),
+    }))
+}
 
 // --- Request/Response Types ---
 
@@ -113,141 +194,146 @@ pub struct MonteCarloPercentiles {
     pub p95: Vec<f64>,
 }
 
-// --- Shared API Error ---
+// --- Validation ---
 
-#[derive(Serialize)]
-pub struct ApiError {
-    pub error: String,
-    pub code: String,
-}
-
-type ApiResult<T> = Result<Json<T>, (StatusCode, Json<ApiError>)>;
-
-fn bad_request(msg: impl Into<String>, code: impl Into<String>) -> (StatusCode, Json<ApiError>) {
-    let msg = msg.into();
-    let code = code.into();
-    tracing::warn!(error = %msg, code = %code, "portfolio API validation error");
-    (
-        StatusCode::BAD_REQUEST,
-        Json(ApiError {
-            error: msg,
-            code: code,
-        }),
-    )
-}
-
-// --- Validation helpers ---
-
-/// Validate that holdings are non-empty and contain sane values.
-fn validate_holdings(holdings: &[Holding]) -> Result<(), (StatusCode, Json<ApiError>)> {
+/// Validate holdings common to all portfolio endpoints.
+/// Checks for: empty array, empty symbols, negative weights/values,
+/// NaN/Infinity in numeric fields, and at least one return per holding.
+fn validate_holdings(holdings: &[Holding]) -> Result<(), PortfolioError> {
     if holdings.is_empty() {
-        return Err(bad_request(
-            "Holdings array must not be empty",
-            "EMPTY_HOLDINGS",
-        ));
+        return Err(PortfolioError::EmptyHoldings);
     }
 
-    for (i, h) in holdings.iter().enumerate() {
-        if h.symbol.is_empty() {
-            return Err(bad_request(
-                format!("Holding at index {i} has an empty symbol"),
-                "EMPTY_SYMBOL",
-            ));
+    for h in holdings {
+        if h.symbol.trim().is_empty() {
+            return Err(PortfolioError::EmptySymbol);
+        }
+        if h.weight.is_nan() || h.weight.is_infinite() {
+            return Err(PortfolioError::NanOrInfWeight { symbol: h.symbol.clone() });
+        }
+        if h.weight < 0.0 {
+            return Err(PortfolioError::NegativeWeight { symbol: h.symbol.clone() });
+        }
+        if h.market_value.is_nan() || h.market_value.is_infinite() {
+            return Err(PortfolioError::NegativeMarketValue { symbol: h.symbol.clone() });
         }
         if h.market_value < 0.0 {
-            return Err(bad_request(
-                format!("Holding '{}' has negative market_value: {}", h.symbol, h.market_value),
-                "NEGATIVE_MARKET_VALUE",
-            ));
-        }
-        if !h.market_value.is_finite() {
-            return Err(bad_request(
-                format!("Holding '{}' has non-finite market_value", h.symbol),
-                "INVALID_MARKET_VALUE",
-            ));
+            return Err(PortfolioError::NegativeMarketValue { symbol: h.symbol.clone() });
         }
         if h.returns.is_empty() {
-            return Err(bad_request(
-                format!("Holding '{}' has no return data", h.symbol),
-                "EMPTY_RETURNS",
-            ));
+            return Err(PortfolioError::NoReturnsData { symbol: h.symbol.clone() });
         }
-        for (j, r) in h.returns.iter().enumerate() {
-            if !r.is_finite() {
-                return Err(bad_request(
-                    format!("Holding '{}' return at index {j} is non-finite", h.symbol),
-                    "INVALID_RETURN",
-                ));
+        for (i, r) in h.returns.iter().enumerate() {
+            if r.is_nan() || r.is_infinite() {
+                return Err(PortfolioError::NanOrInfReturn { symbol: h.symbol.clone(), index: i });
             }
         }
-    }
-
-    let total_value: f64 = holdings.iter().map(|h| h.market_value).sum();
-    if total_value <= 0.0 {
-        return Err(bad_request(
-            "Total portfolio market value must be positive",
-            "ZERO_TOTAL_VALUE",
-        ));
     }
 
     Ok(())
 }
 
+/// Sanitize computed f64 values: replace NaN/Infinity with 0.0.
+/// This prevents JSON serialization issues and ensures clients always
+/// receive valid numeric responses.
+fn sanitize_f64(val: f64) -> f64 {
+    if val.is_nan() || val.is_infinite() {
+        0.0
+    } else {
+        val
+    }
+}
+
 // --- Handlers ---
 
-pub async fn compute_risk(Json(input): Json<PortfolioInput>) -> ApiResult<RiskResponse> {
-    validate_holdings(&input.holdings)?;
+/// POST /api/v1/portfolio/risk
+///
+/// Computes VaR, CVaR, Sharpe, Sortino, volatility, and max drawdown.
+/// Returns 400 if holdings are invalid.
+pub async fn compute_risk(
+    Json(input): Json<PortfolioInput>,
+) -> Result<Json<RiskResponse>, (StatusCode, Json<PortfolioErrorResponse>)> {
+    validate_holdings(&input.holdings).map_err(into_error_response)?;
 
     let returns = metrics::portfolio_returns(&input.holdings);
+    if returns.is_empty() {
+        return Err(into_error_response(PortfolioError::ProcessingError(
+            "All holdings have zero market value, producing no returns".to_string(),
+        )));
+    }
+
     let rf = 0.045; // risk-free rate -- user-configurable in future
 
     Ok(Json(RiskResponse {
-        var_95: metrics::value_at_risk(&returns, 0.05),
-        var_99: metrics::value_at_risk(&returns, 0.01),
-        cvar_95: metrics::conditional_var(&returns, 0.05),
-        max_drawdown: metrics::max_drawdown(&returns),
+        var_95: sanitize_f64(metrics::value_at_risk(&returns, 0.05)),
+        var_99: sanitize_f64(metrics::value_at_risk(&returns, 0.01)),
+        cvar_95: sanitize_f64(metrics::conditional_var(&returns, 0.05)),
+        max_drawdown: sanitize_f64(metrics::max_drawdown(&returns)),
         beta: None, // requires benchmark returns
-        sharpe: metrics::sharpe_ratio(&returns, rf),
-        sortino: metrics::sortino_ratio(&returns, rf),
-        volatility: metrics::volatility(&returns),
+        sharpe: sanitize_f64(metrics::sharpe_ratio(&returns, rf)),
+        sortino: sanitize_f64(metrics::sortino_ratio(&returns, rf)),
+        volatility: sanitize_f64(metrics::volatility(&returns)),
     }))
 }
 
-pub async fn compute_metrics(Json(input): Json<PortfolioInput>) -> ApiResult<MetricsResponse> {
-    validate_holdings(&input.holdings)?;
+/// POST /api/v1/portfolio/metrics
+///
+/// Computes total return, annualized return, volatility, Sharpe, Sortino,
+/// max drawdown, win rate, and Calmar ratio.
+/// Returns 400 if holdings are invalid.
+pub async fn compute_metrics(
+    Json(input): Json<PortfolioInput>,
+) -> Result<Json<MetricsResponse>, (StatusCode, Json<PortfolioErrorResponse>)> {
+    validate_holdings(&input.holdings).map_err(into_error_response)?;
 
     let returns = metrics::portfolio_returns(&input.holdings);
+    if returns.is_empty() {
+        return Err(into_error_response(PortfolioError::ProcessingError(
+            "All holdings have zero market value, producing no returns".to_string(),
+        )));
+    }
+
     let rf = 0.045;
 
     Ok(Json(MetricsResponse {
-        total_return: metrics::total_return(&returns),
-        annualized_return: metrics::annualized_return(&returns, 12),
-        volatility: metrics::volatility(&returns),
-        sharpe: metrics::sharpe_ratio(&returns, rf),
-        sortino: metrics::sortino_ratio(&returns, rf),
-        max_drawdown: metrics::max_drawdown(&returns),
-        win_rate: metrics::win_rate(&returns),
-        calmar: metrics::calmar_ratio(&returns, 12),
+        total_return: sanitize_f64(metrics::total_return(&returns)),
+        annualized_return: sanitize_f64(metrics::annualized_return(&returns, 12)),
+        volatility: sanitize_f64(metrics::volatility(&returns)),
+        sharpe: sanitize_f64(metrics::sharpe_ratio(&returns, rf)),
+        sortino: sanitize_f64(metrics::sortino_ratio(&returns, rf)),
+        max_drawdown: sanitize_f64(metrics::max_drawdown(&returns)),
+        win_rate: sanitize_f64(metrics::win_rate(&returns)),
+        calmar: sanitize_f64(metrics::calmar_ratio(&returns, 12)),
     }))
 }
 
-pub async fn stress_test(Json(input): Json<StressTestInput>) -> ApiResult<StressTestResponse> {
-    validate_holdings(&input.holdings)?;
+/// POST /api/v1/portfolio/stress
+///
+/// Runs a scenario-based stress test on the portfolio.
+/// Returns 400 if holdings are invalid.
+pub async fn stress_test(
+    Json(input): Json<StressTestInput>,
+) -> Result<Json<StressTestResponse>, (StatusCode, Json<PortfolioErrorResponse>)> {
+    validate_holdings(&input.holdings).map_err(into_error_response)?;
 
-    if input.scenario.is_empty() && input.custom_shocks.is_none() {
-        return Err(bad_request(
-            "Either scenario name or custom_shocks must be provided",
-            "MISSING_SCENARIO",
-        ));
+    if input.scenario.trim().is_empty() {
+        return Err(into_error_response(PortfolioError::ProcessingError(
+            "Scenario name must not be empty".to_string(),
+        )));
     }
 
+    // Validate custom shocks if provided
     if let Some(ref shocks) = input.custom_shocks {
         for shock in shocks {
-            if !shock.shock_pct.is_finite() {
-                return Err(bad_request(
-                    format!("Shock for '{}' has non-finite value", shock.asset_class),
-                    "INVALID_SHOCK",
-                ));
+            if shock.asset_class.trim().is_empty() {
+                return Err(into_error_response(PortfolioError::ProcessingError(
+                    "Custom shock asset_class must not be empty".to_string(),
+                )));
+            }
+            if shock.shock_pct.is_nan() || shock.shock_pct.is_infinite() {
+                return Err(into_error_response(PortfolioError::ProcessingError(
+                    format!("Custom shock for '{}' has NaN or Infinity shock_pct", shock.asset_class),
+                )));
             }
         }
     }
@@ -255,53 +341,53 @@ pub async fn stress_test(Json(input): Json<StressTestInput>) -> ApiResult<Stress
     Ok(stress::run_stress_test(&input))
 }
 
-pub async fn correlation_matrix(Json(input): Json<CorrelationInput>) -> ApiResult<CorrelationResponse> {
-    validate_holdings(&input.holdings)?;
-
-    if input.holdings.len() < 2 {
-        return Err(bad_request(
-            "Correlation matrix requires at least 2 holdings",
-            "INSUFFICIENT_HOLDINGS",
-        ));
-    }
+/// POST /api/v1/portfolio/correlation
+///
+/// Computes the pairwise Pearson correlation matrix.
+/// Returns 400 if holdings are invalid or window_days is out of range.
+pub async fn correlation_matrix(
+    Json(input): Json<CorrelationInput>,
+) -> Result<Json<CorrelationResponse>, (StatusCode, Json<PortfolioErrorResponse>)> {
+    validate_holdings(&input.holdings).map_err(into_error_response)?;
 
     if let Some(w) = input.window_days {
-        if w == 0 {
-            return Err(bad_request(
-                "window_days must be at least 1",
-                "INVALID_WINDOW",
-            ));
+        if w < 2 || w > 10_000 {
+            return Err(into_error_response(PortfolioError::InvalidWindowDays));
         }
     }
 
     Ok(correlation::compute_matrix(&input))
 }
 
-pub async fn monte_carlo(Json(input): Json<MonteCarloInput>) -> ApiResult<MonteCarloResponse> {
-    validate_holdings(&input.holdings)?;
+/// POST /api/v1/portfolio/montecarlo
+///
+/// Runs a Monte Carlo simulation on the portfolio.
+/// Returns 400 if holdings are invalid, initial_value <= 0,
+/// num_simulations is out of range, or time_horizon is out of range.
+pub async fn monte_carlo(
+    Json(input): Json<MonteCarloInput>,
+) -> Result<Json<MonteCarloResponse>, (StatusCode, Json<PortfolioErrorResponse>)> {
+    validate_holdings(&input.holdings).map_err(into_error_response)?;
 
-    if !input.initial_value.is_finite() || input.initial_value <= 0.0 {
-        return Err(bad_request(
-            "initial_value must be a positive finite number",
-            "INVALID_INITIAL_VALUE",
-        ));
+    if input.initial_value < 0.0 {
+        return Err(into_error_response(PortfolioError::NegativeInitialValue));
+    }
+    if input.initial_value == 0.0 {
+        return Err(into_error_response(PortfolioError::ZeroInitialValue));
+    }
+    if input.initial_value.is_nan() || input.initial_value.is_infinite() {
+        return Err(into_error_response(PortfolioError::NegativeInitialValue));
     }
 
     if let Some(n) = input.num_simulations {
         if n == 0 || n > 1_000_000 {
-            return Err(bad_request(
-                "num_simulations must be between 1 and 1,000,000",
-                "INVALID_NUM_SIMULATIONS",
-            ));
+            return Err(into_error_response(PortfolioError::InvalidSimulationCount));
         }
     }
 
-    if let Some(h) = input.time_horizon_months {
-        if h == 0 || h > 600 {
-            return Err(bad_request(
-                "time_horizon_months must be between 1 and 600 (50 years)",
-                "INVALID_HORIZON",
-            ));
+    if let Some(t) = input.time_horizon_months {
+        if t == 0 || t > 600 {
+            return Err(into_error_response(PortfolioError::InvalidTimeHorizon));
         }
     }
 
