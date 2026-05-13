@@ -72,8 +72,8 @@ pub fn run_simulation(input: &MonteCarloInput) -> MonteCarloResponse {
     };
     let std_dev = variance.sqrt();
 
-    // Run simulations
-    let mut rng = rand::rng();
+    // Run simulations (rand 0.8 API: thread_rng + gen)
+    let mut rng = rand::thread_rng();
     let mut final_values: Vec<Vec<f64>> = vec![vec![0.0; horizon + 1]; num_sims];
 
     let initial = if input.initial_value.is_nan() || input.initial_value.is_infinite() || input.initial_value <= 0.0 {
@@ -151,8 +151,8 @@ fn percentile(sorted: &[f64], p: f64) -> f64 {
 /// Generates a single N(0,1) sample from two uniform random numbers.
 /// Clamps u1 away from zero to avoid ln(0) = -Infinity.
 fn sample_standard_normal(rng: &mut impl Rng) -> f64 {
-    let u1: f64 = rng.random::<f64>().max(1e-15);
-    let u2: f64 = rng.random::<f64>();
+    let u1: f64 = rng.gen::<f64>().max(1e-15);
+    let u2: f64 = rng.gen::<f64>();
     (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos()
 }
 
