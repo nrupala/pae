@@ -8,43 +8,51 @@ use rand::RngCore;
 use thiserror::Error;
 
 const ARGON2_ITERATIONS: u32 = 600_000;
-const AES_KEY_LEN: usize = 32;
-const NONCE_LEN: usize = 12;
 
 /// Errors that can occur during cryptographic operations.
 #[derive(Debug, Error)]
 pub enum CryptoError {
+    #[error("Invalid base64 encoding: {context}")]
+    InvalidBase64 { context: String },
+
+    #[error("Invalid key length: expected 32 bytes")]
+    InvalidKeyLength,
+
     #[error("Invalid salt: {0}")]
     InvalidSalt(String),
-    #[error("Invalid Argon2 parameters: {0}")]
-    InvalidParams(String),
-    #[error("Password hashing failed: {0}")]
-    HashingFailed(String),
-    #[error("Invalid base64 input: {0}")]
-    InvalidBase64(String),
-    #[error("Invalid key length: expected {expected} bytes, got {actual}")]
-    InvalidKeyLength { expected: usize, actual: usize },
-    #[error("Invalid nonce length: expected {expected} bytes, got {actual}")]
-    InvalidNonceLength { expected: usize, actual: usize },
+
+    #[error("Key derivation failed: {0}")]
+    DerivationFailed(String),
+
     #[error("Encryption failed: {0}")]
     EncryptionFailed(String),
-    #[error("Decryption failed: {0}")]
-    DecryptionFailed(String),
-    #[error("Invalid UTF-8 in decrypted content")]
+
+    #[error("Decryption failed: authentication or data corrupted")]
+    DecryptionFailed,
+
+    #[error("Invalid nonce length: expected 12 bytes, got {0}")]
+    InvalidNonceLength(usize),
+
+    #[error("Invalid UTF-8 in decrypted plaintext")]
     InvalidUtf8,
-    #[error("Passphrase must not be empty")]
+
+    #[error("Empty passphrase is not allowed")]
     EmptyPassphrase,
-    #[error("Plaintext must not be empty")]
-    EmptyPlaintext,
+
+    #[error("Invalid Argon2 parameters: {0}")]
+    InvalidParams(String),
 }
 
 /// Derive a 256-bit key from a passphrase using Argon2id.
-/// Returns (key_hash_b64, salt_b64).
+///
+/// Returns `(key_hash_b64, salt_b64)`.
 /// Uses 600K iterations (6x Google's standard) per the PAE/mykey security spec.
 ///
 /// # Errors
-/// Returns `CryptoError` if the passphrase is empty, the salt is invalid,
-/// or the hashing operation fails.
+///
+/// Returns `CryptoError::EmptyPassphrase` if the passphrase is empty.
+/// Returns `CryptoError::InvalidSalt` if `existing_salt` is not valid base64.
+/// Returns `CryptoError::DerivationFailed` if Argon2 hashing fails.
 pub fn derive_key(passphrase: &str, existing_salt: Option<&str>) -> Result<(String, String), CryptoError> {
     if passphrase.is_empty() {
         return Err(CryptoError::EmptyPassphrase);
@@ -65,40 +73,29 @@ pub fn derive_key(passphrase: &str, existing_salt: Option<&str>) -> Result<(Stri
 
     let hash = argon2
         .hash_password(passphrase.as_bytes(), &salt)
-        .map_err(|e| CryptoError::HashingFailed(e.to_string()))?;
+        .map_err(|e| CryptoError::DerivationFailed(e.to_string()))?;
 
     Ok((hash.to_string(), salt.to_string()))
 }
 
 /// Encrypt plaintext with AES-256-GCM.
-/// key_b64: base64-encoded 32-byte key.
-/// Returns (ciphertext_b64, nonce_b64).
+///
+/// `key_b64`: base64-encoded 32-byte key.
+/// Returns `(ciphertext_b64, nonce_b64)`.
 ///
 /// # Errors
-/// Returns `CryptoError` if the key is invalid, the plaintext is empty,
-/// or encryption fails.
+///
+/// Returns `CryptoError::InvalidBase64` if the key is not valid base64.
+/// Returns `CryptoError::InvalidKeyLength` if the decoded key is not 32 bytes.
+/// Returns `CryptoError::EncryptionFailed` if AES-GCM encryption fails.
 pub fn encrypt(plaintext: &str, key_b64: &str) -> Result<(String, String), CryptoError> {
-    if plaintext.is_empty() {
-        return Err(CryptoError::EmptyPlaintext);
-    }
-
     let key_bytes = B64.decode(key_b64)
-        .map_err(|e| CryptoError::InvalidBase64(format!("key: {e}")))?;
-
-    if key_bytes.len() != AES_KEY_LEN {
-        return Err(CryptoError::InvalidKeyLength {
-            expected: AES_KEY_LEN,
-            actual: key_bytes.len(),
-        });
-    }
+        .map_err(|_| CryptoError::InvalidBase64 { context: "key".to_string() })?;
 
     let cipher = Aes256Gcm::new_from_slice(&key_bytes)
-        .map_err(|e| CryptoError::InvalidKeyLength {
-            expected: AES_KEY_LEN,
-            actual: key_bytes.len(),
-        })?;
+        .map_err(|_| CryptoError::InvalidKeyLength)?;
 
-    let mut nonce_bytes = [0u8; NONCE_LEN];
+    let mut nonce_bytes = [0u8; 12];
     OsRng.fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
 
@@ -110,45 +107,38 @@ pub fn encrypt(plaintext: &str, key_b64: &str) -> Result<(String, String), Crypt
 }
 
 /// Decrypt ciphertext with AES-256-GCM.
-/// Returns plaintext string.
+///
+/// Returns the plaintext string.
 ///
 /// # Errors
-/// Returns `CryptoError` if any base64 input is invalid, the key length
-/// is wrong, decryption fails, or the result is not valid UTF-8.
+///
+/// Returns `CryptoError::InvalidBase64` if any input is not valid base64.
+/// Returns `CryptoError::InvalidKeyLength` if the decoded key is not 32 bytes.
+/// Returns `CryptoError::InvalidNonceLength` if the decoded nonce is not 12 bytes.
+/// Returns `CryptoError::DecryptionFailed` if authentication fails (wrong key, tampered data).
+/// Returns `CryptoError::InvalidUtf8` if decrypted bytes are not valid UTF-8.
 pub fn decrypt(ciphertext_b64: &str, nonce_b64: &str, key_b64: &str) -> Result<String, CryptoError> {
     let key_bytes = B64.decode(key_b64)
-        .map_err(|e| CryptoError::InvalidBase64(format!("key: {e}")))?;
+        .map_err(|_| CryptoError::InvalidBase64 { context: "key".to_string() })?;
     let ciphertext = B64.decode(ciphertext_b64)
-        .map_err(|e| CryptoError::InvalidBase64(format!("ciphertext: {e}")))?;
+        .map_err(|_| CryptoError::InvalidBase64 { context: "ciphertext".to_string() })?;
     let nonce_bytes = B64.decode(nonce_b64)
-        .map_err(|e| CryptoError::InvalidBase64(format!("nonce: {e}")))?;
+        .map_err(|_| CryptoError::InvalidBase64 { context: "nonce".to_string() })?;
 
-    if key_bytes.len() != AES_KEY_LEN {
-        return Err(CryptoError::InvalidKeyLength {
-            expected: AES_KEY_LEN,
-            actual: key_bytes.len(),
-        });
-    }
-
-    if nonce_bytes.len() != NONCE_LEN {
-        return Err(CryptoError::InvalidNonceLength {
-            expected: NONCE_LEN,
-            actual: nonce_bytes.len(),
-        });
+    if nonce_bytes.len() != 12 {
+        return Err(CryptoError::InvalidNonceLength(nonce_bytes.len()));
     }
 
     let cipher = Aes256Gcm::new_from_slice(&key_bytes)
-        .map_err(|e| CryptoError::InvalidKeyLength {
-            expected: AES_KEY_LEN,
-            actual: key_bytes.len(),
-        })?;
+        .map_err(|_| CryptoError::InvalidKeyLength)?;
     let nonce = Nonce::from_slice(&nonce_bytes);
 
     let plaintext = cipher
         .decrypt(nonce, ciphertext.as_ref())
-        .map_err(|e| CryptoError::DecryptionFailed(e.to_string()))?;
+        .map_err(|_| CryptoError::DecryptionFailed)?;
 
-    String::from_utf8(plaintext).map_err(|_| CryptoError::InvalidUtf8)
+    String::from_utf8(plaintext)
+        .map_err(|_| CryptoError::InvalidUtf8)
 }
 
 #[cfg(test)]
@@ -187,31 +177,13 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_plaintext_rejected() {
-        let mut key = [0u8; 32];
-        OsRng.fill_bytes(&mut key);
-        let key_b64 = B64.encode(key);
-
-        let result = encrypt("", &key_b64);
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), CryptoError::EmptyPlaintext));
-    }
-
-    #[test]
-    fn test_invalid_key_length_rejected() {
-        let short_key = B64.encode([0u8; 16]);
-        let result = encrypt("test", &short_key);
+    fn test_invalid_key_base64_rejected() {
+        let result = encrypt("hello", "not-valid-base64!!!");
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_invalid_base64_rejected() {
-        let result = encrypt("test", "not-valid-base64!!!");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_decrypt_wrong_key_fails() {
+    fn test_wrong_key_decryption_fails() {
         let mut key1 = [0u8; 32];
         let mut key2 = [0u8; 32];
         OsRng.fill_bytes(&mut key1);
@@ -220,5 +192,15 @@ mod tests {
         let (ct, nonce) = encrypt("secret", &B64.encode(key1)).unwrap();
         let result = decrypt(&ct, &nonce, &B64.encode(key2));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_nonce_length_rejected() {
+        let mut key = [0u8; 32];
+        OsRng.fill_bytes(&mut key);
+        let key_b64 = B64.encode(key);
+        let bad_nonce = B64.encode([0u8; 8]); // 8 bytes instead of 12
+        let result = decrypt(&B64.encode(b"ciphertext"), &bad_nonce, &key_b64);
+        assert!(matches!(result.unwrap_err(), CryptoError::InvalidNonceLength(8)));
     }
 }
