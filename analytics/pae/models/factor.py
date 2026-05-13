@@ -19,6 +19,7 @@ from dataclasses import dataclass
 @dataclass
 class FactorExposure:
     """Result of a factor regression."""
+
     factor_name: str
     beta: float
     t_stat: float
@@ -28,6 +29,7 @@ class FactorExposure:
 @dataclass
 class FactorDecomposition:
     """Complete factor decomposition of a portfolio."""
+
     alpha: float
     alpha_t_stat: float
     r_squared: float
@@ -54,39 +56,39 @@ def decompose(
     k = len(factor_names)
 
     if n < k + 2:
-        raise ValueError(f"Need at least {k + 2} observations, got {n}")
+        msg = f"Need at least {k + 2} observations, got {n}"
+        raise ValueError(msg)
 
     # Build factor matrix with intercept
-    X = np.column_stack([
+    x_matrix = np.column_stack([
         np.ones(n),
-        *[factor_returns[name] for name in factor_names]
+        *[factor_returns[name] for name in factor_names],
     ])
 
     y = np.array(portfolio_returns)
 
     # OLS: beta = (X'X)^-1 X'y
-    XtX_inv = np.linalg.inv(X.T @ X)
-    betas = XtX_inv @ X.T @ y
+    xtx_inv = np.linalg.inv(x_matrix.T @ x_matrix)
+    betas = xtx_inv @ x_matrix.T @ y
 
     # Residuals and R-squared
-    y_hat = X @ betas
-    residuals = y - y_hat
-    ss_res = np.sum(residuals ** 2)
-    ss_tot = np.sum((y - np.mean(y)) ** 2)
+    y_hat = x_matrix @ betas
+    ss_res = float(np.sum((y - y_hat) ** 2))
+    ss_tot = float(np.sum((y - np.mean(y)) ** 2))
     r_squared = 1.0 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
 
     # Standard errors for t-stats
     sigma2 = ss_res / (n - k - 1) if n > k + 1 else 0.0
-    se = np.sqrt(np.diag(XtX_inv) * sigma2)
+    se = np.sqrt(np.diag(xtx_inv) * sigma2)
 
     # Portfolio variance decomposition
-    portfolio_var = np.var(y, ddof=1)
+    portfolio_var = float(np.var(y, ddof=1))
     exposures = []
     total_explained = 0.0
 
     for i, name in enumerate(factor_names):
         beta_i = betas[i + 1]
-        factor_var = np.var(factor_returns[name], ddof=1)
+        factor_var = float(np.var(factor_returns[name], ddof=1))
         contribution = (beta_i ** 2 * factor_var) / portfolio_var if portfolio_var > 0 else 0.0
         total_explained += contribution
         t_stat_i = betas[i + 1] / se[i + 1] if se[i + 1] > 0 else 0.0
