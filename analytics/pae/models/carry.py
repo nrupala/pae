@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -45,7 +46,7 @@ class CarryError(Exception):
     """Raised when carry analysis encounters invalid inputs."""
 
 
-def _validate_holdings(holdings: list[dict]) -> None:
+def _validate_holdings(holdings: list[dict[str, Any]]) -> None:
     """Validate holdings input for carry analysis.
 
     Args:
@@ -112,7 +113,7 @@ def _validate_margin_params(total_margin: float, margin_rate: float) -> None:
 
 
 def analyze_carry(
-    holdings: list[dict],
+    holdings: list[dict[str, Any]],
     total_margin: float,
     margin_rate: float = 0.058,
 ) -> PortfolioCarry:
