@@ -338,7 +338,7 @@ pub async fn stress_test(
         }
     }
 
-    Ok(stress::run_stress_test(&input))
+    Ok(Json(stress::run_stress_test(&input)))
 }
 
 /// POST /api/v1/portfolio/correlation
@@ -356,7 +356,7 @@ pub async fn correlation_matrix(
         }
     }
 
-    Ok(correlation::compute_matrix(&input))
+    Ok(Json(correlation::compute_matrix(&input)))
 }
 
 /// POST /api/v1/portfolio/montecarlo
@@ -391,5 +391,5 @@ pub async fn monte_carlo(
         }
     }
 
-    Ok(montecarlo::run_simulation(&input))
+    Ok(Json(montecarlo::run_simulation(&input)))
 }
