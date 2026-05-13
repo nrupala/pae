@@ -1,5 +1,11 @@
+use axum::http::StatusCode;
 use axum::Json;
+use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+use crate::versioning::store::{VersionStore, VersionStoreError};
+use crate::versioning::types::{EntityType, VersionAuthor};
 
 /// API endpoints for the versioning system.
 /// All content is encrypted client-side before reaching these endpoints.
@@ -67,42 +73,183 @@ pub struct IntegrityResponse {
     pub total_versions: usize,
 }
 
-// --- Handlers (stubs -- will wire to VersionStore in Axum state) ---
+#[derive(Serialize)]
+pub struct ApiError {
+    pub error: String,
+    pub code: String,
+}
+
+type ApiResult<T> = Result<Json<T>, (StatusCode, Json<ApiError>)>;
+
+fn bad_request(msg: impl Into<String>, code: impl Into<String>) -> (StatusCode, Json<ApiError>) {
+    let msg = msg.into();
+    let code = code.into();
+    tracing::warn!(error = %msg, code = %code, "versioning API error");
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ApiError { error: msg, code: code }),
+    )
+}
+
+fn internal_error(e: VersionStoreError) -> (StatusCode, Json<ApiError>) {
+    tracing::error!(error = %e, "versioning store error");
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ApiError {
+            error: e.to_string(),
+            code: "STORE_ERROR".to_string(),
+        }),
+    )
+}
+
+/// Parse a string entity type into the enum.
+fn parse_entity_type(s: &str) -> Result<EntityType, (StatusCode, Json<ApiError>)> {
+    match s {
+        "holdings" => Ok(EntityType::Holdings),
+        "position" => Ok(EntityType::Position),
+        "decision_entry" => Ok(EntityType::DecisionEntry),
+        "calibration_record" => Ok(EntityType::CalibrationRecord),
+        "knowledge_chunk" => Ok(EntityType::KnowledgeChunk),
+        "knowledge_annotation" => Ok(EntityType::KnowledgeAnnotation),
+        "configuration" => Ok(EntityType::Configuration),
+        "stress_test_config" => Ok(EntityType::StressTestConfig),
+        "monte_carlo_config" => Ok(EntityType::MonteCarloConfig),
+        "carry_snapshot" => Ok(EntityType::CarrySnapshot),
+        other => Err(bad_request(
+            format!("Unknown entity type: '{other}'"),
+            "INVALID_ENTITY_TYPE",
+        )),
+    }
+}
+
+/// Convert an internal VersionedRecord to the API response format.
+fn to_api_record(r: &crate::versioning::types::VersionedRecord) -> VersionRecord {
+    use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
+    VersionRecord {
+        version_hash: r.version_hash.clone(),
+        entity_id: r.entity_id.clone(),
+        entity_type: format!("{:?}", r.entity_type),
+        version: r.version,
+        created_at: r.created_at.to_rfc3339(),
+        change_summary: r.metadata.change_summary.clone(),
+        tags: r.metadata.tags.clone(),
+        content_encrypted_b64: B64.encode(&r.content_encrypted),
+        nonce_b64: B64.encode(&r.nonce),
+        parent_hash: r.parent_hash.clone(),
+    }
+}
+
+// --- Handlers (wired to VersionStore via Axum shared state) ---
 
 pub async fn append_version(
-    Json(_input): Json<AppendVersionRequest>,
-) -> Json<AppendVersionResponse> {
-    Json(AppendVersionResponse {
-        version_hash: "stub".to_string(),
-        version: 0,
-    })
+    State(store): State<Arc<VersionStore>>,
+    Json(input): Json<AppendVersionRequest>,
+) -> ApiResult<AppendVersionResponse> {
+    if input.entity_id.is_empty() {
+        return Err(bad_request("entity_id must not be empty", "EMPTY_ENTITY_ID"));
+    }
+    if input.content_encrypted_b64.is_empty() {
+        return Err(bad_request("content_encrypted_b64 must not be empty", "EMPTY_CONTENT"));
+    }
+    if input.nonce_b64.is_empty() {
+        return Err(bad_request("nonce_b64 must not be empty", "EMPTY_NONCE"));
+    }
+
+    let entity_type = parse_entity_type(&input.entity_type)?;
+
+    use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
+    let content = B64.decode(&input.content_encrypted_b64)
+        .map_err(|e| bad_request(format!("Invalid content base64: {e}"), "INVALID_BASE64"))?;
+    let nonce = B64.decode(&input.nonce_b64)
+        .map_err(|e| bad_request(format!("Invalid nonce base64: {e}"), "INVALID_BASE64"))?;
+
+    let version_hash = store
+        .append(
+            &input.entity_id,
+            entity_type,
+            content,
+            nonce,
+            VersionAuthor::User,
+            input.change_summary,
+            input.tags,
+        )
+        .map_err(internal_error)?;
+
+    // Retrieve the version number from the latest record
+    let latest = store
+        .get_latest(&input.entity_id)
+        .map_err(internal_error)?;
+    let version = latest.map(|r| r.version).unwrap_or(1);
+
+    tracing::info!(entity_id = %input.entity_id, version = version, "version appended");
+
+    Ok(Json(AppendVersionResponse {
+        version_hash,
+        version,
+    }))
 }
 
 pub async fn get_history(
-    Json(_input): Json<GetHistoryRequest>,
-) -> Json<GetHistoryResponse> {
-    Json(GetHistoryResponse {
-        entity_id: "stub".to_string(),
-        total_versions: 0,
-        versions: vec![],
-    })
+    State(store): State<Arc<VersionStore>>,
+    Json(input): Json<GetHistoryRequest>,
+) -> ApiResult<GetHistoryResponse> {
+    if input.entity_id.is_empty() {
+        return Err(bad_request("entity_id must not be empty", "EMPTY_ENTITY_ID"));
+    }
+
+    let query = crate::versioning::types::VersionQuery {
+        entity_id: input.entity_id.clone(),
+        entity_type: None,
+        since: None,
+        until: None,
+        limit: input.limit,
+        latest_only: input.latest_only.unwrap_or(false),
+    };
+
+    let records = store.query(&query).map_err(internal_error)?;
+    let total = records.len();
+    let versions: Vec<VersionRecord> = records.iter().map(to_api_record).collect();
+
+    Ok(Json(GetHistoryResponse {
+        entity_id: input.entity_id,
+        total_versions: total,
+        versions,
+    }))
 }
 
 pub async fn get_snapshot(
     Json(_input): Json<SnapshotRequest>,
-) -> Json<SnapshotResponse> {
-    Json(SnapshotResponse {
-        as_of: "stub".to_string(),
+) -> ApiResult<SnapshotResponse> {
+    // TODO: Wire to SnapshotEngine once production SQLite backend is ready
+    Ok(Json(SnapshotResponse {
+        as_of: _input.as_of,
         entities: vec![],
-    })
+    }))
 }
 
 pub async fn verify_integrity(
-    axum::extract::Path(entity_id): axum::extract::Path<String>,
-) -> Json<IntegrityResponse> {
-    Json(IntegrityResponse {
+    State(store): State<Arc<VersionStore>>,
+    Path(entity_id): Path<String>,
+) -> ApiResult<IntegrityResponse> {
+    if entity_id.is_empty() {
+        return Err(bad_request("entity_id must not be empty", "EMPTY_ENTITY_ID"));
+    }
+
+    let chain_valid = store.verify_chain(&entity_id).map_err(internal_error)?;
+
+    let query = crate::versioning::types::VersionQuery {
+        entity_id: entity_id.clone(),
+        entity_type: None,
+        since: None,
+        until: None,
+        limit: None,
+        latest_only: false,
+    };
+    let records = store.query(&query).map_err(internal_error)?;
+
+    Ok(Json(IntegrityResponse {
         entity_id,
-        chain_valid: true,
-        total_versions: 0,
-    })
+        chain_valid,
+        total_versions: records.len(),
+    }))
 }

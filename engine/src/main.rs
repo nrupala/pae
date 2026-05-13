@@ -4,6 +4,7 @@ use axum::{
     Router,
 };
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -23,7 +24,18 @@ async fn main() -> Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let app = Router::new()
+    // Shared state: version store (in-memory; production uses SQLite with WAL)
+    let version_store = Arc::new(versioning::store::VersionStore::new());
+
+    // Routes that need shared state (versioning)
+    let versioned_routes = Router::new()
+        .route("/api/v1/version", post(api::versioning_api::append_version))
+        .route("/api/v1/version/history", post(api::versioning_api::get_history))
+        .route("/api/v1/version/integrity/{entity_id}", get(api::versioning_api::verify_integrity))
+        .with_state(version_store);
+
+    // Routes without shared state (stateless compute)
+    let stateless_routes = Router::new()
         .route("/health", get(api::health::check))
         .route("/api/v1/portfolio/risk", post(api::portfolio::compute_risk))
         .route("/api/v1/portfolio/metrics", post(api::portfolio::compute_metrics))
@@ -33,22 +45,49 @@ async fn main() -> Result<()> {
         .route("/api/v1/crypto/derive-key", post(api::crypto_api::derive_key))
         .route("/api/v1/crypto/encrypt", post(api::crypto_api::encrypt))
         .route("/api/v1/crypto/decrypt", post(api::crypto_api::decrypt))
-        .route("/api/v1/version", post(api::versioning_api::append_version))
-        .route("/api/v1/version/history", post(api::versioning_api::get_history))
-        .route("/api/v1/version/snapshot", post(api::versioning_api::get_snapshot))
-        .route("/api/v1/version/integrity/:entity_id", get(api::versioning_api::verify_integrity))
+        .route("/api/v1/version/snapshot", post(api::versioning_api::get_snapshot));
+
+    let app = Router::new()
+        .merge(versioned_routes)
+        .merge(stateless_routes)
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
 
     let port: u16 = std::env::var("PAE_ENGINE_PORT")
         .unwrap_or_else(|_| "3001".to_string())
-        .parse()?;
+        .parse()
+        .map_err(|e| anyhow::anyhow!("Invalid PAE_ENGINE_PORT: {e}"))?;
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("PAE Engine listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
 
+    // Graceful shutdown on SIGINT/SIGTERM
+    let shutdown_signal = async {
+        let ctrl_c = tokio::signal::ctrl_c();
+        #[cfg(unix)]
+        let mut sigterm = tokio::signal::unix::signal(
+            tokio::signal::unix::SignalKind::terminate(),
+        ).expect("failed to register SIGTERM handler");
+
+        #[cfg(unix)]
+        tokio::select! {
+            _ = ctrl_c => { tracing::info!("Received SIGINT, shutting down..."); }
+            _ = sigterm.recv() => { tracing::info!("Received SIGTERM, shutting down..."); }
+        }
+
+        #[cfg(not(unix))]
+        {
+            ctrl_c.await.ok();
+            tracing::info!("Received shutdown signal, shutting down...");
+        }
+    };
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal)
+        .await?;
+
+    tracing::info!("PAE Engine shut down cleanly");
     Ok(())
 }
