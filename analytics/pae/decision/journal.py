@@ -9,9 +9,10 @@ This is a data model and storage layer. No recommendations are generated.
 
 from __future__ import annotations
 
+import math
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 
@@ -62,7 +63,7 @@ class DecisionEntry:
     """
 
     entry_id: str = field(default_factory=lambda: str(uuid.uuid4())[:12])
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     action: str = ""
     symbols_affected: list[str] = field(default_factory=list)
     rationale: str = ""
@@ -95,8 +96,6 @@ def validate_entry(entry: DecisionEntry) -> list[str]:
     Returns:
         List of validation error strings. Empty if valid.
     """
-    import math
-
     errors: list[str] = []
 
     # Confidence must be in [1, 10]
@@ -180,8 +179,6 @@ def compute_calibration(entries: list[DecisionEntry]) -> list[CalibrationMetric]
     Raises:
         TypeError: If entries is not a list.
     """
-    import math
-
     if not isinstance(entries, list):
         msg = f"entries must be a list, got {type(entries).__name__}"
         raise TypeError(msg)
