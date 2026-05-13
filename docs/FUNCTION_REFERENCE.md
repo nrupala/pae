@@ -1,1490 +1,834 @@
 # PAE Function Reference
 
-> Complete API and function documentation for the Personal Analytics Engine.
-> Generated from source code audit. Every public function, struct, enum, and API endpoint is documented.
+> Auto-generated documentation for every public function in the PAE codebase.
+> Covers the Rust engine (crypto, risk, API handlers, versioning) and the Python analytics layer.
+>
+> **Conventions used in this document:**
+> - *Valid range* describes the domain of accepted inputs.
+> - *Edge cases* describes boundary conditions the function handles gracefully.
+> - *Error conditions* describes inputs that cause the function to return an error or raise an exception.
+> - *Dependencies* lists other PAE functions called internally.
 
 ---
 
 ## Table of Contents
 
-- [Rust Engine](#rust-engine)
-  - [API Layer](#api-layer)
-    - [Health Check](#health-check)
-    - [Portfolio Risk](#portfolio-risk)
-    - [Portfolio Metrics](#portfolio-metrics)
-    - [Stress Testing](#stress-testing)
-    - [Correlation Matrix](#correlation-matrix)
-    - [Monte Carlo Simulation](#monte-carlo-simulation)
-    - [Crypto: Key Derivation](#crypto-key-derivation)
-    - [Crypto: Encrypt](#crypto-encrypt)
-    - [Crypto: Decrypt](#crypto-decrypt)
-    - [Versioning: Append](#versioning-append)
-    - [Versioning: History](#versioning-history)
-    - [Versioning: Snapshot](#versioning-snapshot)
-    - [Versioning: Integrity](#versioning-integrity)
-  - [Risk Module](#risk-module)
-    - [portfolio_returns](#portfolio_returns)
-    - [volatility](#volatility)
-    - [sharpe_ratio](#sharpe_ratio)
-    - [sortino_ratio](#sortino_ratio)
-    - [value_at_risk](#value_at_risk)
-    - [conditional_var](#conditional_var)
-    - [max_drawdown](#max_drawdown)
-    - [total_return](#total_return)
-    - [annualized_return](#annualized_return)
-    - [win_rate](#win_rate)
-    - [calmar_ratio](#calmar_ratio)
-    - [pearson_correlation](#pearson_correlation)
-    - [compute_matrix](#compute_matrix)
-    - [run_stress_test](#run_stress_test)
-    - [get_scenario_shocks](#get_scenario_shocks)
-    - [classify_asset](#classify_asset)
-    - [run_simulation (Monte Carlo)](#run_simulation-monte-carlo)
-    - [percentile](#percentile)
-    - [sample_standard_normal](#sample_standard_normal)
-  - [Crypto Module](#crypto-module)
-    - [derive_key](#derive_key)
-    - [encrypt](#encrypt)
-    - [decrypt](#decrypt)
-    - [CryptoError](#cryptoerror)
-  - [Versioning Module](#versioning-module)
-    - [VersionedRecord](#versionedrecord)
-    - [VersionStore](#versionstore)
-    - [SnapshotEngine](#snapshotengine)
-  - [Data Types (Rust)](#data-types-rust)
-- [Python Analytics](#python-analytics)
-  - [Factor Decomposition](#factor-decomposition)
-    - [decompose](#decompose)
-    - [FactorExposure](#factorexposure)
-    - [FactorDecomposition](#factordecomposition)
-  - [Carry Analysis](#carry-analysis)
-    - [analyze_carry](#analyze_carry)
-    - [PositionCarry](#positioncarry)
-    - [PortfolioCarry](#portfoliocarry)
-  - [Decision Journal](#decision-journal)
-    - [DecisionEntry](#decisionentry)
-    - [EmotionalState](#emotionalstate)
-    - [compute_calibration](#compute_calibration)
-    - [CalibrationMetric](#calibrationmetric)
-  - [PKE Ingestion](#pke-ingestion)
-    - [ingest_markdown](#ingest_markdown)
-    - [ingest_directory](#ingest_directory)
-    - [chunk_text](#chunk_text)
-    - [parse_frontmatter](#parse_frontmatter)
-    - [generate_chunk_id](#generate_chunk_id)
-    - [classify_themes](#classify_themes)
-    - [KnowledgeChunk](#knowledgechunk)
-    - [IngestionResult](#ingestionresult)
-  - [PKE Retrieval](#pke-retrieval)
-    - [retrieve_by_theme](#retrieve_by_theme)
-    - [retrieve_by_context](#retrieve_by_context)
-    - [RetrievalResult](#retrievalresult)
-- [TypeScript UI](#typescript-ui)
-  - [PaeApp](#paeapp)
-  - [PaeDashboard](#paedashboard)
-  - [PaeChart](#paechart)
-  - [PaeDisclaimer](#paedisclaimer)
+### Rust Engine (`engine/src/`)
+
+1. [Crypto Vault](#1-crypto-vault)
+2. [Crypto API Handlers](#2-crypto-api-handlers)
+3. [Portfolio API Handlers](#3-portfolio-api-handlers)
+4. [Risk Metrics](#4-risk-metrics)
+5. [Monte Carlo Simulation](#5-monte-carlo-simulation)
+6. [Stress Testing](#6-stress-testing)
+7. [Correlation Matrix](#7-correlation-matrix)
+8. [Versioning Types](#8-versioning-types)
+9. [Version Store](#9-version-store)
+10. [Snapshot Engine](#10-snapshot-engine)
+11. [Versioning API Handlers](#11-versioning-api-handlers)
+12. [Health Check](#12-health-check)
+
+### Python Analytics (`analytics/pae/`)
+
+13. [Factor Decomposition](#13-factor-decomposition)
+14. [Carry Analysis](#14-carry-analysis)
+15. [PKE Ingestion](#15-pke-ingestion)
+16. [PKE Retrieval](#16-pke-retrieval)
+17. [Decision Journal](#17-decision-journal)
 
 ---
 
-## Rust Engine
+## 1. Crypto Vault
 
-### API Layer
+**File:** `engine/src/crypto/vault.rs`
 
-All API endpoints accept JSON payloads and return JSON responses.
-Error responses use the format `{ "error": "message", "code": "ERROR_CODE" }` with appropriate HTTP status codes.
+Provides zero-knowledge cryptographic primitives for PAE's encryption layer. All data is encrypted client-side before storage. The server never sees plaintext.
+
+### `CryptoError` (enum)
+
+Error type for all cryptographic operations.
+
+| Variant | Description |
+|---------|-------------|
+| `InvalidBase64 { context }` | Input is not valid base64. `context` identifies which field. |
+| `InvalidKeyLength` | Decoded key is not 32 bytes. |
+| `InvalidSalt(String)` | Salt string is not valid base64 for Argon2. |
+| `DerivationFailed(String)` | Argon2 hashing failed. |
+| `EncryptionFailed(String)` | AES-GCM encryption failed. |
+| `DecryptionFailed` | AES-GCM decryption failed (wrong key or tampered data). |
+| `InvalidNonceLength(usize)` | Nonce is not 12 bytes. |
+| `InvalidUtf8` | Decrypted bytes are not valid UTF-8. |
+| `EmptyPassphrase` | Passphrase is empty string. |
+| `InvalidParams(String)` | Argon2 parameters are invalid. |
 
 ---
 
-#### Health Check
+### `derive_key`
 
-| Property | Value |
-|---|---|
-| **Endpoint** | `GET /health` |
-| **File** | `engine/src/api/health.rs` |
-| **Handler** | `check()` |
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn derive_key(passphrase: &str, existing_salt: Option<&str>) -> Result<(String, String), CryptoError>` |
+| **Purpose** | Derive a 256-bit key from a passphrase using Argon2id with 600K iterations. |
+| **Parameters** | `passphrase`: non-empty string. `existing_salt`: optional base64-encoded salt for deterministic re-derivation. |
+| **Valid ranges** | `passphrase`: any non-empty `&str`. `existing_salt`: valid base64 or `None`. |
+| **Returns** | `Ok((key_hash_b64, salt_b64))` on success. |
+| **Error conditions** | `EmptyPassphrase` if passphrase is `""`. `InvalidSalt` if salt is not valid base64. `DerivationFailed` if Argon2 hashing fails. `InvalidParams` if Argon2 config is invalid. |
+| **Edge cases** | `None` salt generates a new random salt via `OsRng`. Same passphrase + same salt produces identical output (deterministic). |
+| **Dependencies** | `argon2::Argon2`, `SaltString`, `OsRng` |
 
-**Response:**
+---
+
+### `encrypt`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn encrypt(plaintext: &str, key_b64: &str) -> Result<(String, String), CryptoError>` |
+| **Purpose** | Encrypt plaintext with AES-256-GCM. |
+| **Parameters** | `plaintext`: any string. `key_b64`: base64-encoded 32-byte key. |
+| **Valid ranges** | `key_b64` must decode to exactly 32 bytes. |
+| **Returns** | `Ok((ciphertext_b64, nonce_b64))` on success. |
+| **Error conditions** | `InvalidBase64` if key is not valid base64. `InvalidKeyLength` if decoded key is not 32 bytes. `EncryptionFailed` if AES-GCM encryption fails. |
+| **Edge cases** | Empty plaintext is valid (encrypts zero-length payload). Nonce is generated randomly via `OsRng` (12 bytes). |
+| **Dependencies** | `Aes256Gcm`, `OsRng`, `base64` |
+
+---
+
+### `decrypt`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn decrypt(ciphertext_b64: &str, nonce_b64: &str, key_b64: &str) -> Result<String, CryptoError>` |
+| **Purpose** | Decrypt ciphertext with AES-256-GCM. |
+| **Parameters** | `ciphertext_b64`: base64-encoded ciphertext. `nonce_b64`: base64-encoded 12-byte nonce. `key_b64`: base64-encoded 32-byte key. |
+| **Valid ranges** | All inputs must be valid base64. Nonce must decode to 12 bytes. Key must decode to 32 bytes. |
+| **Returns** | `Ok(plaintext_string)` on success. |
+| **Error conditions** | `InvalidBase64` if any input is not valid base64. `InvalidKeyLength` if key is not 32 bytes. `InvalidNonceLength(n)` if nonce is not 12 bytes. `DecryptionFailed` if authentication fails. `InvalidUtf8` if decrypted bytes are not valid UTF-8. |
+| **Edge cases** | Wrong key produces `DecryptionFailed` (not garbage output). Tampered ciphertext produces `DecryptionFailed`. |
+| **Dependencies** | `Aes256Gcm`, `base64` |
+
+---
+
+## 2. Crypto API Handlers
+
+**File:** `engine/src/api/crypto_api.rs`
+
+HTTP endpoints for the crypto vault. All handlers return `Result` with proper HTTP status codes.
+
+### `derive_key` (handler)
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub async fn derive_key(Json(req): Json<DeriveKeyRequest>) -> Result<Json<DeriveKeyResponse>, (StatusCode, Json<CryptoErrorResponse>)>` |
+| **Route** | `POST /api/v1/crypto/derive-key` |
+| **Purpose** | HTTP wrapper for `vault::derive_key`. |
+| **Request body** | `{ "passphrase": string, "salt": string | null }` |
+| **Response** | `200 { "key_hash": string, "salt": string }` |
+| **Error responses** | `400` for empty passphrase or invalid salt. `422` for derivation failure. `500` for invalid Argon2 params. |
+| **Dependencies** | `vault::derive_key` |
+
+### `encrypt` (handler)
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub async fn encrypt(Json(req): Json<EncryptRequest>) -> Result<Json<EncryptResponse>, (StatusCode, Json<CryptoErrorResponse>)>` |
+| **Route** | `POST /api/v1/crypto/encrypt` |
+| **Purpose** | HTTP wrapper for `vault::encrypt`. |
+| **Request body** | `{ "plaintext": string, "key_b64": string }` |
+| **Response** | `200 { "ciphertext_b64": string, "nonce_b64": string }` |
+| **Error responses** | `400` for invalid base64 or wrong key length. `422` for encryption failure. |
+| **Dependencies** | `vault::encrypt` |
+
+### `decrypt` (handler)
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub async fn decrypt(Json(req): Json<DecryptRequest>) -> Result<Json<DecryptResponse>, (StatusCode, Json<CryptoErrorResponse>)>` |
+| **Route** | `POST /api/v1/crypto/decrypt` |
+| **Purpose** | HTTP wrapper for `vault::decrypt`. |
+| **Request body** | `{ "ciphertext_b64": string, "nonce_b64": string, "key_b64": string }` |
+| **Response** | `200 { "plaintext": string }` |
+| **Error responses** | `400` for invalid base64 or wrong nonce/key length. `422` for decryption failure. |
+| **Dependencies** | `vault::decrypt` |
+
+---
+
+## 3. Portfolio API Handlers
+
+**File:** `engine/src/api/portfolio.rs`
+
+All portfolio endpoints share a common `validate_holdings()` function and a `sanitize_f64()` output guard.
+
+### `PortfolioError` (enum)
+
+| Variant | HTTP Status | Description |
+|---------|-------------|-------------|
+| `EmptyHoldings` | 400 | Holdings array is empty. |
+| `NegativeWeight { symbol }` | 400 | A holding has a negative weight. |
+| `NegativeMarketValue { symbol }` | 400 | A holding has a negative or NaN/Inf market value. |
+| `EmptySymbol` | 400 | A holding has an empty symbol string. |
+| `NoReturnsData { symbol }` | 400 | A holding has an empty returns array. |
+| `NanOrInfReturn { symbol, index }` | 400 | A return value is NaN or Infinity. |
+| `NanOrInfWeight { symbol }` | 400 | A weight is NaN or Infinity. |
+| `InvalidSimulationCount` | 400 | `num_simulations` is 0 or > 1,000,000. |
+| `InvalidTimeHorizon` | 400 | `time_horizon_months` is 0 or > 600. |
+| `NegativeInitialValue` | 400 | `initial_value` is negative or NaN/Inf. |
+| `ZeroInitialValue` | 400 | `initial_value` is exactly 0.0. |
+| `InvalidWindowDays` | 400 | `window_days` is < 2 or > 10,000. |
+| `ProcessingError(msg)` | 422 | A computation error occurred after validation. |
+
+### `validate_holdings`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `fn validate_holdings(holdings: &[Holding]) -> Result<(), PortfolioError>` |
+| **Purpose** | Validate all holdings before any computation. |
+| **Checks** | Non-empty array, non-empty symbols, non-negative weights, non-negative market values, at least one return per holding, no NaN/Infinity in numeric fields. |
+| **Dependencies** | None (pure validation) |
+
+### `sanitize_f64`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `fn sanitize_f64(val: f64) -> f64` |
+| **Purpose** | Replace NaN/Infinity with 0.0 to prevent JSON serialization issues. |
+
+### `compute_risk`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub async fn compute_risk(Json(input): Json<PortfolioInput>) -> Result<Json<RiskResponse>, ...>` |
+| **Route** | `POST /api/v1/portfolio/risk` |
+| **Purpose** | Compute VaR (95/99), CVaR, Sharpe, Sortino, volatility, and max drawdown. |
+| **Request body** | `{ "holdings": [Holding], "benchmark": string | null }` |
+| **Response** | `200 { var_95, var_99, cvar_95, max_drawdown, beta, sharpe, sortino, volatility }` |
+| **Error responses** | `400` for invalid holdings. `422` if all holdings have zero market value. |
+| **Dependencies** | `validate_holdings`, `metrics::portfolio_returns`, `metrics::value_at_risk`, `metrics::conditional_var`, `metrics::max_drawdown`, `metrics::sharpe_ratio`, `metrics::sortino_ratio`, `metrics::volatility`, `sanitize_f64` |
+
+### `compute_metrics`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub async fn compute_metrics(Json(input): Json<PortfolioInput>) -> Result<Json<MetricsResponse>, ...>` |
+| **Route** | `POST /api/v1/portfolio/metrics` |
+| **Purpose** | Compute total return, annualized return, volatility, Sharpe, Sortino, max drawdown, win rate, and Calmar ratio. |
+| **Response** | `200 { total_return, annualized_return, volatility, sharpe, sortino, max_drawdown, win_rate, calmar }` |
+| **Error responses** | `400` for invalid holdings. `422` if all holdings have zero market value. |
+| **Dependencies** | `validate_holdings`, `metrics::*`, `sanitize_f64` |
+
+### `stress_test`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub async fn stress_test(Json(input): Json<StressTestInput>) -> Result<Json<StressTestResponse>, ...>` |
+| **Route** | `POST /api/v1/portfolio/stress` |
+| **Purpose** | Run scenario-based stress test. |
+| **Request body** | `{ "holdings": [Holding], "scenario": string, "custom_shocks": [AssetShock] | null }` |
+| **Response** | `200 { scenario, portfolio_impact_pct, position_impacts: [{ symbol, impact_pct, impact_value }] }` |
+| **Error responses** | `400` for invalid holdings, empty scenario, or invalid custom shock values. |
+| **Dependencies** | `validate_holdings`, `stress::run_stress_test` |
+
+### `correlation_matrix`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub async fn correlation_matrix(Json(input): Json<CorrelationInput>) -> Result<Json<CorrelationResponse>, ...>` |
+| **Route** | `POST /api/v1/portfolio/correlation` |
+| **Purpose** | Compute pairwise Pearson correlation matrix. |
+| **Request body** | `{ "holdings": [Holding], "window_days": usize | null }` |
+| **Response** | `200 { symbols: [string], matrix: [[f64]], window_days: usize }` |
+| **Error responses** | `400` for invalid holdings or `window_days` outside [2, 10000]. |
+| **Dependencies** | `validate_holdings`, `correlation::compute_matrix` |
+
+### `monte_carlo`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub async fn monte_carlo(Json(input): Json<MonteCarloInput>) -> Result<Json<MonteCarloResponse>, ...>` |
+| **Route** | `POST /api/v1/portfolio/montecarlo` |
+| **Purpose** | Run Monte Carlo simulation. |
+| **Request body** | `{ "holdings": [Holding], "num_simulations": usize | null, "time_horizon_months": usize | null, "initial_value": f64 }` |
+| **Valid ranges** | `initial_value` > 0. `num_simulations` in [1, 1000000]. `time_horizon_months` in [1, 600]. |
+| **Response** | `200 { percentiles: { p5, p25, p50, p75, p95 }, num_simulations, time_horizon_months, probability_of_loss }` |
+| **Error responses** | `400` for invalid holdings, non-positive initial value, or out-of-range simulation parameters. |
+| **Dependencies** | `validate_holdings`, `montecarlo::run_simulation` |
+
+---
+
+## 4. Risk Metrics
+
+**File:** `engine/src/risk/metrics.rs`
+
+Pure computation functions. No I/O. All functions handle empty/single-element inputs gracefully.
+
+### `portfolio_returns`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn portfolio_returns(holdings: &[Holding]) -> Vec<f64>` |
+| **Purpose** | Compute market-value-weighted portfolio returns. |
+| **Parameters** | `holdings`: slice of `Holding` structs with `market_value` and `returns`. |
+| **Returns** | Vec of weighted returns, length = min of all holdings' return lengths. |
+| **Edge cases** | Empty holdings -> `vec![]`. Zero total market value -> `vec![]`. Single holding -> that holding's returns weighted by 1.0. |
+| **Dependencies** | None |
+
+### `volatility`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn volatility(returns: &[f64]) -> f64` |
+| **Purpose** | Sample standard deviation of returns (Bessel's correction). |
+| **Edge cases** | < 2 returns -> 0.0. All identical returns -> 0.0. |
+
+### `sharpe_ratio`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn sharpe_ratio(returns: &[f64], risk_free_annual: f64) -> f64` |
+| **Purpose** | `(mean - rf_period) / volatility`. Assumes monthly returns. |
+| **Edge cases** | < 2 returns -> 0.0. Zero volatility -> 0.0 (avoids division by zero). |
+| **Dependencies** | `volatility` |
+
+### `sortino_ratio`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn sortino_ratio(returns: &[f64], risk_free_annual: f64) -> f64` |
+| **Purpose** | `(mean - rf_period) / downside_deviation`. |
+| **Edge cases** | < 2 returns -> 0.0. No downside returns -> 0.0 (returns 0.0, not Infinity). Zero downside deviation -> 0.0. |
+
+### `value_at_risk`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn value_at_risk(returns: &[f64], alpha: f64) -> f64` |
+| **Purpose** | Historical VaR at confidence level `1 - alpha`. Reported as positive number. |
+| **Parameters** | `alpha`: 0.05 for 95% VaR, 0.01 for 99% VaR. |
+| **Edge cases** | Empty returns -> 0.0. NaN values in sort handled with `unwrap_or(Equal)`. |
+
+### `conditional_var`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn conditional_var(returns: &[f64], alpha: f64) -> f64` |
+| **Purpose** | Average loss beyond VaR threshold (Expected Shortfall). |
+| **Edge cases** | Empty returns -> 0.0. Cutoff rounds to zero -> uses at least 1 observation. |
+
+### `max_drawdown`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn max_drawdown(returns: &[f64]) -> f64` |
+| **Purpose** | Largest peak-to-trough decline in cumulative returns. |
+| **Edge cases** | Empty returns -> 0.0. Monotonically increasing -> 0.0. Guards against zero peak. |
+
+### `total_return`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn total_return(returns: &[f64]) -> f64` |
+| **Purpose** | Cumulative compounded return: `product(1 + r_i) - 1`. |
+| **Edge cases** | Empty returns -> 0.0 (product of empty = 1.0, minus 1 = 0.0). |
+
+### `annualized_return`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn annualized_return(returns: &[f64], periods_per_year: usize) -> f64` |
+| **Purpose** | `(1 + total_return)^(1/years) - 1`. |
+| **Edge cases** | Empty returns -> 0.0. `periods_per_year == 0` -> 0.0 (avoids division by zero). |
+| **Dependencies** | `total_return` |
+
+### `win_rate`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn win_rate(returns: &[f64]) -> f64` |
+| **Purpose** | Fraction of positive return periods. |
+| **Edge cases** | Empty returns -> 0.0. |
+
+### `calmar_ratio`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn calmar_ratio(returns: &[f64], periods_per_year: usize) -> f64` |
+| **Purpose** | `annualized_return / max_drawdown`. |
+| **Edge cases** | Zero max drawdown -> 0.0 (avoids division by zero). |
+| **Dependencies** | `annualized_return`, `max_drawdown` |
+
+---
+
+## 5. Monte Carlo Simulation
+
+**File:** `engine/src/risk/montecarlo.rs`
+
+### Constants
+
+| Name | Value | Purpose |
+|------|-------|---------|
+| `MAX_SIMULATIONS` | 1,000,000 | Prevents resource exhaustion. |
+| `MAX_HORIZON_MONTHS` | 600 | 50-year cap on projection horizon. |
+
+### `run_simulation`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn run_simulation(input: &MonteCarloInput) -> MonteCarloResponse` |
+| **Purpose** | Run geometric Brownian motion Monte Carlo simulation. |
+| **Parameters** | `input.holdings`, `input.num_simulations` (default 10000), `input.time_horizon_months` (default 120), `input.initial_value`. |
+| **Valid ranges** | `num_simulations`: clamped to [1, 1000000]. `time_horizon_months`: clamped to [1, 600]. `initial_value`: falls back to 1.0 if NaN/Inf/non-positive. |
+| **Returns** | Percentile paths (p5/p25/p50/p75/p95), simulation count, horizon, probability of loss. |
+| **Edge cases** | Empty holdings -> zero mean/std, paths stay near initial value. Single observation -> zero variance. Extreme returns clamped to [-0.99, 10.0] to prevent Infinity overflow. |
+| **Dependencies** | `percentile`, `sample_standard_normal` |
+
+### `percentile`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `fn percentile(sorted: &[f64], p: f64) -> f64` |
+| **Purpose** | Compute p-th percentile from a sorted slice. |
+| **Edge cases** | Empty slice -> 0.0. Single element -> that element. |
+
+### `sample_standard_normal`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `fn sample_standard_normal(rng: &mut impl Rng) -> f64` |
+| **Purpose** | Box-Muller transform for N(0,1) sampling. |
+| **Edge cases** | Clamps u1 to `max(u1, 1e-15)` to avoid `ln(0) = -Infinity`. |
+
+---
+
+## 6. Stress Testing
+
+**File:** `engine/src/risk/stress.rs`
+
+### `get_scenario_shocks`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `fn get_scenario_shocks(name: &str) -> Vec<(&'static str, f64)>` |
+| **Purpose** | Return historical shock profiles by scenario name. |
+| **Supported scenarios** | `gfc_2008`, `covid_2020`, `rate_shock_2022`, `dotcom_2000`, `stagflation_1970s`, `black_monday_1987`, `oil_shock_2020`. Unknown names -> moderate default profile. |
+
+### `classify_asset`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `fn classify_asset(_symbol: &str) -> &'static str` |
+| **Purpose** | Classify a holding into an asset class. Stub: always returns `"equity"`. |
+
+### `run_stress_test`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn run_stress_test(input: &StressTestInput) -> StressTestResponse` |
+| **Purpose** | Apply scenario shocks to portfolio holdings. |
+| **Edge cases** | Empty holdings -> zero impact. Zero total market value -> `portfolio_impact_pct = 0.0`. NaN/Infinity in `shock_pct` -> sanitized to 0.0. NaN/Infinity in `impact_value` -> sanitized to 0.0. Unknown asset class -> default -10% shock. |
+| **Dependencies** | `get_scenario_shocks`, `classify_asset` |
+
+---
+
+## 7. Correlation Matrix
+
+**File:** `engine/src/risk/correlation.rs`
+
+### `compute_matrix`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn compute_matrix(input: &CorrelationInput) -> CorrelationResponse` |
+| **Purpose** | Build NxN pairwise Pearson correlation matrix. |
+| **Parameters** | `input.holdings`, `input.window_days` (default 90, min 2). |
+| **Edge cases** | Empty holdings -> empty matrix. Single holding -> `[[1.0]]`. NaN/Infinity in returns -> 0.0 correlation for that pair. |
+| **Dependencies** | `pearson_correlation`, `clamp_correlation` |
+
+### `clamp_correlation`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `fn clamp_correlation(corr: f64) -> f64` |
+| **Purpose** | Clamp to [-1.0, 1.0]. NaN/Infinity -> 0.0. |
+
+### `pearson_correlation`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `fn pearson_correlation(x: &[f64], y: &[f64], window: usize) -> f64` |
+| **Purpose** | Pearson r over the last `window` observations. |
+| **Edge cases** | < 2 observations -> 0.0. Zero variance in either series -> 0.0. NaN/Infinity in either series -> 0.0. |
+
+---
+
+## 8. Versioning Types
+
+**File:** `engine/src/versioning/types.rs`
+
+### `VersionedRecord` (struct)
+
+Content-addressed, append-only version record. Fields: `version_hash`, `entity_id`, `entity_type`, `version`, `author`, `created_at`, `content_encrypted`, `nonce`, `metadata`, `parent_hash`.
+
+### `VersionedRecord::compute_hash`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn compute_hash(entity_id: &str, version: u64, content: &[u8]) -> String` |
+| **Purpose** | SHA-256 content-addressed hash for tamper evidence. |
+| **Returns** | Hex-encoded SHA-256 hash string. |
+
+### `VersionedRecord::verify_integrity`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn verify_integrity(&self) -> bool` |
+| **Purpose** | Verify `version_hash` matches recomputed hash of current fields. |
+
+### `EntityType` (enum)
+
+Variants: `Holdings`, `Position`, `DecisionEntry`, `CalibrationRecord`, `KnowledgeChunk`, `KnowledgeAnnotation`, `Configuration`, `StressTestConfig`, `MonteCarloConfig`, `CarrySnapshot`.
+
+### `VersionAuthor` (enum)
+
+Variants: `User`, `System`, `DataFeed(String)`.
+
+---
+
+## 9. Version Store
+
+**File:** `engine/src/versioning/store.rs`
+
+In-memory append-only version store with `RwLock`. Production target: SQLite with WAL.
+
+### `VersionStoreError` (enum)
+
+| Variant | Description |
+|---------|-------------|
+| `LockFailed` | Failed to acquire RwLock. |
+| `NotFound(String)` | Entity ID not found. |
+| `IntegrityFailed(String)` | Chain integrity check failed. |
+
+### `VersionStore::new`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn new() -> Self` |
+| **Purpose** | Create an empty in-memory version store. |
+
+### `VersionStore::append`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn append(&self, entity_id, entity_type, content_encrypted, nonce, author, change_summary, tags) -> Result<String, VersionStoreError>` |
+| **Purpose** | Append a new version. Returns version hash. |
+| **Error conditions** | `LockFailed` if RwLock is poisoned. |
+
+### `VersionStore::get_latest`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn get_latest(&self, entity_id: &str) -> Result<Option<VersionedRecord>, VersionStoreError>` |
+| **Purpose** | Get the most recent version of an entity. |
+
+### `VersionStore::get_by_hash`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn get_by_hash(&self, version_hash: &str) -> Result<Option<VersionedRecord>, VersionStoreError>` |
+| **Purpose** | Look up a specific version by its content-addressed hash. |
+
+### `VersionStore::query`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn query(&self, query: &VersionQuery) -> Result<Vec<VersionedRecord>, VersionStoreError>` |
+| **Purpose** | Query version history with optional date range, limit, and latest-only filters. |
+
+### `VersionStore::total_versions`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn total_versions(&self) -> Result<usize, VersionStoreError>` |
+| **Purpose** | Count total versions across all entities. |
+
+### `VersionStore::verify_chain`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn verify_chain(&self, entity_id: &str) -> Result<bool, VersionStoreError>` |
+| **Purpose** | Verify integrity of the full version chain for an entity. Checks content hashes and parent linkage. |
+| **Edge cases** | Non-existent entity -> `Ok(true)` (no chain to violate). |
+
+---
+
+## 10. Snapshot Engine
+
+**File:** `engine/src/versioning/snapshot.rs`
+
+Point-in-time portfolio state reconstruction. Currently stub implementations.
+
+### `SnapshotEngine::snapshot_at`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn snapshot_at(&self, _query: &SnapshotQuery) -> Result<Vec<VersionedRecord>, VersionStoreError>` |
+| **Purpose** | Reconstruct state of all entities at a specific timestamp. |
+| **Status** | Stub: returns `Ok(vec![])`. Production: SQL query with GROUP BY + MAX(version). |
+
+### `SnapshotEngine::diff`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub fn diff(&self, from, to, _entity_types) -> Result<SnapshotDiff, VersionStoreError>` |
+| **Purpose** | Compare two snapshots. Returns added, removed, and modified entities. |
+| **Status** | Stub: returns empty diff. |
+
+---
+
+## 11. Versioning API Handlers
+
+**File:** `engine/src/api/versioning_api.rs`
+
+Stub HTTP handlers for the versioning system. All return placeholder responses.
+
+| Handler | Route | Purpose |
+|---------|-------|---------|
+| `append_version` | `POST /api/v1/version` | Append a new version for an entity. |
+| `get_history` | `POST /api/v1/version/history` | Get version history for an entity. |
+| `get_snapshot` | `POST /api/v1/version/snapshot` | Get point-in-time snapshot. |
+| `verify_integrity` | `GET /api/v1/version/integrity/:entity_id` | Verify chain integrity. |
+
+---
+
+## 12. Health Check
+
+**File:** `engine/src/api/health.rs`
+
+### `check`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub async fn check() -> Json<HealthResponse>` |
+| **Route** | `GET /health` |
+| **Purpose** | Health/readiness probe. Returns engine status, version (from Cargo.toml), and engine name. |
+
+---
+
+## 13. Factor Decomposition
+
+**File:** `analytics/pae/models/factor.py`
+
+### `FactorError` (exception)
+
+Raised when factor decomposition fails due to singular matrix or numerical instability.
+
+### `_validate_returns`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `def _validate_returns(portfolio_returns, factor_returns) -> None` |
+| **Purpose** | Validate inputs before regression. |
+| **Raises** | `ValueError` if: empty arrays, fewer than k+2 observations, mismatched lengths, NaN/Infinity values, no factors. |
+
+### `decompose`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `def decompose(portfolio_returns: NDArray, factor_returns: dict[str, NDArray]) -> FactorDecomposition` |
+| **Purpose** | OLS regression of portfolio returns on Fama-French factors. Returns alpha, R-squared, factor exposures, and residual risk. |
+| **Parameters** | `portfolio_returns`: 1D array. `factor_returns`: dict mapping factor name to 1D array (same length). |
+| **Valid ranges** | Need >= k+2 observations. All values must be finite. |
+| **Returns** | `FactorDecomposition(alpha, alpha_t_stat, r_squared, exposures, residual_risk_pct)` |
+| **Error conditions** | `ValueError` from validation. `FactorError` if factor matrix is singular (collinear factors) or regression produces NaN/Infinity coefficients. |
+| **Edge cases** | Near-singular matrices: caught via NaN check on betas. Negative covariance diagonal: guarded with `np.maximum(diag, 0.0)`. Zero portfolio variance: contribution_pct = 0.0. |
+| **Dependencies** | `numpy.linalg.inv`, `_validate_returns` |
+
+---
+
+## 14. Carry Analysis
+
+**File:** `analytics/pae/models/carry.py`
+
+### `CarryError` (exception)
+
+Raised when carry analysis encounters invalid inputs.
+
+### `_validate_holdings`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `def _validate_holdings(holdings: list[dict]) -> None` |
+| **Raises** | `ValueError` if: empty list, missing symbol/market_value, negative market_value, NaN/Infinity in market_value or yield_pct. |
+
+### `_validate_margin_params`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `def _validate_margin_params(total_margin: float, margin_rate: float) -> None` |
+| **Raises** | `ValueError` if: negative, NaN, or Infinity values. |
+
+### `analyze_carry`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `def analyze_carry(holdings, total_margin, margin_rate=0.058) -> PortfolioCarry` |
+| **Purpose** | Compute income vs. margin cost for each position and the portfolio. |
+| **Parameters** | `holdings`: list of dicts with `symbol`, `market_value`, optional `yield_pct`. `total_margin`: borrowed amount. `margin_rate`: annual rate (default 5.8%). |
+| **Valid ranges** | All numeric values non-negative and finite. |
+| **Returns** | `PortfolioCarry` with per-position and aggregate metrics. |
+| **Error conditions** | `ValueError` from validation. |
+| **Edge cases** | `total_long == 0` -> margin_share = 0. `total_nav <= 0` -> leverage = 0, margin_pct = 0. `total_margin_cost == 0` -> coverage = `inf` if income > 0, else 0.0. `yield_pct = None` -> treated as 0.0. |
+| **Dependencies** | `_validate_holdings`, `_validate_margin_params` |
+
+---
+
+## 15. PKE Ingestion
+
+**File:** `analytics/pae/pke/ingest.py`
+
+### Constants
+
+| Name | Value | Purpose |
+|------|-------|---------|
+| `MAX_FILE_SIZE_BYTES` | 10,485,760 (10 MB) | Prevents memory exhaustion on large files. |
+| `MIN_CHUNK_WORDS` | 10 | Minimum word count to keep a chunk. |
+| `THEMES` | 10 theme strings | Valid classification categories. |
+
+### `parse_frontmatter`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `def parse_frontmatter(text: str) -> tuple[dict, str]` |
+| **Purpose** | Extract YAML frontmatter from `---` delimiters. |
+| **Returns** | `(metadata_dict, body_text)`. No frontmatter -> `({}, original_text)`. |
+
+### `chunk_text`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `def chunk_text(text: str, max_tokens: int = 400) -> list[str]` |
+| **Purpose** | Split text at paragraph boundaries, respecting max word count. |
+| **Valid ranges** | `max_tokens >= 1`. |
+| **Error conditions** | `ValueError` if `max_tokens < 1`. |
+| **Edge cases** | Empty/whitespace text -> `[]`. Oversized paragraphs split at sentence boundaries. |
+
+### `generate_chunk_id`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `def generate_chunk_id(source: str, text: str) -> str` |
+| **Purpose** | Deterministic SHA-256 chunk ID (16 hex chars). |
+
+### `classify_themes`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `def classify_themes(text: str) -> list[str]` |
+| **Purpose** | Keyword-based theme classification (stub for zero-shot classifier). |
+| **Returns** | List of matching themes, or `["general"]` if none match. |
+
+### `ingest_markdown`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `def ingest_markdown(file_path: Path) -> IngestionResult` |
+| **Purpose** | Read a Markdown file, chunk it, classify themes, return structured result. |
+| **Error handling** | `FileNotFoundError`, `PermissionError`, `UnicodeDecodeError`, `OSError`: all captured in `errors` list (not raised). Files > `MAX_FILE_SIZE_BYTES` rejected. Empty files reported as error. |
+| **Dependencies** | `parse_frontmatter`, `chunk_text`, `generate_chunk_id`, `classify_themes` |
+
+### `ingest_directory`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `def ingest_directory(dir_path: Path) -> list[IngestionResult]` |
+| **Purpose** | Recursively ingest all `*.md` files in a directory. |
+| **Error conditions** | `ValueError` if `dir_path` does not exist or is not a directory. |
+| **Edge cases** | Individual file errors captured per-result; do not abort other files. Directory glob errors logged and return empty list. |
+| **Dependencies** | `ingest_markdown` |
+
+---
+
+## 16. PKE Retrieval
+
+**File:** `analytics/pae/pke/retrieve.py`
+
+### `retrieve_by_theme`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `def retrieve_by_theme(theme: str, top_k: int = 5) -> list[RetrievalResult]` |
+| **Purpose** | Retrieve top-k passages matching a theme. |
+| **Status** | Stub: returns `[]`. Production: sqlite-vec vector similarity search. |
+
+### `retrieve_by_context`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `def retrieve_by_context(context_text: str, themes: list[str] | None = None, top_k: int = 5) -> list[RetrievalResult]` |
+| **Purpose** | Retrieve passages relevant to an analytical context. |
+| **Status** | Stub: returns `[]`. Production: semantic search. |
+
+### `ANALYTICAL_CONTEXT_THEMES` (dict)
+
+Maps analytical contexts (e.g. `"monte_carlo"`, `"stress_test"`) to relevant PKE themes for automatic knowledge surfacing.
+
+---
+
+## 17. Decision Journal
+
+**File:** `analytics/pae/decision/journal.py`
+
+### Constants
+
+| Name | Value | Purpose |
+|------|-------|---------|
+| `CONFIDENCE_MIN` | 1 | Minimum valid confidence score. |
+| `CONFIDENCE_MAX` | 10 | Maximum valid confidence score. |
+| `_VALID_EMOTIONAL_STATES` | frozenset of 7 values | Valid emotional state strings. |
+
+### `EmotionalState` (enum)
+
+Values: `calm`, `anxious`, `excited`, `fearful`, `confident`, `uncertain`, `neutral`.
+
+### `validate_entry`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `def validate_entry(entry: DecisionEntry) -> list[str]` |
+| **Purpose** | Validate a journal entry for data integrity. |
+| **Checks** | Confidence in [1, 10] and is int. Emotional state is valid enum value. `max_acceptable_loss_pct` is non-negative and finite. Outcome values are finite or None. |
+| **Returns** | List of error strings. Empty list = valid. |
+
+### `compute_calibration`
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `def compute_calibration(entries: list[DecisionEntry]) -> list[CalibrationMetric]` |
+| **Purpose** | Compare stated confidence against actual 90-day outcomes. Groups into buckets: high (8-10), medium (5-7), low (1-4). |
+| **Parameters** | `entries`: list of `DecisionEntry`. Entries without `outcome_90d` are skipped. |
+| **Returns** | List of 3 `CalibrationMetric` objects. Zero-decision buckets show 0.0% accuracy. |
+| **Error conditions** | `TypeError` if `entries` is not a list. |
+| **Edge cases** | Invalid confidence or non-finite outcomes silently skipped. Division by zero on empty buckets -> 0.0. |
+
+---
+
+## Appendix: Error Response Format
+
+All API endpoints return errors in this format:
 
 ```json
 {
-  "status": "ok",
-  "version": "0.1.0",
-  "engine": "pae-engine"
+  "error": "Human-readable error message",
+  "code": "MACHINE_READABLE_ERROR_CODE"
 }
 ```
 
-**Error Conditions:** None (always returns 200).
+### HTTP Status Code Mapping
+
+| Status | Meaning | When |
+|--------|---------|------|
+| 400 | Bad Request | Input validation failures (empty holdings, negative values, NaN, invalid base64) |
+| 422 | Unprocessable Entity | Processing failures (decryption failed, singular matrix, zero market value) |
+| 500 | Internal Server Error | Unexpected internal errors (invalid Argon2 params) |
 
 ---
 
-#### Portfolio Risk
-
-| Property | Value |
-|---|---|
-| **Endpoint** | `POST /api/v1/portfolio/risk` |
-| **File** | `engine/src/api/portfolio.rs` |
-| **Handler** | `compute_risk(Json<PortfolioInput>)` |
-
-**Request Body (`PortfolioInput`):**
-
-| Field | Type | Required | Valid Range | Description |
-|---|---|---|---|---|
-| `holdings` | `Holding[]` | Yes | >= 1 element | Portfolio holdings |
-| `benchmark` | `string?` | No | -- | Benchmark symbol (future use) |
-
-**Holding:**
-
-| Field | Type | Required | Valid Range | Description |
-|---|---|---|---|---|
-| `symbol` | `string` | Yes | Non-empty | Ticker symbol |
-| `weight` | `f64` | Yes | -- | Portfolio weight |
-| `returns` | `f64[]` | Yes | >= 1, all finite | Historical period returns |
-| `yield_pct` | `f64?` | No | -- | Annual yield percentage |
-| `cost_basis` | `f64?` | No | -- | Cost basis |
-| `market_value` | `f64` | Yes | >= 0, finite | Current market value |
-
-**Response (`RiskResponse`):**
-
-| Field | Type | Description |
-|---|---|---|
-| `var_95` | `f64` | 95% Value at Risk (positive = loss) |
-| `var_99` | `f64` | 99% Value at Risk (positive = loss) |
-| `cvar_95` | `f64` | 95% Conditional VaR (Expected Shortfall) |
-| `max_drawdown` | `f64` | Maximum peak-to-trough drawdown [0, 1] |
-| `beta` | `f64?` | Portfolio beta (null without benchmark) |
-| `sharpe` | `f64` | Annualized Sharpe ratio |
-| `sortino` | `f64` | Annualized Sortino ratio |
-| `volatility` | `f64` | Annualized volatility |
-
-**Error Responses:**
-
-| HTTP Status | Code | Condition |
-|---|---|---|
-| 400 | `EMPTY_HOLDINGS` | Holdings array is empty |
-| 400 | `EMPTY_SYMBOL` | A holding has an empty symbol |
-| 400 | `NEGATIVE_MARKET_VALUE` | A holding has negative market value |
-| 400 | `INVALID_MARKET_VALUE` | A holding has NaN or Infinity market value |
-| 400 | `EMPTY_RETURNS` | A holding has no return data |
-| 400 | `INVALID_RETURN` | A return value is NaN or Infinity |
-| 400 | `ZERO_TOTAL_VALUE` | Total portfolio value is zero or negative |
-
-**Dependencies:** `metrics::portfolio_returns`, `metrics::value_at_risk`, `metrics::conditional_var`, `metrics::max_drawdown`, `metrics::sharpe_ratio`, `metrics::sortino_ratio`, `metrics::volatility`.
-
----
-
-#### Portfolio Metrics
-
-| Property | Value |
-|---|---|
-| **Endpoint** | `POST /api/v1/portfolio/metrics` |
-| **File** | `engine/src/api/portfolio.rs` |
-| **Handler** | `compute_metrics(Json<PortfolioInput>)` |
-
-**Request:** Same as Portfolio Risk (`PortfolioInput`).
-
-**Response (`MetricsResponse`):**
-
-| Field | Type | Description |
-|---|---|---|
-| `total_return` | `f64` | Cumulative return over all periods |
-| `annualized_return` | `f64` | Annualized return (assuming 12 periods/year) |
-| `volatility` | `f64` | Annualized volatility |
-| `sharpe` | `f64` | Annualized Sharpe ratio |
-| `sortino` | `f64` | Annualized Sortino ratio |
-| `max_drawdown` | `f64` | Maximum drawdown [0, 1] |
-| `win_rate` | `f64` | Fraction of positive return periods [0, 1] |
-| `calmar` | `f64` | Calmar ratio (annualized return / max drawdown) |
-
-**Error Responses:** Same as Portfolio Risk.
-
-**Dependencies:** `metrics::portfolio_returns`, `metrics::total_return`, `metrics::annualized_return`, `metrics::volatility`, `metrics::sharpe_ratio`, `metrics::sortino_ratio`, `metrics::max_drawdown`, `metrics::win_rate`, `metrics::calmar_ratio`.
-
----
-
-#### Stress Testing
-
-| Property | Value |
-|---|---|
-| **Endpoint** | `POST /api/v1/portfolio/stress` |
-| **File** | `engine/src/api/portfolio.rs` |
-| **Handler** | `stress_test(Json<StressTestInput>)` |
-
-**Request (`StressTestInput`):**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `holdings` | `Holding[]` | Yes | Portfolio holdings |
-| `scenario` | `string` | Yes | Scenario name or "custom" |
-| `custom_shocks` | `AssetShock[]?` | No | User-defined shocks |
-
-**AssetShock:**
-
-| Field | Type | Description |
-|---|---|---|
-| `asset_class` | `string` | Asset class name (e.g., "equity") |
-| `shock_pct` | `f64` | Shock as decimal (e.g., -0.30 for -30%) |
-
-**Named Scenarios:** `gfc_2008`, `covid_2020`, `rate_shock_2022`, `dotcom_2000`, `stagflation_1970s`, `black_monday_1987`, `oil_shock_2020`. Unknown names use a moderate default.
-
-**Response (`StressTestResponse`):**
-
-| Field | Type | Description |
-|---|---|---|
-| `scenario` | `string` | Scenario name |
-| `portfolio_impact_pct` | `f64` | Weighted portfolio impact |
-| `position_impacts` | `PositionImpact[]` | Per-position impacts |
-
-**Error Responses:** Standard holding validation errors, plus:
-
-| HTTP Status | Code | Condition |
-|---|---|---|
-| 400 | `MISSING_SCENARIO` | Empty scenario and no custom_shocks |
-| 400 | `INVALID_SHOCK` | Non-finite shock value |
-
-**Dependencies:** `stress::run_stress_test`.
-
----
-
-#### Correlation Matrix
-
-| Property | Value |
-|---|---|
-| **Endpoint** | `POST /api/v1/portfolio/correlation` |
-| **File** | `engine/src/api/portfolio.rs` |
-| **Handler** | `correlation_matrix(Json<CorrelationInput>)` |
-
-**Request (`CorrelationInput`):**
-
-| Field | Type | Required | Valid Range | Description |
-|---|---|---|---|---|
-| `holdings` | `Holding[]` | Yes | >= 2 | Holdings with return series |
-| `window_days` | `usize?` | No | >= 1, default 90 | Rolling window |
-
-**Response (`CorrelationResponse`):**
-
-| Field | Type | Description |
-|---|---|---|
-| `symbols` | `string[]` | Ordered symbol list |
-| `matrix` | `f64[][]` | NxN correlation matrix [-1, 1] |
-| `window_days` | `usize` | Window used |
-
-**Error Responses:** Standard validation, plus:
-
-| HTTP Status | Code | Condition |
-|---|---|---|
-| 400 | `INSUFFICIENT_HOLDINGS` | Fewer than 2 holdings |
-| 400 | `INVALID_WINDOW` | window_days is 0 |
-
-**Dependencies:** `correlation::compute_matrix`.
-
----
-
-#### Monte Carlo Simulation
-
-| Property | Value |
-|---|---|
-| **Endpoint** | `POST /api/v1/portfolio/montecarlo` |
-| **File** | `engine/src/api/portfolio.rs` |
-| **Handler** | `monte_carlo(Json<MonteCarloInput>)` |
-
-**Request (`MonteCarloInput`):**
-
-| Field | Type | Required | Valid Range | Description |
-|---|---|---|---|---|
-| `holdings` | `Holding[]` | Yes | >= 1 | Holdings with returns |
-| `num_simulations` | `usize?` | No | 1 to 1,000,000 (default: 10,000) | Number of paths |
-| `time_horizon_months` | `usize?` | No | 1 to 600 (default: 120) | Horizon in months |
-| `initial_value` | `f64` | Yes | > 0, finite | Starting value |
-
-**Response (`MonteCarloResponse`):**
-
-| Field | Type | Description |
-|---|---|---|
-| `percentiles.p5` | `f64[]` | 5th percentile path (horizon+1 points) |
-| `percentiles.p25` | `f64[]` | 25th percentile path |
-| `percentiles.p50` | `f64[]` | Median path |
-| `percentiles.p75` | `f64[]` | 75th percentile path |
-| `percentiles.p95` | `f64[]` | 95th percentile path |
-| `num_simulations` | `usize` | Simulations run |
-| `time_horizon_months` | `usize` | Horizon used |
-| `probability_of_loss` | `f64` | P(final < initial) [0, 1] |
-
-**Error Responses:** Standard validation, plus:
-
-| HTTP Status | Code | Condition |
-|---|---|---|
-| 400 | `INVALID_INITIAL_VALUE` | Non-positive or non-finite initial_value |
-| 400 | `INVALID_NUM_SIMULATIONS` | Outside [1, 1,000,000] |
-| 400 | `INVALID_HORIZON` | Outside [1, 600] |
-
-**Dependencies:** `montecarlo::run_simulation`.
-
----
-
-#### Crypto: Key Derivation
-
-| Property | Value |
-|---|---|
-| **Endpoint** | `POST /api/v1/crypto/derive-key` |
-| **File** | `engine/src/api/crypto_api.rs` |
-| **Handler** | `derive_key(Json<DeriveKeyRequest>)` |
-
-**Request:**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `passphrase` | `string` | Yes | User passphrase (must not be empty) |
-| `salt` | `string?` | No | Base64 salt for deterministic derivation |
-
-**Response:**
-
-| Field | Type | Description |
-|---|---|---|
-| `key_hash` | `string` | Argon2id hash string |
-| `salt` | `string` | Salt used (base64) |
-
-**Error Responses:**
-
-| HTTP Status | Code | Condition |
-|---|---|---|
-| 400 | `INVALID_INPUT` | Empty passphrase or invalid salt |
-| 500 | `CRYPTO_ERROR` | Hashing failure |
-
-**Dependencies:** `vault::derive_key`.
-
----
-
-#### Crypto: Encrypt
-
-| Property | Value |
-|---|---|
-| **Endpoint** | `POST /api/v1/crypto/encrypt` |
-| **File** | `engine/src/api/crypto_api.rs` |
-| **Handler** | `encrypt(Json<EncryptRequest>)` |
-
-**Request:**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `plaintext` | `string` | Yes | Text to encrypt (must not be empty) |
-| `key_b64` | `string` | Yes | Base64-encoded 32-byte AES key |
-
-**Response:**
-
-| Field | Type | Description |
-|---|---|---|
-| `ciphertext_b64` | `string` | Base64 ciphertext |
-| `nonce_b64` | `string` | Base64 12-byte nonce |
-
-**Error Responses:**
-
-| HTTP Status | Code | Condition |
-|---|---|---|
-| 400 | `INVALID_INPUT` | Empty plaintext, invalid base64, wrong key length |
-| 500 | `CRYPTO_ERROR` | Encryption failure |
-
-**Dependencies:** `vault::encrypt`.
-
----
-
-#### Crypto: Decrypt
-
-| Property | Value |
-|---|---|
-| **Endpoint** | `POST /api/v1/crypto/decrypt` |
-| **File** | `engine/src/api/crypto_api.rs` |
-| **Handler** | `decrypt(Json<DecryptRequest>)` |
-
-**Request:**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `ciphertext_b64` | `string` | Yes | Base64 ciphertext |
-| `nonce_b64` | `string` | Yes | Base64 12-byte nonce |
-| `key_b64` | `string` | Yes | Base64 32-byte AES key |
-
-**Response:**
-
-| Field | Type | Description |
-|---|---|---|
-| `plaintext` | `string` | Decrypted text |
-
-**Error Responses:**
-
-| HTTP Status | Code | Condition |
-|---|---|---|
-| 400 | `INVALID_INPUT` | Invalid base64, wrong key/nonce length |
-| 422 | `DECRYPTION_FAILED` | Wrong key, tampered ciphertext, etc. |
-
-**Dependencies:** `vault::decrypt`.
-
----
-
-#### Versioning: Append
-
-| Property | Value |
-|---|---|
-| **Endpoint** | `POST /api/v1/version` |
-| **File** | `engine/src/api/versioning_api.rs` |
-| **Handler** | `append_version(State<Arc<VersionStore>>, Json<AppendVersionRequest>)` |
-
-**Request:**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `entity_id` | `string` | Yes | Stable entity identifier |
-| `entity_type` | `string` | Yes | One of: `holdings`, `position`, `decision_entry`, `calibration_record`, `knowledge_chunk`, `knowledge_annotation`, `configuration`, `stress_test_config`, `monte_carlo_config`, `carry_snapshot` |
-| `content_encrypted_b64` | `string` | Yes | Base64 encrypted content |
-| `nonce_b64` | `string` | Yes | Base64 encryption nonce |
-| `change_summary` | `string?` | No | Human-readable change description |
-| `tags` | `string[]` | Yes | Metadata tags |
-
-**Response:**
-
-| Field | Type | Description |
-|---|---|---|
-| `version_hash` | `string` | Content-addressed SHA-256 hash |
-| `version` | `u64` | Monotonic version number |
-
-**Error Responses:**
-
-| HTTP Status | Code | Condition |
-|---|---|---|
-| 400 | `EMPTY_ENTITY_ID` | Empty entity_id |
-| 400 | `EMPTY_CONTENT` | Empty content_encrypted_b64 |
-| 400 | `EMPTY_NONCE` | Empty nonce_b64 |
-| 400 | `INVALID_ENTITY_TYPE` | Unrecognized entity type string |
-| 400 | `INVALID_BASE64` | Malformed base64 |
-| 500 | `STORE_ERROR` | Lock failure or internal error |
-
-**Dependencies:** `VersionStore::append`, `VersionStore::get_latest`.
-
----
-
-#### Versioning: History
-
-| Property | Value |
-|---|---|
-| **Endpoint** | `POST /api/v1/version/history` |
-| **File** | `engine/src/api/versioning_api.rs` |
-| **Handler** | `get_history(State<Arc<VersionStore>>, Json<GetHistoryRequest>)` |
-
-**Request:**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `entity_id` | `string` | Yes | Entity to query |
-| `limit` | `usize?` | No | Max versions to return |
-| `latest_only` | `bool?` | No | Return only the latest version |
-
-**Response:**
-
-| Field | Type | Description |
-|---|---|---|
-| `entity_id` | `string` | Queried entity |
-| `total_versions` | `usize` | Count of returned versions |
-| `versions` | `VersionRecord[]` | Version history |
-
----
-
-#### Versioning: Snapshot
-
-| Property | Value |
-|---|---|
-| **Endpoint** | `POST /api/v1/version/snapshot` |
-| **File** | `engine/src/api/versioning_api.rs` |
-| **Handler** | `get_snapshot(Json<SnapshotRequest>)` |
-
-**Status:** Stub. Returns empty entities array. Will be wired to `SnapshotEngine` when SQLite backend is ready.
-
----
-
-#### Versioning: Integrity
-
-| Property | Value |
-|---|---|
-| **Endpoint** | `GET /api/v1/version/integrity/{entity_id}` |
-| **File** | `engine/src/api/versioning_api.rs` |
-| **Handler** | `verify_integrity(State<Arc<VersionStore>>, Path<String>)` |
-
-**Response:**
-
-| Field | Type | Description |
-|---|---|---|
-| `entity_id` | `string` | Entity checked |
-| `chain_valid` | `bool` | Whether all hashes and parent links are valid |
-| `total_versions` | `usize` | Number of versions in the chain |
-
----
-
-### Risk Module
-
-#### portfolio_returns
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/metrics.rs` |
-| **Signature** | `pub fn portfolio_returns(holdings: &[Holding]) -> Vec<f64>` |
-
-**Purpose:** Compute weighted portfolio returns from holdings. Weights are derived from `market_value` relative to total portfolio value.
-
-**Parameters:**
-
-| Param | Type | Description |
-|---|---|---|
-| `holdings` | `&[Holding]` | Slice of portfolio holdings |
-
-**Returns:** `Vec<f64>` - Weighted portfolio returns. Empty if holdings are empty, total value is zero, or no return data exists.
-
-**Edge Cases:**
-- Empty holdings: returns `[]`
-- Zero total value: returns `[]`
-- Mismatched return lengths: uses minimum length across all holdings
-- Uses `.get(i)` with fallback to 0.0 instead of direct indexing
-
-**Dependencies:** None.
-
----
-
-#### volatility
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/metrics.rs` |
-| **Signature** | `pub fn volatility(returns: &[f64]) -> f64` |
-
-**Purpose:** Compute sample standard deviation of returns (annualized volatility).
-
-**Parameters:**
-
-| Param | Type | Valid Range | Description |
-|---|---|---|---|
-| `returns` | `&[f64]` | >= 2 elements for meaningful result | Period returns |
-
-**Returns:** `f64` - Standard deviation. Returns 0.0 if fewer than 2 returns or non-finite result.
-
-**Edge Cases:**
-- Empty/single return: 0.0
-- All identical returns: 0.0
-- Non-finite result: clamped to 0.0
-
----
-
-#### sharpe_ratio
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/metrics.rs` |
-| **Signature** | `pub fn sharpe_ratio(returns: &[f64], risk_free_annual: f64) -> f64` |
-
-**Purpose:** Compute annualized Sharpe ratio = (mean - risk_free_per_period) / volatility.
-
-**Parameters:**
-
-| Param | Type | Description |
-|---|---|---|
-| `returns` | `&[f64]` | Period returns |
-| `risk_free_annual` | `f64` | Annual risk-free rate (e.g., 0.045 for 4.5%) |
-
-**Returns:** `f64` - Sharpe ratio. Returns 0.0 if <2 returns, zero volatility, or non-finite.
-
-**Assumptions:** Returns are monthly (divides risk-free by 12).
-
-**Dependencies:** `volatility`.
-
----
-
-#### sortino_ratio
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/metrics.rs` |
-| **Signature** | `pub fn sortino_ratio(returns: &[f64], risk_free_annual: f64) -> f64` |
-
-**Purpose:** Compute Sortino ratio, penalizing only downside deviation.
-
-**Returns:** `f64` - Sortino ratio. Returns `f64::INFINITY` if no downside returns exist, 0.0 if <2 returns.
-
-**Dependencies:** None (self-contained calculation).
-
----
-
-#### value_at_risk
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/metrics.rs` |
-| **Signature** | `pub fn value_at_risk(returns: &[f64], alpha: f64) -> f64` |
-
-**Purpose:** Historical Value at Risk at a given confidence level.
-
-**Parameters:**
-
-| Param | Type | Valid Range | Description |
-|---|---|---|---|
-| `returns` | `&[f64]` | -- | Period returns |
-| `alpha` | `f64` | 0.001 to 0.999 (clamped) | Tail probability (0.05 = 95% VaR) |
-
-**Returns:** `f64` - VaR as a positive number (magnitude of loss). Returns 0.0 if empty or all non-finite.
-
-**Edge Cases:**
-- Filters out NaN/Infinity values before sorting
-- Alpha is clamped to [0.001, 0.999]
-- Uses `partial_cmp` with `Ordering::Equal` fallback for NaN safety
-
----
-
-#### conditional_var
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/metrics.rs` |
-| **Signature** | `pub fn conditional_var(returns: &[f64], alpha: f64) -> f64` |
-
-**Purpose:** Conditional VaR (Expected Shortfall) - average loss beyond the VaR threshold.
-
-**Returns:** `f64` - CVaR as positive number. Returns 0.0 if empty, non-finite, or empty tail.
-
----
-
-#### max_drawdown
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/metrics.rs` |
-| **Signature** | `pub fn max_drawdown(returns: &[f64]) -> f64` |
-
-**Purpose:** Maximum peak-to-trough drawdown from a cumulative return series.
-
-**Returns:** `f64` in [0, 1]. Returns 0.0 if empty or non-finite.
-
-**Edge Cases:**
-- Non-finite cumulative values: replaced with previous value
-- Zero peak: avoids division by zero
-
----
-
-#### total_return
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/metrics.rs` |
-| **Signature** | `pub fn total_return(returns: &[f64]) -> f64` |
-
-**Purpose:** Cumulative return: product of (1 + r_i) - 1.
-
-**Returns:** `f64`. Returns 0.0 if empty or non-finite.
-
----
-
-#### annualized_return
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/metrics.rs` |
-| **Signature** | `pub fn annualized_return(returns: &[f64], periods_per_year: usize) -> f64` |
-
-**Purpose:** Annualize a cumulative return given periods per year.
-
-**Parameters:**
-
-| Param | Type | Valid Range | Description |
-|---|---|---|---|
-| `returns` | `&[f64]` | -- | Period returns |
-| `periods_per_year` | `usize` | > 0 | Periods in a year (e.g., 12 for monthly) |
-
-**Returns:** `f64`. Returns 0.0 if empty or periods_per_year is 0. Returns -1.0 if total loss exceeds 100%.
-
-**Dependencies:** `total_return`.
-
----
-
-#### win_rate
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/metrics.rs` |
-| **Signature** | `pub fn win_rate(returns: &[f64]) -> f64` |
-
-**Purpose:** Fraction of periods with positive returns.
-
-**Returns:** `f64` in [0, 1]. Returns 0.0 if empty.
-
----
-
-#### calmar_ratio
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/metrics.rs` |
-| **Signature** | `pub fn calmar_ratio(returns: &[f64], periods_per_year: usize) -> f64` |
-
-**Purpose:** Calmar ratio = annualized_return / max_drawdown.
-
-**Returns:** `f64`. Returns 0.0 if drawdown is zero or non-finite result.
-
-**Dependencies:** `annualized_return`, `max_drawdown`.
-
----
-
-#### pearson_correlation
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/correlation.rs` |
-| **Signature** | `fn pearson_correlation(x: &[f64], y: &[f64], window: usize) -> f64` |
-| **Visibility** | Private (crate-internal) |
-
-**Purpose:** Compute Pearson correlation coefficient over trailing `window` observations.
-
-**Returns:** `f64` in [-1, 1]. Returns 0.0 if <2 valid pairs, zero variance, or non-finite denominator.
-
-**Edge Cases:**
-- NaN/Infinity pairs are filtered out
-- Result is clamped to [-1, 1] to handle floating-point drift
-
----
-
-#### compute_matrix
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/correlation.rs` |
-| **Signature** | `pub fn compute_matrix(input: &CorrelationInput) -> CorrelationResponse` |
-
-**Purpose:** Compute pairwise correlation matrix for all holdings.
-
-**Returns:** `CorrelationResponse` with NxN symmetric matrix, diagonal = 1.0.
-
-**Dependencies:** `pearson_correlation`.
-
----
-
-#### run_stress_test
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/stress.rs` |
-| **Signature** | `pub fn run_stress_test(input: &StressTestInput) -> StressTestResponse` |
-
-**Purpose:** Apply scenario shocks to portfolio positions and compute weighted impact.
-
-**Edge Cases:**
-- Zero total value: portfolio_impact_pct = 0.0
-- Non-finite market values: treated as 0.0
-- Non-finite custom shocks: treated as 0.0
-- Unknown scenario: moderate default shocks applied
-
-**Dependencies:** `get_scenario_shocks`, `classify_asset`.
-
----
-
-#### get_scenario_shocks
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/stress.rs` |
-| **Signature** | `fn get_scenario_shocks(name: &str) -> Vec<(&'static str, f64)>` |
-| **Visibility** | Private |
-
-**Purpose:** Return asset-class shock profiles for named historical scenarios.
-
-**Supported Scenarios:** `gfc_2008`, `covid_2020`, `rate_shock_2022`, `dotcom_2000`, `stagflation_1970s`, `black_monday_1987`, `oil_shock_2020`.
-
----
-
-#### classify_asset
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/stress.rs` |
-| **Signature** | `fn classify_asset(_symbol: &str) -> &'static str` |
-| **Visibility** | Private |
-
-**Purpose:** Classify a holding into a broad asset class. **Stub**: always returns `"equity"`.
-
----
-
-#### run_simulation (Monte Carlo)
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/montecarlo.rs` |
-| **Signature** | `pub fn run_simulation(input: &MonteCarloInput) -> MonteCarloResponse` |
-
-**Purpose:** Run Monte Carlo simulation using geometric Brownian motion parameterized from historical returns.
-
-**Edge Cases:**
-- Empty holdings: zero mean/stddev produces flat paths
-- Per-period returns capped at [-50%, +50%] to prevent overflow
-- Non-finite simulation values: clamped to 0.0
-- Simulation count clamped to [1, 1,000,000]
-- Horizon clamped to [1, 600]
-
-**Dependencies:** `percentile`, `sample_standard_normal`.
-
----
-
-#### percentile
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/montecarlo.rs` |
-| **Signature** | `fn percentile(sorted: &[f64], p: f64) -> f64` |
-| **Visibility** | Private |
-
-**Purpose:** Compute a percentile value from a pre-sorted slice.
-
-**Returns:** 0.0 if empty. `p` is clamped to [0, 1].
-
----
-
-#### sample_standard_normal
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/risk/montecarlo.rs` |
-| **Signature** | `fn sample_standard_normal(rng: &mut impl Rng) -> f64` |
-| **Visibility** | Private |
-
-**Purpose:** Generate a standard normal random variate using the Box-Muller transform.
-
-**Returns:** N(0,1) sample. Non-finite results return 0.0.
-
----
-
-### Crypto Module
-
-#### derive_key
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/crypto/vault.rs` |
-| **Signature** | `pub fn derive_key(passphrase: &str, existing_salt: Option<&str>) -> Result<(String, String), CryptoError>` |
-
-**Purpose:** Derive a 256-bit key from a passphrase using Argon2id with 600K iterations.
-
-**Returns:** `Ok((key_hash, salt))` on success.
-
-**Errors:**
-- `CryptoError::EmptyPassphrase` if passphrase is empty
-- `CryptoError::InvalidSalt` if salt base64 is malformed
-- `CryptoError::InvalidParams` if Argon2 parameters are invalid
-- `CryptoError::HashingFailed` if the hashing operation fails
-
----
-
-#### encrypt
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/crypto/vault.rs` |
-| **Signature** | `pub fn encrypt(plaintext: &str, key_b64: &str) -> Result<(String, String), CryptoError>` |
-
-**Purpose:** Encrypt plaintext with AES-256-GCM. Generates a random 12-byte nonce.
-
-**Returns:** `Ok((ciphertext_b64, nonce_b64))` on success.
-
-**Errors:**
-- `CryptoError::EmptyPlaintext`
-- `CryptoError::InvalidBase64` if key is not valid base64
-- `CryptoError::InvalidKeyLength` if key is not 32 bytes
-- `CryptoError::EncryptionFailed`
-
----
-
-#### decrypt
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/crypto/vault.rs` |
-| **Signature** | `pub fn decrypt(ciphertext_b64: &str, nonce_b64: &str, key_b64: &str) -> Result<String, CryptoError>` |
-
-**Purpose:** Decrypt AES-256-GCM ciphertext.
-
-**Returns:** `Ok(plaintext)` on success.
-
-**Errors:**
-- `CryptoError::InvalidBase64` for any malformed input
-- `CryptoError::InvalidKeyLength` if key is not 32 bytes
-- `CryptoError::InvalidNonceLength` if nonce is not 12 bytes
-- `CryptoError::DecryptionFailed` (wrong key, tampered data)
-- `CryptoError::InvalidUtf8` if decrypted bytes are not UTF-8
-
----
-
-#### CryptoError
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/crypto/vault.rs` |
-| **Type** | `enum` (derives `Debug`, `thiserror::Error`) |
-
-**Variants:**
-
-| Variant | Description |
-|---|---|
-| `InvalidSalt(String)` | Salt base64 is malformed |
-| `InvalidParams(String)` | Argon2 parameters are invalid |
-| `HashingFailed(String)` | Password hashing failed |
-| `InvalidBase64(String)` | Base64 decode failure |
-| `InvalidKeyLength { expected, actual }` | Key is not 32 bytes |
-| `InvalidNonceLength { expected, actual }` | Nonce is not 12 bytes |
-| `EncryptionFailed(String)` | AES-GCM encryption error |
-| `DecryptionFailed(String)` | AES-GCM decryption error |
-| `InvalidUtf8` | Decrypted content is not valid UTF-8 |
-| `EmptyPassphrase` | Passphrase is empty |
-| `EmptyPlaintext` | Plaintext is empty |
-
----
-
-### Versioning Module
-
-#### VersionedRecord
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/versioning/types.rs` |
-| **Type** | `struct` (derives `Debug, Clone, Serialize, Deserialize`) |
-
-**Fields:**
-
-| Field | Type | Description |
-|---|---|---|
-| `version_hash` | `String` | SHA-256 content-addressed hash |
-| `entity_id` | `String` | Stable entity identifier |
-| `entity_type` | `EntityType` | Type enum |
-| `version` | `u64` | Monotonic version number |
-| `author` | `VersionAuthor` | Who created this version |
-| `created_at` | `DateTime<Utc>` | Creation timestamp |
-| `content_encrypted` | `Vec<u8>` | Encrypted content bytes |
-| `nonce` | `Vec<u8>` | AES-GCM nonce |
-| `metadata` | `VersionMetadata` | Plaintext metadata |
-| `parent_hash` | `Option<String>` | Previous version's hash |
-
-**Methods:**
-
-| Method | Signature | Description |
-|---|---|---|
-| `compute_hash` | `fn(entity_id: &str, version: u64, content: &[u8]) -> String` | Compute content-addressed hash |
-| `verify_integrity` | `fn(&self) -> bool` | Verify hash matches content |
-
----
-
-#### VersionStore
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/versioning/store.rs` |
-| **Type** | `struct` (in-memory, `Arc<RwLock<HashMap>>`) |
-
-**Methods:**
-
-| Method | Signature | Returns | Description |
-|---|---|---|---|
-| `new` | `fn() -> Self` | `VersionStore` | Create empty store |
-| `append` | `fn(&self, entity_id, entity_type, content, nonce, author, summary, tags)` | `Result<String, VersionStoreError>` | Append a new version |
-| `get_latest` | `fn(&self, entity_id: &str)` | `Result<Option<VersionedRecord>, ...>` | Get latest version |
-| `get_by_hash` | `fn(&self, version_hash: &str)` | `Result<Option<VersionedRecord>, ...>` | Find by hash |
-| `query` | `fn(&self, query: &VersionQuery)` | `Result<Vec<VersionedRecord>, ...>` | Query history with filters |
-| `total_versions` | `fn(&self)` | `Result<usize, ...>` | Count all versions |
-| `verify_chain` | `fn(&self, entity_id: &str)` | `Result<bool, ...>` | Verify hash chain integrity |
-
-**Error Type: `VersionStoreError`**
-
-| Variant | Description |
-|---|---|
-| `LockFailed` | RwLock poisoned |
-| `NotFound(String)` | Entity not found |
-| `IntegrityFailed(String)` | Chain integrity violated |
-
----
-
-#### SnapshotEngine
-
-| Property | Value |
-|---|---|
-| **File** | `engine/src/versioning/snapshot.rs` |
-| **Type** | `struct<'a>` (borrows `&'a VersionStore`) |
-
-**Methods:**
-
-| Method | Signature | Status | Description |
-|---|---|---|---|
-| `new` | `fn(store: &'a VersionStore) -> Self` | Implemented | Constructor |
-| `snapshot_at` | `fn(&self, query: &SnapshotQuery)` | **Stub** | Point-in-time portfolio state |
-| `diff` | `fn(&self, from, to, entity_types)` | **Stub** | Compare two timestamps |
-
----
-
-### Data Types (Rust)
-
-#### EntityType (enum)
-
-```
-Holdings, Position, DecisionEntry, CalibrationRecord,
-KnowledgeChunk, KnowledgeAnnotation, Configuration,
-StressTestConfig, MonteCarloConfig, CarrySnapshot
-```
-
-#### VersionAuthor (enum)
-
-```
-User, System, DataFeed(String)
-```
-
-#### VersionMetadata (struct)
-
-| Field | Type |
-|---|---|
-| `change_summary` | `Option<String>` |
-| `content_size_bytes` | `u64` |
-| `tags` | `Vec<String>` |
-
----
-
-## Python Analytics
-
-### Factor Decomposition
-
-#### decompose
-
-| Property | Value |
-|---|---|
-| **File** | `analytics/pae/models/factor.py` |
-| **Signature** | `def decompose(portfolio_returns: NDArray, factor_returns: dict[str, NDArray]) -> FactorDecomposition` |
-
-**Purpose:** Run OLS regression of portfolio returns on factor returns (Fama-French style).
-
-**Parameters:**
-
-| Param | Type | Valid Range | Description |
-|---|---|---|---|
-| `portfolio_returns` | `NDArray[float64]` | 1-D, no NaN/Inf, len >= factors+2 | Period returns |
-| `factor_returns` | `dict[str, NDArray]` | Same length as portfolio, no NaN/Inf | Factor return series |
-
-**Returns:** `FactorDecomposition` with alpha, R-squared, and per-factor exposures.
-
-**Raises:**
-- `ValueError` if inputs are empty, non-1D, contain non-finite values, have mismatched lengths, or insufficient observations
-- `numpy.linalg.LinAlgError` if factor matrix is singular (collinear factors)
-
-**Dependencies:** `numpy.linalg.inv`.
-
----
-
-#### FactorExposure
-
-| Field | Type | Description |
-|---|---|---|
-| `factor_name` | `str` | Factor identifier |
-| `beta` | `float` | Regression coefficient |
-| `t_stat` | `float` | T-statistic |
-| `contribution_pct` | `float` | Variance contribution (%) |
-
-#### FactorDecomposition
-
-| Field | Type | Description |
-|---|---|---|
-| `alpha` | `float` | Intercept (excess return) |
-| `alpha_t_stat` | `float` | Alpha T-statistic |
-| `r_squared` | `float` | R-squared [0, 1] |
-| `exposures` | `list[FactorExposure]` | Per-factor results |
-| `residual_risk_pct` | `float` | Unexplained variance (%) |
-
----
-
-### Carry Analysis
-
-#### analyze_carry
-
-| Property | Value |
-|---|---|
-| **File** | `analytics/pae/models/carry.py` |
-| **Signature** | `def analyze_carry(holdings: list[dict], total_margin: float, margin_rate: float = 0.058) -> PortfolioCarry` |
-
-**Purpose:** Compute carry analysis for a leveraged portfolio -- income vs. margin cost.
-
-**Parameters:**
-
-| Param | Type | Valid Range | Description |
-|---|---|---|---|
-| `holdings` | `list[dict]` | Non-empty, each needs `symbol` and `market_value` >= 0 | Portfolio holdings |
-| `total_margin` | `float` | >= 0, finite | Total margin debt |
-| `margin_rate` | `float` | >= 0, finite, default 0.058 | Annual margin rate |
-
-**Returns:** `PortfolioCarry` with position-level and aggregate carry metrics.
-
-**Raises:** `ValueError` if holdings is empty, margin is negative, rate is negative, holdings are missing required fields, or values are non-finite.
-
----
-
-#### PositionCarry
-
-| Field | Type | Description |
-|---|---|---|
-| `symbol` | `str` | Ticker |
-| `market_value` | `float` | Position value |
-| `yield_pct` | `float` | Annual yield % |
-| `annual_income` | `float` | MV * yield |
-| `margin_allocated` | `float` | Proportional margin |
-| `margin_rate` | `float` | Rate used |
-| `annual_margin_cost` | `float` | Margin cost |
-| `net_carry` | `float` | Income - margin cost |
-| `carry_spread` | `float` | Yield - margin rate |
-
-#### PortfolioCarry
-
-| Field | Type | Description |
-|---|---|---|
-| `total_nav` | `float` | Net asset value |
-| `total_long_value` | `float` | Sum of market values |
-| `total_margin` | `float` | Total margin |
-| `leverage_ratio` | `float` | Long / NAV |
-| `total_annual_income` | `float` | Total income |
-| `total_annual_margin_cost` | `float` | Total margin cost |
-| `net_carry` | `float` | Net carry |
-| `income_coverage_ratio` | `float` | Income / margin cost |
-| `margin_as_pct_of_nav` | `float` | Margin % of NAV |
-| `positions` | `list[PositionCarry]` | Per-position detail |
-
----
-
-### Decision Journal
-
-#### DecisionEntry
-
-| Property | Value |
-|---|---|
-| **File** | `analytics/pae/decision/journal.py` |
-| **Type** | `@dataclass` |
-
-A single decision journal entry with auto-validation via `__post_init__`:
-- `confidence` clamped to [1, 10]
-- `max_acceptable_loss_pct` converted to absolute value if negative
-- Invalid `emotional_state` defaults to `"neutral"`
-
-See file docstring for full field listing (19 fields).
-
-#### EmotionalState
-
-Enum with values: `CALM`, `ANXIOUS`, `EXCITED`, `FEARFUL`, `CONFIDENT`, `UNCERTAIN`, `NEUTRAL`.
-
-#### compute_calibration
-
-| Property | Value |
-|---|---|
-| **File** | `analytics/pae/decision/journal.py` |
-| **Signature** | `def compute_calibration(entries: list[DecisionEntry]) -> list[CalibrationMetric]` |
-
-**Purpose:** Compute confidence calibration -- do high-confidence decisions perform better?
-
-**Parameters:**
-
-| Param | Type | Description |
-|---|---|---|
-| `entries` | `list[DecisionEntry]` | Journal entries (only those with outcome_90d are used) |
-
-**Returns:** List of 3 `CalibrationMetric` objects (buckets 8-10, 5-7, 1-4). Empty list if entries is empty.
-
-#### CalibrationMetric
-
-| Field | Type | Description |
-|---|---|---|
-| `confidence_bucket` | `str` | Bucket label ("8-10", "5-7", "1-4") |
-| `total_decisions` | `int` | Decisions in bucket |
-| `positive_outcomes` | `int` | Positive 90d outcomes |
-| `accuracy_pct` | `float` | Hit rate (%) |
-
----
-
-### PKE Ingestion
-
-#### ingest_markdown
-
-| Property | Value |
-|---|---|
-| **File** | `analytics/pae/pke/ingest.py` |
-| **Signature** | `def ingest_markdown(file_path: Path) -> IngestionResult` |
-
-**Purpose:** Ingest a Markdown file: extract frontmatter, chunk text, classify themes, generate IDs.
-
-**Edge Cases:**
-- File does not exist: returns error result
-- File is empty: returns error result
-- Encoding error: returns error result
-- Chunks <10 words: discarded
-
-**Dependencies:** `parse_frontmatter`, `chunk_text`, `classify_themes`, `generate_chunk_id`.
-
----
-
-#### ingest_directory
-
-| Property | Value |
-|---|---|
-| **File** | `analytics/pae/pke/ingest.py` |
-| **Signature** | `def ingest_directory(dir_path: Path) -> list[IngestionResult]` |
-
-**Purpose:** Recursively ingest all `*.md` files in a directory.
-
-**Raises:** `ValueError` if path does not exist or is not a directory.
-
----
-
-#### chunk_text
-
-| Property | Value |
-|---|---|
-| **File** | `analytics/pae/pke/ingest.py` |
-| **Signature** | `def chunk_text(text: str, max_tokens: int = 400) -> list[str]` |
-
-**Purpose:** Split text into semantic chunks at paragraph boundaries, respecting `max_tokens` word limit.
-
-**Raises:** `ValueError` if `max_tokens < 10`.
-
-**Returns:** Empty list if text is empty/blank.
-
----
-
-#### parse_frontmatter
-
-| Property | Value |
-|---|---|
-| **File** | `analytics/pae/pke/ingest.py` |
-| **Signature** | `def parse_frontmatter(text: str) -> tuple[dict, str]` |
-
-**Purpose:** Extract YAML frontmatter between `---` delimiters.
-
-**Returns:** `(metadata_dict, body_text)`. Empty dict if no frontmatter found.
-
----
-
-#### generate_chunk_id
-
-| Property | Value |
-|---|---|
-| **File** | `analytics/pae/pke/ingest.py` |
-| **Signature** | `def generate_chunk_id(source: str, text: str) -> str` |
-
-**Purpose:** Deterministic 16-char hex hash from source + first 200 chars of text.
-
----
-
-#### classify_themes
-
-| Property | Value |
-|---|---|
-| **File** | `analytics/pae/pke/ingest.py` |
-| **Signature** | `def classify_themes(text: str) -> list[str]` |
-
-**Purpose:** Keyword-based theme classification. Stub for future zero-shot classifier.
-
-**Returns:** List of matching themes, or `["general"]` if none match.
-
----
-
-#### KnowledgeChunk
-
-| Field | Type | Description |
-|---|---|---|
-| `chunk_id` | `str` | Deterministic hash ID |
-| `source` | `str` | Source document |
-| `author` | `str` | Author |
-| `date` | `str` | Date string |
-| `themes` | `list[str]` | Classifications |
-| `text` | `str` | Passage content |
-| `embedding` | `list[float]` | Vector (empty until populated) |
-
-#### IngestionResult
-
-| Field | Type | Description |
-|---|---|---|
-| `source_file` | `str` | File path |
-| `chunks_created` | `int` | Chunks produced |
-| `themes_detected` | `list[str]` | Unique themes |
-| `errors` | `list[str]` | Error messages |
-| `chunks` | `list[KnowledgeChunk]` | Chunk objects |
-
----
-
-### PKE Retrieval
-
-#### retrieve_by_theme
-
-| Property | Value |
-|---|---|
-| **File** | `analytics/pae/pke/retrieve.py` |
-| **Signature** | `def retrieve_by_theme(theme: str, top_k: int = 5) -> list[RetrievalResult]` |
-
-**Status:** Stub (returns empty list). Will use sqlite-vec.
-
-**Raises:** `ValueError` if theme is empty or top_k < 1.
-
----
-
-#### retrieve_by_context
-
-| Property | Value |
-|---|---|
-| **File** | `analytics/pae/pke/retrieve.py` |
-| **Signature** | `def retrieve_by_context(context_text: str, themes: list[str] | None = None, top_k: int = 5) -> list[RetrievalResult]` |
-
-**Status:** Stub (returns empty list). Will use semantic search.
-
-**Raises:** `ValueError` if context_text is empty or top_k < 1.
-
----
-
-#### RetrievalResult
-
-| Field | Type | Description |
-|---|---|---|
-| `chunk_id` | `str` | Chunk identifier |
-| `source` | `str` | Source document |
-| `author` | `str` | Author |
-| `text` | `str` | Passage text |
-| `themes` | `list[str]` | Theme classifications |
-| `relevance_score` | `float` | Similarity [0, 1] |
-
----
-
-## TypeScript UI
-
-### PaeApp
-
-| Property | Value |
-|---|---|
-| **File** | `ui/src/components/pae-app.ts` |
-| **Element** | `<pae-app>` |
-| **Shadow DOM** | Open |
-
-**Purpose:** Root application shell. Manages layout (header, sidebar, main), theme toggle (light/dark persisted to localStorage), and hash-based navigation.
-
-**Methods:**
-
-| Method | Visibility | Description |
-|---|---|---|
-| `initTheme()` | private | Load theme from localStorage; fallback to dark |
-| `toggleTheme()` | private | Switch theme and persist; handles localStorage errors |
-| `setupRouting()` | private | Register `hashchange` listener |
-| `handleRoute(hash)` | private | Update active nav item styling |
-| `render()` | private | Build shadow DOM HTML |
-
-**Lifecycle:**
-- `connectedCallback`: init theme, render, setup routing
-- `disconnectedCallback`: remove hashchange listener
-
----
-
-### PaeDashboard
-
-| Property | Value |
-|---|---|
-| **File** | `ui/src/components/pae-dashboard.ts` |
-| **Element** | `<pae-dashboard>` |
-| **Shadow DOM** | Open |
-
-**Purpose:** Portfolio overview with metric cards (NAV, return, Sharpe, drawdown), holdings table, allocation/performance charts, and carry analysis section.
-
-**Methods:**
-
-| Method | Visibility | Description |
-|---|---|---|
-| `setMetric(id, value)` | private | Update a metric card's display |
-| `formatCurrency(value)` | private | Format as USD; '--' for non-finite |
-| `formatPercent(value)` | private | Format as %; '--' for non-finite |
-| `formatNumber(value, decimals)` | private | Fixed-decimal format; '--' for non-finite |
-| `fetchApi<T>(endpoint, body)` | private | POST to engine API with 15s timeout |
-| `render()` | private | Build shadow DOM HTML |
-
-**Error Handling:** `fetchApi` catches network errors, abort (timeout), and non-200 responses. Returns `null` on any failure. Logs errors to console.
-
----
-
-### PaeChart
-
-| Property | Value |
-|---|---|
-| **File** | `ui/src/components/pae-chart.ts` |
-| **Element** | `<pae-chart>` |
-| **Shadow DOM** | Open |
-| **Observed Attributes** | `type`, `width`, `height` |
-
-**Purpose:** Canvas-based chart rendering. Supports line and donut/pie charts with zero external dependencies.
-
-**Methods:**
-
-| Method | Visibility | Description |
-|---|---|---|
-| `getNumericAttr(name, default, min, max)` | private | Parse numeric attribute with clamping |
-| `drawLine(data: ChartData)` | **public** | Render line chart. Skips non-finite values (gap). |
-| `drawPie(data: PieSlice[])` | **public** | Render donut chart. Filters non-positive slices. |
-| `render()` | private | Create canvas element |
-
-**Exported Types:**
-
-| Type | Description |
-|---|---|
-| `ChartData` | `{ labels: string[], datasets: ChartDataset[] }` |
-| `ChartDataset` | `{ label: string, data: number[], color: string }` |
-| `PieSlice` | `{ label: string, value: number, color: string }` |
-| `ChartType` | `'line' \| 'bar' \| 'pie'` |
-
-**Edge Cases:**
-- Empty datasets: no-op
-- All NaN/Infinity values: no-op
-- Zero total in pie: no-op
-- Width/height attributes: clamped to [50, 4000]
-
----
-
-### PaeDisclaimer
-
-| Property | Value |
-|---|---|
-| **File** | `ui/src/components/pae-disclaimer.ts` |
-| **Element** | `<pae-disclaimer>` |
-| **Shadow DOM** | Open |
-
-**Purpose:** Fixed-position regulatory disclaimer bar. Cannot be permanently dismissed (architectural requirement). Rendered on every page.
-
-**Accessibility:** Uses `role="contentinfo"` and `aria-label="Legal disclaimer"`.
-
----
-
-## Audit Summary
-
-### Issues Found and Fixed
-
-#### Rust Engine (27 fixes)
-
-| Category | Count | Examples |
-|---|---|---|
-| Panic-prone `.expect()` / `.unwrap()` | 11 | `vault.rs` had 8 `.expect()` calls; `metrics.rs` had `partial_cmp().unwrap()` |
-| Missing input validation | 6 | Empty holdings, negative market values, non-finite returns |
-| Missing API error responses | 4 | All API handlers returned bare JSON without error handling |
-| Missing NaN/Infinity guards | 3 | Sort comparisons, cumulative return overflow |
-| Missing graceful shutdown | 1 | Server had no SIGINT/SIGTERM handler |
-| Versioning stubs not wired | 2 | API stubs not connected to VersionStore |
-
-#### Python Analytics (18 fixes)
-
-| Category | Count | Examples |
-|---|---|---|
-| Missing input validation | 8 | Empty arrays, non-finite values, missing dict keys |
-| Missing docstrings | 4 | `PositionCarry`, `PortfolioCarry`, `CalibrationMetric`, `RetrievalResult` |
-| Missing type annotations | 2 | `Optional` types on return values |
-| Missing exception handling | 2 | `OSError` and `UnicodeDecodeError` in file I/O |
-| Division by zero risks | 2 | Zero total_margin_cost, zero portfolio_var |
-
-#### TypeScript UI (12 fixes)
-
-| Category | Count | Examples |
-|---|---|---|
-| Missing null/NaN guards | 4 | Non-finite values in charts, formatters |
-| Missing API error handling | 2 | `fetchApi` with timeout, error responses |
-| Missing accessibility | 3 | `role`, `aria-label` on charts, nav, disclaimer |
-| Missing cleanup | 2 | `disconnectedCallback`, `removeEventListener` |
-| Missing type exports | 1 | `PieSlice`, `ChartDataset` types |
+*Generated as part of PAE code audit. Every function, error type, edge case, and dependency documented.*
