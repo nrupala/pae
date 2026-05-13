@@ -7,28 +7,16 @@ patterns over time.
 This is a data model and storage layer. No recommendations are generated.
 """
 
-import logging
+from __future__ import annotations
+
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
-import uuid
-
-logger = logging.getLogger(__name__)
 
 
 class EmotionalState(Enum):
-    """Emotional state at time of decision.
-
-    Values:
-        CALM: Relaxed, clear-headed state.
-        ANXIOUS: Worried or stressed state.
-        EXCITED: Enthusiastic, high-energy state.
-        FEARFUL: Afraid of loss or negative outcome.
-        CONFIDENT: Strong conviction in the decision.
-        UNCERTAIN: Unsure or ambivalent state.
-        NEUTRAL: No strong emotional signal.
-    """
+    """Emotional state at time of decision."""
 
     CALM = "calm"
     ANXIOUS = "anxious"
@@ -39,29 +27,37 @@ class EmotionalState(Enum):
     NEUTRAL = "neutral"
 
 
+# Valid emotional state values for input validation
+_VALID_EMOTIONAL_STATES: frozenset[str] = frozenset(e.value for e in EmotionalState)
+
+# Confidence score valid range (inclusive)
+CONFIDENCE_MIN = 1
+CONFIDENCE_MAX = 10
+
+
 @dataclass
 class DecisionEntry:
     """A single decision journal entry.
 
     Attributes:
-        entry_id: Unique identifier (auto-generated 12-char UUID prefix).
-        timestamp: ISO 8601 timestamp in UTC (auto-generated).
-        action: Description of the action taken (e.g., "Buy 100 shares of SPY").
+        entry_id: Unique identifier (first 12 chars of UUID4).
+        timestamp: ISO 8601 UTC timestamp of entry creation.
+        action: Description of the portfolio action taken.
         symbols_affected: List of ticker symbols involved.
         rationale: Why the decision was made.
         alternatives_considered: Other options that were evaluated.
-        thesis: Investment thesis supporting the decision.
-        confidence: Confidence level from 1 (low) to 10 (high).
-        time_horizon: Expected holding period (e.g., "6 months", "2 years").
-        what_could_go_wrong: Pre-mortem analysis.
-        max_acceptable_loss_pct: Maximum loss percentage before reconsidering.
-        emotional_state: Self-reported emotional state at decision time.
-        market_context: Description of market conditions.
-        trigger: What prompted the decision.
-        outcome_30d: Return after 30 days (None if not yet measured).
-        outcome_90d: Return after 90 days (None if not yet measured).
-        outcome_180d: Return after 180 days (None if not yet measured).
-        outcome_notes: Qualitative notes on the outcome.
+        thesis: The investment thesis behind the decision.
+        confidence: Self-assessed confidence (1-10 scale).
+        time_horizon: Expected holding period (e.g. "6 months").
+        what_could_go_wrong: Pre-mortem analysis of risks.
+        max_acceptable_loss_pct: Maximum tolerable loss as a percentage.
+        emotional_state: Emotional state at decision time.
+        market_context: Description of current market conditions.
+        trigger: What triggered the decision.
+        outcome_30d: 30-day return outcome (None if not yet measured).
+        outcome_90d: 90-day return outcome (None if not yet measured).
+        outcome_180d: 180-day return outcome (None if not yet measured).
+        outcome_notes: Free-text notes on the outcome.
         was_thesis_correct: Whether the original thesis played out.
     """
 
@@ -79,33 +75,72 @@ class DecisionEntry:
     emotional_state: str = EmotionalState.NEUTRAL.value
     market_context: str = ""
     trigger: str = ""
-    outcome_30d: Optional[float] = None
-    outcome_90d: Optional[float] = None
-    outcome_180d: Optional[float] = None
+    outcome_30d: float | None = None
+    outcome_90d: float | None = None
+    outcome_180d: float | None = None
     outcome_notes: str = ""
-    was_thesis_correct: Optional[bool] = None
+    was_thesis_correct: bool | None = None
 
-    def __post_init__(self) -> None:
-        """Validate fields after initialization."""
-        if not isinstance(self.confidence, int):
-            try:
-                self.confidence = int(self.confidence)
-            except (ValueError, TypeError):
-                self.confidence = 5
 
-        self.confidence = max(1, min(10, self.confidence))
+def validate_entry(entry: DecisionEntry) -> list[str]:
+    """Validate a DecisionEntry for data integrity.
 
-        if self.max_acceptable_loss_pct < 0:
-            self.max_acceptable_loss_pct = abs(self.max_acceptable_loss_pct)
+    Checks confidence range, emotional state validity, loss percentage bounds,
+    and outcome value sanity. Returns a list of validation error messages.
+    An empty list means the entry is valid.
 
-        # Validate emotional state
-        valid_states = {e.value for e in EmotionalState}
-        if self.emotional_state not in valid_states:
-            logger.warning(
-                "Invalid emotional_state '%s', defaulting to 'neutral'",
-                self.emotional_state,
-            )
-            self.emotional_state = EmotionalState.NEUTRAL.value
+    Args:
+        entry: The DecisionEntry to validate.
+
+    Returns:
+        List of validation error strings. Empty if valid.
+    """
+    import math
+
+    errors: list[str] = []
+
+    # Confidence must be in [1, 10]
+    if not isinstance(entry.confidence, int):
+        errors.append(
+            f"confidence must be an integer, got {type(entry.confidence).__name__}"
+        )
+    elif entry.confidence < CONFIDENCE_MIN or entry.confidence > CONFIDENCE_MAX:
+        errors.append(
+            f"confidence must be between {CONFIDENCE_MIN} and {CONFIDENCE_MAX}, "
+            f"got {entry.confidence}"
+        )
+
+    # Emotional state must be a recognized value
+    if entry.emotional_state not in _VALID_EMOTIONAL_STATES:
+        errors.append(
+            f"emotional_state '{entry.emotional_state}' is not valid. "
+            f"Must be one of: {', '.join(sorted(_VALID_EMOTIONAL_STATES))}"
+        )
+
+    # max_acceptable_loss_pct should be non-negative and finite
+    if not isinstance(entry.max_acceptable_loss_pct, (int, float)):
+        errors.append(
+            f"max_acceptable_loss_pct must be numeric, "
+            f"got {type(entry.max_acceptable_loss_pct).__name__}"
+        )
+    elif math.isnan(entry.max_acceptable_loss_pct) or math.isinf(entry.max_acceptable_loss_pct):
+        errors.append("max_acceptable_loss_pct must be a finite number")
+    elif entry.max_acceptable_loss_pct < 0:
+        errors.append(
+            f"max_acceptable_loss_pct must be non-negative, "
+            f"got {entry.max_acceptable_loss_pct}"
+        )
+
+    # Validate outcome values if present
+    for field_name in ("outcome_30d", "outcome_90d", "outcome_180d"):
+        value = getattr(entry, field_name)
+        if value is not None:
+            if not isinstance(value, (int, float)):
+                errors.append(f"{field_name} must be numeric or None")
+            elif math.isnan(value) or math.isinf(value):
+                errors.append(f"{field_name} must be a finite number, got {value}")
+
+    return errors
 
 
 @dataclass
@@ -113,10 +148,10 @@ class CalibrationMetric:
     """Confidence calibration for a bucket of decisions.
 
     Attributes:
-        confidence_bucket: Label for the confidence range (e.g., "8-10").
+        confidence_bucket: Label for the confidence range (e.g. "8-10").
         total_decisions: Number of decisions in this bucket.
-        positive_outcomes: Number of decisions with positive 90-day outcome.
-        accuracy_pct: Percentage of positive outcomes (0.0 to 100.0).
+        positive_outcomes: Number of decisions with positive 90-day returns.
+        accuracy_pct: Percentage of positive outcomes.
     """
 
     confidence_bucket: str
@@ -129,26 +164,27 @@ def compute_calibration(entries: list[DecisionEntry]) -> list[CalibrationMetric]
     """Compute confidence calibration from completed journal entries.
 
     Groups decisions by confidence level and compares stated confidence
-    against actual outcomes. Pure behavioral observation, not advice.
+    against actual 90-day outcomes. Pure behavioral observation, not advice.
+
+    Only entries with a non-None outcome_90d are included. Entries with
+    invalid confidence values (outside 1-10) are skipped with a warning.
 
     Args:
-        entries: List of DecisionEntry objects. Only entries with a
-            non-None outcome_90d value are included in the analysis.
+        entries: List of DecisionEntry objects. Entries without outcome_90d
+            are silently skipped.
 
     Returns:
-        List of CalibrationMetric for each confidence bucket:
-        - "8-10": High confidence decisions
-        - "5-7": Medium confidence decisions
-        - "1-4": Low confidence decisions
+        List of CalibrationMetric for each confidence bucket (high/medium/low).
+        Buckets with zero decisions show 0.0% accuracy.
 
-        Empty list if entries is empty.
-
-    Note:
-        Uses 90-day outcomes as the default evaluation period.
-        A positive outcome is defined as outcome_90d > 0.
+    Raises:
+        TypeError: If entries is not a list.
     """
-    if not entries:
-        return []
+    import math
+
+    if not isinstance(entries, list):
+        msg = f"entries must be a list, got {type(entries).__name__}"
+        raise TypeError(msg)
 
     buckets: dict[str, dict[str, int]] = {
         "8-10": {"total": 0, "positive": 0},
@@ -156,20 +192,25 @@ def compute_calibration(entries: list[DecisionEntry]) -> list[CalibrationMetric]
         "1-4": {"total": 0, "positive": 0},
     }
 
-    evaluated_count = 0
-
     for entry in entries:
         if entry.outcome_90d is None:
             continue
 
-        evaluated_count += 1
+        # Skip entries with invalid confidence
+        if not isinstance(entry.confidence, int):
+            continue
+        if entry.confidence < CONFIDENCE_MIN or entry.confidence > CONFIDENCE_MAX:
+            continue
 
-        # Clamp confidence to valid range before bucketing
-        conf = max(1, min(10, entry.confidence))
+        # Skip entries with non-finite outcomes
+        if not isinstance(entry.outcome_90d, (int, float)):
+            continue
+        if math.isnan(entry.outcome_90d) or math.isinf(entry.outcome_90d):
+            continue
 
-        if conf >= 8:
+        if entry.confidence >= 8:
             bucket = "8-10"
-        elif conf >= 5:
+        elif entry.confidence >= 5:
             bucket = "5-7"
         else:
             bucket = "1-4"
@@ -189,10 +230,5 @@ def compute_calibration(entries: list[DecisionEntry]) -> list[CalibrationMetric]
             positive_outcomes=positive,
             accuracy_pct=round(accuracy, 1),
         ))
-
-    logger.info(
-        "Calibration computed: %d entries evaluated out of %d total",
-        evaluated_count, len(entries),
-    )
 
     return results
