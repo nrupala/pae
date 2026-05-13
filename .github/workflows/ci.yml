@@ -40,7 +40,8 @@ jobs:
       - name: Clippy
         working-directory: engine
         run: cargo clippy -- -D warnings
-analytics:
+
+  analytics:
     name: Python Analytics
     runs-on: ubuntu-latest
     steps:
@@ -66,4 +67,4 @@ analytics:
       - name: Test
         working-directory: analytics
         run: pytest tests/ -v
-EOF
+CIEOF
