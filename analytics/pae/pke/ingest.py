@@ -7,15 +7,15 @@ in the local vector store.
 All processing runs locally. No content ever leaves the user's machine.
 """
 
+from __future__ import annotations
+
 import hashlib
 import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
-
 
 THEMES = [
     "risk",
@@ -30,19 +30,25 @@ THEMES = [
     "general",
 ]
 
+# Maximum file size to ingest (10 MB). Prevents accidental memory exhaustion.
+MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
+
+# Minimum chunk word count to keep. Shorter chunks lack semantic value.
+MIN_CHUNK_WORDS = 10
+
 
 @dataclass
 class KnowledgeChunk:
     """A single passage from the user's knowledge base.
 
     Attributes:
-        chunk_id: Deterministic hash-based ID (first 16 chars of SHA-256).
-        source: Source document name or path.
-        author: Author of the source document.
-        date: Publication or creation date string.
-        themes: List of theme classifications for this chunk.
-        text: The actual passage text.
-        embedding: Float vector embedding (populated by embedding model).
+        chunk_id: Deterministic SHA-256 hash (first 16 hex chars) of source + text.
+        source: Source document identifier (from frontmatter or filename).
+        author: Author name (from frontmatter, defaults to 'Unknown').
+        date: Date string (from frontmatter, defaults to empty).
+        themes: List of classified themes for this chunk.
+        text: The passage text content.
+        embedding: Vector embedding (populated by embedding pipeline).
     """
 
     chunk_id: str
@@ -59,11 +65,11 @@ class IngestionResult:
     """Result of ingesting a document.
 
     Attributes:
-        source_file: Path to the ingested file.
-        chunks_created: Number of knowledge chunks produced.
-        themes_detected: Sorted list of unique themes found.
+        source_file: Path of the ingested file.
+        chunks_created: Number of chunks produced.
+        themes_detected: Sorted list of unique themes across all chunks.
         errors: List of error messages encountered during ingestion.
-        chunks: The actual KnowledgeChunk objects created.
+        chunks: The actual KnowledgeChunk objects produced.
     """
 
     source_file: str
@@ -76,26 +82,16 @@ class IngestionResult:
 def parse_frontmatter(text: str) -> tuple[dict, str]:
     """Extract YAML frontmatter from a Markdown document.
 
-    Parses the YAML block between ``---`` delimiters at the start of a
-    Markdown file. Supports simple key-value pairs and inline lists.
+    Parses the leading ``---`` delimited block into a dict of key-value pairs.
+    List values in ``[a, b, c]`` format are parsed into Python lists.
 
     Args:
-        text: Raw Markdown text, possibly with frontmatter.
+        text: Raw Markdown text, potentially with frontmatter.
 
     Returns:
-        A tuple of (metadata_dict, body_text). If no frontmatter is found,
-        returns an empty dict and the original text unchanged.
-
-    Note:
-        This is a lightweight parser. It handles:
-        - Simple key: value pairs
-        - Inline lists: key: [val1, val2]
-        - Quoted values: key: "value" or key: 'value'
-        It does NOT handle nested YAML, multi-line values, or anchors.
+        Tuple of (metadata dict, body text without frontmatter).
+        Returns ({}, original text) if no frontmatter is found.
     """
-    if not text or not text.startswith("---"):
-        return {}, text
-
     pattern = r"^---\s*\n(.*?)\n---\s*\n(.*)$"
     match = re.match(pattern, text, re.DOTALL)
     if not match:
@@ -114,7 +110,6 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
                 value = [
                     v.strip().strip('"').strip("'")
                     for v in value[1:-1].split(",")
-                    if v.strip()
                 ]
             metadata[key] = value
 
@@ -124,22 +119,23 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
 def chunk_text(text: str, max_tokens: int = 400) -> list[str]:
     """Split text into semantic chunks at paragraph boundaries.
 
-    Attempts to keep paragraphs together up to ``max_tokens`` words.
-    Paragraphs exceeding the limit are split at sentence boundaries.
+    Attempts to keep chunks under ``max_tokens`` words while respecting
+    paragraph boundaries. Oversized paragraphs are split at sentence
+    boundaries as a fallback.
 
     Args:
-        text: Input text to chunk.
+        text: Plain text content to chunk.
         max_tokens: Maximum word count per chunk (default: 400).
-            Must be at least 10.
 
     Returns:
-        List of text chunks. Empty list if input text is empty or blank.
+        List of chunk strings. Empty input produces an empty list.
 
     Raises:
-        ValueError: If max_tokens is less than 10.
+        ValueError: If max_tokens is less than 1.
     """
-    if max_tokens < 10:
-        raise ValueError(f"max_tokens must be at least 10, got {max_tokens}")
+    if max_tokens < 1:
+        msg = f"max_tokens must be >= 1, got {max_tokens}"
+        raise ValueError(msg)
 
     if not text or not text.strip():
         return []
@@ -183,12 +179,15 @@ def chunk_text(text: str, max_tokens: int = 400) -> list[str]:
 def generate_chunk_id(source: str, text: str) -> str:
     """Deterministic chunk ID from source + text content.
 
+    Uses SHA-256 of ``source:text[:200]`` truncated to 16 hex characters.
+    This ensures the same chunk always gets the same ID across re-ingestion.
+
     Args:
         source: Source document identifier.
-        text: Chunk text content (first 200 chars used for hashing).
+        text: Chunk text content.
 
     Returns:
-        16-character hexadecimal hash string.
+        16-character hex string.
     """
     content = f"{source}:{text[:200]}"
     return hashlib.sha256(content.encode()).hexdigest()[:16]
@@ -197,19 +196,16 @@ def generate_chunk_id(source: str, text: str) -> str:
 def classify_themes(text: str) -> list[str]:
     """Auto-classify a chunk into themes based on keyword matching.
 
-    Stub implementation. Full version uses a local zero-shot classifier
-    (e.g., sentence-transformers with BART-MNLI).
+    Stub implementation using simple keyword presence detection.
+    Full version uses a local zero-shot classifier model.
 
     Args:
         text: Chunk text to classify.
 
     Returns:
-        List of detected theme strings. Returns ["general"] if no
+        List of matching theme names. Returns ["general"] if no
         specific themes are detected.
     """
-    if not text:
-        return ["general"]
-
     text_lower = text.lower()
     detected: list[str] = []
     keyword_map: dict[str, list[str]] = {
@@ -231,47 +227,93 @@ def classify_themes(text: str) -> list[str]:
 def ingest_markdown(file_path: Path) -> IngestionResult:
     """Ingest a Markdown file into knowledge chunks.
 
-    Reads the file, extracts frontmatter metadata, splits into semantic
-    chunks, classifies themes, and generates deterministic chunk IDs.
+    Reads the file, extracts frontmatter metadata, chunks the body text,
+    classifies each chunk by theme, and returns structured results.
 
     Args:
-        file_path: Path to a Markdown file. Must exist and be readable.
+        file_path: Path to the Markdown file.
 
     Returns:
-        IngestionResult with chunks and metadata. If the file cannot be read,
-        returns a result with zero chunks and an error message.
+        IngestionResult with chunks, themes, and any errors encountered.
+        File read errors are captured in the errors list rather than raised.
 
-    Note:
-        Chunks with fewer than 10 words are discarded as too short
-        for meaningful retrieval.
+    Error handling:
+        - FileNotFoundError: captured with descriptive message.
+        - PermissionError: captured with descriptive message.
+        - UnicodeDecodeError: captured with descriptive message.
+        - Files exceeding MAX_FILE_SIZE_BYTES: rejected with size error.
+        - Other I/O exceptions: captured with generic message.
     """
     errors: list[str] = []
 
-    if not file_path.exists():
+    # Validate path exists and is a file
+    try:
+        if not file_path.exists():
+            return IngestionResult(
+                source_file=str(file_path),
+                chunks_created=0,
+                themes_detected=[],
+                errors=[f"File not found: {file_path}"],
+            )
+
+        if not file_path.is_file():
+            return IngestionResult(
+                source_file=str(file_path),
+                chunks_created=0,
+                themes_detected=[],
+                errors=[f"Path is not a file: {file_path}"],
+            )
+
+        # Check file size before reading
+        file_size = file_path.stat().st_size
+        if file_size > MAX_FILE_SIZE_BYTES:
+            return IngestionResult(
+                source_file=str(file_path),
+                chunks_created=0,
+                themes_detected=[],
+                errors=[
+                    f"File too large: {file_size} bytes "
+                    f"(max {MAX_FILE_SIZE_BYTES} bytes)"
+                ],
+            )
+    except OSError as e:
         return IngestionResult(
             source_file=str(file_path),
             chunks_created=0,
             themes_detected=[],
-            errors=[f"File does not exist: {file_path}"],
+            errors=[f"Cannot access file: {e}"],
         )
 
+    # Read file content with explicit error handling per exception type
     try:
         text = file_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return IngestionResult(
+            source_file=str(file_path),
+            chunks_created=0,
+            themes_detected=[],
+            errors=[f"File not found: {file_path}"],
+        )
+    except PermissionError:
+        return IngestionResult(
+            source_file=str(file_path),
+            chunks_created=0,
+            themes_detected=[],
+            errors=[f"Permission denied reading file: {file_path}"],
+        )
+    except UnicodeDecodeError as e:
+        return IngestionResult(
+            source_file=str(file_path),
+            chunks_created=0,
+            themes_detected=[],
+            errors=[f"File is not valid UTF-8: {e}"],
+        )
     except OSError as e:
-        logger.error("Failed to read file %s: %s", file_path, e)
         return IngestionResult(
             source_file=str(file_path),
             chunks_created=0,
             themes_detected=[],
             errors=[f"Failed to read file: {e}"],
-        )
-    except UnicodeDecodeError as e:
-        logger.error("Encoding error reading %s: %s", file_path, e)
-        return IngestionResult(
-            source_file=str(file_path),
-            chunks_created=0,
-            themes_detected=[],
-            errors=[f"Encoding error: {e}"],
         )
 
     if not text.strip():
@@ -279,25 +321,25 @@ def ingest_markdown(file_path: Path) -> IngestionResult:
             source_file=str(file_path),
             chunks_created=0,
             themes_detected=[],
-            errors=["File is empty"],
+            errors=["File is empty or contains only whitespace"],
         )
 
     metadata, body = parse_frontmatter(text)
     source = metadata.get("source", file_path.stem)
     author = metadata.get("author", "Unknown")
     date = metadata.get("date", "")
-    themes_meta = metadata.get("themes", [])
-    if isinstance(themes_meta, str):
-        themes_meta = [themes_meta]
+    themes = metadata.get("themes", [])
+    if isinstance(themes, str):
+        themes = [themes]
 
     chunks_text = chunk_text(body)
     chunks: list[KnowledgeChunk] = []
 
     for ct in chunks_text:
-        if len(ct.split()) < 10:
+        if len(ct.split()) < MIN_CHUNK_WORDS:
             continue
 
-        chunk_themes = themes_meta if themes_meta else classify_themes(ct)
+        chunk_themes = themes if themes else classify_themes(ct)
         chunk = KnowledgeChunk(
             chunk_id=generate_chunk_id(source, ct),
             source=source,
@@ -312,11 +354,6 @@ def ingest_markdown(file_path: Path) -> IngestionResult:
     for c in chunks:
         all_themes.update(c.themes)
 
-    logger.info(
-        "Ingested %s: %d chunks, themes=%s",
-        file_path.name, len(chunks), sorted(all_themes),
-    )
-
     return IngestionResult(
         source_file=str(file_path),
         chunks_created=len(chunks),
@@ -327,30 +364,38 @@ def ingest_markdown(file_path: Path) -> IngestionResult:
 
 
 def ingest_directory(dir_path: Path) -> list[IngestionResult]:
-    """Ingest all Markdown files in a directory (recursive).
+    """Ingest all Markdown files in a directory recursively.
+
+    Processes each ``.md`` file found via glob, collecting results.
+    Individual file failures are captured in each result's errors list
+    and do not abort processing of remaining files.
 
     Args:
-        dir_path: Path to directory containing .md files.
+        dir_path: Root directory to scan for Markdown files.
 
     Returns:
-        List of IngestionResult, one per file processed.
+        List of IngestionResult, one per file found.
 
     Raises:
         ValueError: If dir_path does not exist or is not a directory.
     """
     if not dir_path.exists():
-        raise ValueError(f"Directory does not exist: {dir_path}")
+        msg = f"Directory does not exist: {dir_path}"
+        raise ValueError(msg)
+
     if not dir_path.is_dir():
-        raise ValueError(f"Path is not a directory: {dir_path}")
+        msg = f"Path is not a directory: {dir_path}"
+        raise ValueError(msg)
 
     results: list[IngestionResult] = []
-    for md_file in sorted(dir_path.glob("**/*.md")):
+    try:
+        md_files = sorted(dir_path.glob("**/*.md"))
+    except OSError as e:
+        logger.error("Failed to list directory %s: %s", dir_path, e)
+        return results
+
+    for md_file in md_files:
         result = ingest_markdown(md_file)
         results.append(result)
-
-    logger.info(
-        "Directory ingestion complete: %d files, %d total chunks",
-        len(results), sum(r.chunks_created for r in results),
-    )
 
     return results
