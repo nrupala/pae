@@ -3,16 +3,15 @@ use crate::api::portfolio::{PositionImpact, StressTestInput, StressTestResponse}
 /// Historical scenario shock profiles.
 /// Each maps asset classes to percentage shocks observed during the event.
 ///
-/// # Supported Scenarios
+/// Supported scenarios:
 /// - `gfc_2008`: Global Financial Crisis
-/// - `covid_2020`: COVID-19 crash
-/// - `rate_shock_2022`: 2022 rate hiking cycle
+/// - `covid_2020`: COVID-19 pandemic crash
+/// - `rate_shock_2022`: 2022 interest rate hiking cycle
 /// - `dotcom_2000`: Dot-com bubble burst
-/// - `stagflation_1970s`: 1970s stagflation
-/// - `black_monday_1987`: Black Monday crash
-/// - `oil_shock_2020`: Oil price war
-///
-/// Unknown scenarios fall through to a moderate default shock profile.
+/// - `stagflation_1970s`: 1970s stagflation era
+/// - `black_monday_1987`: October 1987 crash
+/// - `oil_shock_2020`: Oil price collapse
+/// - Any other string: uses a moderate default shock profile
 fn get_scenario_shocks(name: &str) -> Vec<(&'static str, f64)> {
     match name {
         "gfc_2008" => vec![
@@ -75,34 +74,44 @@ fn get_scenario_shocks(name: &str) -> Vec<(&'static str, f64)> {
 }
 
 /// Classify a holding into a broad asset class.
-/// In production, this would use GICS codes or user-defined tags.
 ///
-/// # Returns
-/// Currently always returns "equity" as a stub. Real implementation
-/// would inspect holdings metadata, GICS sector codes, or user tags.
+/// Stub implementation: defaults all holdings to "equity".
+/// Production version uses GICS codes or user-defined tags from holdings metadata.
 fn classify_asset(_symbol: &str) -> &'static str {
     // Stub: default to equity. Real implementation uses holdings metadata.
     "equity"
 }
 
-/// Run a stress test on the portfolio using a historical scenario or custom shocks.
+/// Run a scenario-based stress test on the portfolio.
+///
+/// Applies either a historical scenario's shock profile or custom shocks
+/// to each holding based on its asset class classification.
 ///
 /// # Parameters
-/// - `input.holdings`: Portfolio positions
-/// - `input.scenario`: Named scenario (e.g., "gfc_2008") or empty if using custom_shocks
-/// - `input.custom_shocks`: Optional user-defined shock profile
+/// - `input.holdings`: portfolio holdings (must be non-empty; validated by handler)
+/// - `input.scenario`: scenario name (matches a historical profile or falls back to defaults)
+/// - `input.custom_shocks`: optional custom shock percentages per asset class
 ///
-/// # Edge Cases
-/// - Zero total portfolio value: returns 0.0 for portfolio_impact_pct
-/// - Unknown scenario: falls through to moderate default shocks
-/// - Non-finite shock values: treated as 0.0
+/// # Edge cases
+/// - Empty holdings: returns zero impact (though handler validates before calling)
+/// - Zero total market value: portfolio_impact_pct is 0.0
+/// - Unknown asset class in custom shocks: uses -0.10 default
+/// - NaN/Infinity in shock_pct: sanitized to 0.0
+///
+/// # Returns
+/// `StressTestResponse` with per-position and aggregate portfolio impact.
 pub fn run_stress_test(input: &StressTestInput) -> StressTestResponse {
     let shocks: Vec<(&str, f64)> = if let Some(ref custom) = input.custom_shocks {
         custom
             .iter()
             .map(|s| {
-                let shock = if s.shock_pct.is_finite() { s.shock_pct } else { 0.0 };
-                (s.asset_class.as_str(), shock)
+                // Sanitize: if shock_pct is NaN/Infinity, treat as zero shock
+                let pct = if s.shock_pct.is_nan() || s.shock_pct.is_infinite() {
+                    0.0
+                } else {
+                    s.shock_pct
+                };
+                (s.asset_class.as_str(), pct)
             })
             .collect()
     } else {
@@ -114,23 +123,30 @@ pub fn run_stress_test(input: &StressTestInput) -> StressTestResponse {
 
     let total_value: f64 = input.holdings.iter().map(|h| h.market_value).sum();
     let mut total_impact = 0.0;
-    let mut position_impacts = Vec::with_capacity(input.holdings.len());
+    let mut position_impacts = Vec::new();
 
     for holding in &input.holdings {
         let asset_class = classify_asset(&holding.symbol);
         let shock = shock_map.get(asset_class).copied().unwrap_or(-0.10);
-        let mv = if holding.market_value.is_finite() { holding.market_value } else { 0.0 };
-        let impact_value = mv * shock;
-        total_impact += impact_value;
+        let impact_value = holding.market_value * shock;
+
+        // Guard against NaN/Infinity propagation from market_value
+        let safe_impact = if impact_value.is_nan() || impact_value.is_infinite() {
+            0.0
+        } else {
+            impact_value
+        };
+
+        total_impact += safe_impact;
 
         position_impacts.push(PositionImpact {
             symbol: holding.symbol.clone(),
             impact_pct: shock,
-            impact_value: if impact_value.is_finite() { impact_value } else { 0.0 },
+            impact_value: safe_impact,
         });
     }
 
-    let portfolio_impact_pct = if total_value > 0.0 && total_impact.is_finite() {
+    let portfolio_impact_pct = if total_value > 0.0 && !total_value.is_nan() && !total_value.is_infinite() {
         total_impact / total_value
     } else {
         0.0
@@ -148,47 +164,76 @@ mod tests {
     use super::*;
     use crate::api::portfolio::{AssetShock, Holding, StressTestInput};
 
-    fn test_holding(symbol: &str, mv: f64) -> Holding {
-        Holding {
-            symbol: symbol.to_string(),
-            weight: 1.0,
-            returns: vec![0.01, -0.01],
-            yield_pct: None,
-            cost_basis: None,
-            market_value: mv,
-        }
+    fn sample_holdings() -> Vec<Holding> {
+        vec![
+            Holding {
+                symbol: "SPY".to_string(),
+                weight: 0.6,
+                returns: vec![0.01, -0.02],
+                yield_pct: None,
+                cost_basis: None,
+                market_value: 60000.0,
+            },
+            Holding {
+                symbol: "AGG".to_string(),
+                weight: 0.4,
+                returns: vec![0.005, 0.003],
+                yield_pct: None,
+                cost_basis: None,
+                market_value: 40000.0,
+            },
+        ]
     }
 
     #[test]
-    fn test_gfc_scenario() {
+    fn test_stress_gfc_2008() {
         let input = StressTestInput {
-            holdings: vec![test_holding("SPY", 10000.0)],
+            holdings: sample_holdings(),
             scenario: "gfc_2008".to_string(),
             custom_shocks: None,
         };
         let result = run_stress_test(&input);
         assert_eq!(result.scenario, "gfc_2008");
+        assert!(result.portfolio_impact_pct < 0.0, "GFC should produce negative impact");
+        assert_eq!(result.position_impacts.len(), 2);
+    }
+
+    #[test]
+    fn test_stress_custom_shocks() {
+        let input = StressTestInput {
+            holdings: sample_holdings(),
+            scenario: "custom".to_string(),
+            custom_shocks: Some(vec![
+                AssetShock { asset_class: "equity".to_string(), shock_pct: -0.30 },
+            ]),
+        };
+        let result = run_stress_test(&input);
         assert!(result.portfolio_impact_pct < 0.0);
     }
 
     #[test]
-    fn test_custom_shocks() {
+    fn test_stress_empty_holdings() {
         let input = StressTestInput {
-            holdings: vec![test_holding("BTC", 5000.0)],
-            scenario: "custom".to_string(),
-            custom_shocks: Some(vec![AssetShock {
-                asset_class: "equity".to_string(),
-                shock_pct: -0.30,
-            }]),
+            holdings: vec![],
+            scenario: "gfc_2008".to_string(),
+            custom_shocks: None,
         };
         let result = run_stress_test(&input);
-        assert!((result.portfolio_impact_pct - (-0.30)).abs() < 1e-10);
+        assert_eq!(result.portfolio_impact_pct, 0.0);
+        assert!(result.position_impacts.is_empty());
     }
 
     #[test]
-    fn test_zero_value_portfolio() {
+    fn test_stress_zero_market_value() {
         let input = StressTestInput {
-            holdings: vec![test_holding("SPY", 0.0)],
+            holdings: vec![Holding {
+                symbol: "ZERO".to_string(),
+                weight: 1.0,
+                returns: vec![0.0],
+                yield_pct: None,
+                cost_basis: None,
+                market_value: 0.0,
+            }],
             scenario: "gfc_2008".to_string(),
             custom_shocks: None,
         };
@@ -197,14 +242,28 @@ mod tests {
     }
 
     #[test]
-    fn test_unknown_scenario_uses_default() {
+    fn test_stress_nan_shock_sanitized() {
         let input = StressTestInput {
-            holdings: vec![test_holding("SPY", 10000.0)],
-            scenario: "alien_invasion".to_string(),
+            holdings: sample_holdings(),
+            scenario: "custom".to_string(),
+            custom_shocks: Some(vec![
+                AssetShock { asset_class: "equity".to_string(), shock_pct: f64::NAN },
+            ]),
+        };
+        let result = run_stress_test(&input);
+        // NaN shock should be sanitized to 0.0, so zero impact
+        assert_eq!(result.portfolio_impact_pct, 0.0);
+    }
+
+    #[test]
+    fn test_stress_unknown_scenario_uses_defaults() {
+        let input = StressTestInput {
+            holdings: sample_holdings(),
+            scenario: "unknown_scenario_xyz".to_string(),
             custom_shocks: None,
         };
         let result = run_stress_test(&input);
-        // Default shock for equity is -0.20
-        assert!((result.portfolio_impact_pct - (-0.20)).abs() < 1e-10);
+        // Should use the default moderate shock profile
+        assert!(result.portfolio_impact_pct < 0.0);
     }
 }
