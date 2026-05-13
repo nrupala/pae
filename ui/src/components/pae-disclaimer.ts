@@ -2,6 +2,12 @@
  * PAE Disclaimer Component.
  * First-class UI component. Rendered on every page.
  * Cannot be permanently dismissed (architectural guardrail).
+ *
+ * This component is a regulatory and design requirement:
+ * PAE is an educational analytics tool, not a financial advisor.
+ * The disclaimer must always be visible to reinforce this.
+ *
+ * @element pae-disclaimer
  */
 
 class PaeDisclaimer extends HTMLElement {
@@ -40,13 +46,24 @@ class PaeDisclaimer extends HTMLElement {
         .disclaimer strong {
           color: var(--text-secondary, #475569);
         }
+        .disclaimer a {
+          color: var(--accent-primary, #2563eb);
+          text-decoration: none;
+        }
+        .disclaimer a:hover {
+          text-decoration: underline;
+        }
+        .disclaimer a:focus-visible {
+          outline: 2px solid var(--accent-primary, #2563eb);
+          outline-offset: 2px;
+        }
       </style>
-      <div class="disclaimer">
+      <div class="disclaimer" role="contentinfo" aria-label="Legal disclaimer">
         <strong>PAE is an educational analytics tool, not a financial advisor.</strong>
         This tool provides data, calculations, and educational content only.
         The user is responsible for all investment decisions.
         This is not financial advice. Results vary with each use and over time.
-        <a href="#methodology" style="color:var(--accent-primary, #2563eb)">View methodology</a>
+        <a href="#methodology">View methodology</a>
       </div>
     `;
   }

@@ -2,17 +2,30 @@
  * PAE Chart Component.
  * Renders charts using HTML5 Canvas. Zero dependencies.
  * Supports: line, pie/donut.
+ *
+ * @element pae-chart
+ * @attr {string} type - Chart type: 'line' | 'bar' | 'pie'.
+ * @attr {string} width - Canvas width in pixels (default: 400).
+ * @attr {string} height - Canvas height in pixels (default: 300).
  */
 
 type ChartType = 'line' | 'bar' | 'pie';
 
+interface ChartDataset {
+  label: string;
+  data: number[];
+  color: string;
+}
+
 interface ChartData {
   labels: string[];
-  datasets: {
-    label: string;
-    data: number[];
-    color: string;
-  }[];
+  datasets: ChartDataset[];
+}
+
+interface PieSlice {
+  label: string;
+  value: number;
+  color: string;
 }
 
 class PaeChart extends HTMLElement {
@@ -33,9 +46,25 @@ class PaeChart extends HTMLElement {
     this.render();
   }
 
+  attributeChangedCallback(): void {
+    this.render();
+  }
+
+  /**
+   * Parse a numeric attribute with a default fallback.
+   * Clamps to [minVal, maxVal] and rejects non-finite values.
+   */
+  private getNumericAttr(name: string, defaultVal: number, minVal: number, maxVal: number): number {
+    const raw = this.getAttribute(name);
+    if (raw === null) return defaultVal;
+    const parsed = parseInt(raw, 10);
+    if (!Number.isFinite(parsed)) return defaultVal;
+    return Math.max(minVal, Math.min(maxVal, parsed));
+  }
+
   private render(): void {
-    const width = parseInt(this.getAttribute('width') || '400');
-    const height = parseInt(this.getAttribute('height') || '300');
+    const width = this.getNumericAttr('width', 400, 50, 4000);
+    const height = this.getNumericAttr('height', 300, 50, 4000);
 
     this.shadow.innerHTML = `
       <style>
@@ -46,15 +75,23 @@ class PaeChart extends HTMLElement {
           max-width: ${width}px;
         }
       </style>
-      <canvas width="${width}" height="${height}"></canvas>
+      <canvas width="${width}" height="${height}" role="img" aria-label="Chart"></canvas>
     `;
 
     this.canvas = this.shadow.querySelector('canvas');
-    this.ctx = this.canvas?.getContext('2d') || null;
+    this.ctx = this.canvas?.getContext('2d') ?? null;
   }
 
+  /**
+   * Draw a line chart.
+   *
+   * @param data - Chart data with labels and datasets.
+   *   Each dataset.data array should be the same length as labels.
+   *   Non-finite values are skipped (gaps in the line).
+   */
   public drawLine(data: ChartData): void {
     if (!this.ctx || !this.canvas) return;
+    if (!data.datasets.length) return;
 
     const ctx = this.ctx;
     const w = this.canvas.width;
@@ -66,11 +103,18 @@ class PaeChart extends HTMLElement {
     const chartW = w - padding.left - padding.right;
     const chartH = h - padding.top - padding.bottom;
 
-    const allValues = data.datasets.flatMap(d => d.data);
+    // Collect all finite values for scale computation
+    const allValues = data.datasets
+      .flatMap(d => d.data)
+      .filter(v => Number.isFinite(v));
+
+    if (allValues.length === 0) return;
+
     const minVal = Math.min(...allValues);
     const maxVal = Math.max(...allValues);
-    const range = maxVal - minVal || 1;
+    const range = maxVal - minVal || 1; // avoid division by zero
 
+    // Draw grid lines
     ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
     ctx.lineWidth = 1;
     for (let i = 0; i <= 4; i++) {
@@ -81,17 +125,27 @@ class PaeChart extends HTMLElement {
       ctx.stroke();
     }
 
+    // Draw each dataset
     for (const dataset of data.datasets) {
+      if (!dataset.data.length) continue;
+
       ctx.strokeStyle = dataset.color;
       ctx.lineWidth = 2;
       ctx.beginPath();
 
-      for (let i = 0; i < dataset.data.length; i++) {
-        const x = padding.left + (i / Math.max(dataset.data.length - 1, 1)) * chartW;
-        const y = padding.top + chartH - ((dataset.data[i] - minVal) / range) * chartH;
+      const maxIdx = Math.max(dataset.data.length - 1, 1);
+      let pathStarted = false;
 
-        if (i === 0) {
+      for (let i = 0; i < dataset.data.length; i++) {
+        const val = dataset.data[i];
+        if (!Number.isFinite(val)) continue; // skip NaN/Infinity gaps
+
+        const x = padding.left + (i / maxIdx) * chartW;
+        const y = padding.top + chartH - ((val - minVal) / range) * chartH;
+
+        if (!pathStarted) {
           ctx.moveTo(x, y);
+          pathStarted = true;
         } else {
           ctx.lineTo(x, y);
         }
@@ -100,8 +154,21 @@ class PaeChart extends HTMLElement {
     }
   }
 
-  public drawPie(data: { label: string; value: number; color: string }[]): void {
+  /**
+   * Draw a donut/pie chart.
+   *
+   * @param data - Array of pie slices with label, value, and color.
+   *   Slices with non-positive or non-finite values are skipped.
+   *   If all slices are zero, nothing is drawn.
+   */
+  public drawPie(data: PieSlice[]): void {
     if (!this.ctx || !this.canvas) return;
+
+    // Filter out invalid slices
+    const validSlices = data.filter(
+      d => Number.isFinite(d.value) && d.value > 0
+    );
+    if (validSlices.length === 0) return;
 
     const ctx = this.ctx;
     const w = this.canvas.width;
@@ -113,10 +180,12 @@ class PaeChart extends HTMLElement {
 
     ctx.clearRect(0, 0, w, h);
 
-    const total = data.reduce((sum, d) => sum + d.value, 0);
+    const total = validSlices.reduce((sum, d) => sum + d.value, 0);
+    if (total === 0) return; // avoid division by zero
+
     let startAngle = -Math.PI / 2;
 
-    for (const slice of data) {
+    for (const slice of validSlices) {
       const sliceAngle = (slice.value / total) * Math.PI * 2;
       const endAngle = startAngle + sliceAngle;
 
@@ -134,4 +203,4 @@ class PaeChart extends HTMLElement {
 
 customElements.define('pae-chart', PaeChart);
 
-export { PaeChart, ChartData, ChartType };
+export { PaeChart, ChartData, ChartType, PieSlice, ChartDataset };
