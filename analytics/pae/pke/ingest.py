@@ -14,6 +14,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ class IngestionResult:
     chunks: list[KnowledgeChunk] = field(default_factory=list)
 
 
-def parse_frontmatter(text: str) -> tuple[dict, str]:
+def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     """Extract YAML frontmatter from a Markdown document.
 
     Parses the leading ``---`` delimited block into a dict of key-value pairs.
@@ -100,7 +101,7 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
     frontmatter_raw = match.group(1)
     body = match.group(2)
 
-    metadata: dict = {}
+    metadata: dict[str, Any] = {}
     for line in frontmatter_raw.strip().split("\n"):
         if ":" in line:
             key, _, value = line.partition(":")
