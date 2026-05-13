@@ -1,6 +1,7 @@
 """Tests for factor decomposition engine."""
 
 import numpy as np
+
 from pae.models.factor import decompose
 
 
