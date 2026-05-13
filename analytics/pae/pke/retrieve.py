@@ -6,9 +6,10 @@ based on the current analytical context.
 All retrieval runs locally. No queries leave the user's machine.
 """
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ def retrieve_by_theme(
 
 def retrieve_by_context(
     context_text: str,
-    themes: Optional[list[str]] = None,
+    themes: list[str] | None = None,
     top_k: int = 5,
 ) -> list[RetrievalResult]:
     """Retrieve passages relevant to a given analytical context.
