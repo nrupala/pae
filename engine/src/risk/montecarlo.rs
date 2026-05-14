@@ -27,14 +27,12 @@ pub fn run_simulation(input: &MonteCarloInput) -> MonteCarloResponse {
     let num_sims = input
         .num_simulations
         .unwrap_or(10_000)
-        .min(MAX_SIMULATIONS)
-        .max(1);
+        .clamp(1, MAX_SIMULATIONS);
 
     let horizon = input
         .time_horizon_months
         .unwrap_or(120)
-        .min(MAX_HORIZON_MONTHS)
-        .max(1);
+        .clamp(1, MAX_HORIZON_MONTHS);
 
     // Compute portfolio-level return statistics from holdings
     let all_returns: Vec<f64> = if input.holdings.is_empty() {
@@ -83,14 +81,14 @@ pub fn run_simulation(input: &MonteCarloInput) -> MonteCarloResponse {
         input.initial_value
     };
 
-    for sim in 0..num_sims {
-        final_values[sim][0] = initial;
+    for item in final_values.iter_mut().take(num_sims) {
+        item[0] = initial;
         for t in 1..=horizon {
             let z: f64 = sample_standard_normal(&mut rng);
             let r = mean + std_dev * z;
             // Clamp extreme returns to prevent overflow to Infinity
-            let r_clamped = r.max(-0.99).min(10.0);
-            final_values[sim][t] = final_values[sim][t - 1] * (1.0 + r_clamped);
+            let r_clamped = r.clamp(-0.99, 10.0);
+            item[t] = item[t - 1] * (1.0 + r_clamped);
         }
     }
 
