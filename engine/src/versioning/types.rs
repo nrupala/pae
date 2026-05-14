@@ -90,6 +90,7 @@ pub struct VersionQuery {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct SnapshotQuery {
     pub as_of: DateTime<Utc>,
     pub entity_types: Vec<EntityType>,
