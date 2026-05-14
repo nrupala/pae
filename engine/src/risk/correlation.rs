@@ -30,6 +30,7 @@ pub fn compute_matrix(input: &CorrelationInput) -> CorrelationResponse {
 
     let mut matrix = vec![vec![0.0_f64; n]; n];
 
+    #[allow(clippy::needless_range_loop)]
     for i in 0..n {
         for j in 0..n {
             if i == j {
@@ -62,7 +63,7 @@ fn clamp_correlation(corr: f64) -> f64 {
     if corr.is_nan() || corr.is_infinite() {
         return 0.0;
     }
-    corr.max(-1.0).min(1.0)
+    corr.clamp(-1.0, 1.0)
 }
 
 /// Pearson correlation coefficient over the last `window` observations.
