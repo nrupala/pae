@@ -121,7 +121,7 @@ pub fn value_at_risk(returns: &[f64], alpha: f64) -> f64 {
     let mut sorted = returns.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-    let index = ((alpha * sorted.len() as f64).floor() as usize).max(0);
+    let index = (alpha * sorted.len() as f64).floor() as usize;
     let index = index.min(sorted.len() - 1);
     -sorted[index] // VaR is reported as positive number
 }
