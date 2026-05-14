@@ -11,10 +11,12 @@ use super::types::{EntityType, SnapshotQuery, VersionedRecord};
 /// - Performance attribution: "What was my allocation on March 15?"
 /// - Regret minimization: "If I had not made change Y, what would my portfolio be?"
 /// - Audit trail: "Prove that these were my holdings on date Z."
+#[allow(dead_code)]
 pub struct SnapshotEngine<'a> {
     store: &'a VersionStore,
 }
 
+#[allow(dead_code)]
 impl<'a> SnapshotEngine<'a> {
     pub fn new(store: &'a VersionStore) -> Self {
         Self { store }
@@ -55,6 +57,7 @@ impl<'a> SnapshotEngine<'a> {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct SnapshotDiff {
     pub from: DateTime<Utc>,
     pub to: DateTime<Utc>,
@@ -64,6 +67,7 @@ pub struct SnapshotDiff {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct ModifiedEntity {
     pub entity_id: String,
     pub from_version: u64,
