@@ -62,7 +62,7 @@ jobs:
 
       - name: Type check
         working-directory: analytics
-        run: mypy pae/--ignore-missing-imports
+        run: mypy pae/ --ignore-missing-imports
 
       - name: Test
         working-directory: analytics
