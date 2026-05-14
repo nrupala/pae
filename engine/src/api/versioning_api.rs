@@ -55,6 +55,7 @@ pub struct GetHistoryResponse {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct SnapshotRequest {
     pub as_of: String,
     pub entity_types: Vec<String>,
@@ -87,7 +88,7 @@ fn bad_request(msg: impl Into<String>, code: impl Into<String>) -> (StatusCode, 
     tracing::warn!(error = %msg, code = %code, "versioning API error");
     (
         StatusCode::BAD_REQUEST,
-        Json(ApiError { error: msg, code: code }),
+        Json(ApiError { error: msg, code }),
     )
 }
 
