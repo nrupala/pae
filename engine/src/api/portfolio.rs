@@ -23,7 +23,6 @@ pub enum PortfolioError {
     NoReturnsData { symbol: String },
     NanOrInfReturn { symbol: String, index: usize },
     NanOrInfWeight { symbol: String },
-    InvalidAlpha,
     InvalidSimulationCount,
     InvalidTimeHorizon,
     NegativeInitialValue,
@@ -49,7 +48,6 @@ impl PortfolioError {
             PortfolioError::NoReturnsData { .. } => "NO_RETURNS_DATA",
             PortfolioError::NanOrInfReturn { .. } => "NAN_INF_RETURN",
             PortfolioError::NanOrInfWeight { .. } => "NAN_INF_WEIGHT",
-            PortfolioError::InvalidAlpha => "INVALID_ALPHA",
             PortfolioError::InvalidSimulationCount => "INVALID_SIMULATION_COUNT",
             PortfolioError::InvalidTimeHorizon => "INVALID_TIME_HORIZON",
             PortfolioError::NegativeInitialValue => "NEGATIVE_INITIAL_VALUE",
@@ -68,7 +66,6 @@ impl PortfolioError {
             PortfolioError::NoReturnsData { symbol } => format!("No returns data for symbol '{symbol}'"),
             PortfolioError::NanOrInfReturn { symbol, index } => format!("NaN or Infinity in returns[{index}] for symbol '{symbol}'"),
             PortfolioError::NanOrInfWeight { symbol } => format!("NaN or Infinity weight for symbol '{symbol}'"),
-            PortfolioError::InvalidAlpha => "Alpha must be between 0 and 1 exclusive".to_string(),
             PortfolioError::InvalidSimulationCount => "num_simulations must be between 1 and 1_000_000".to_string(),
             PortfolioError::InvalidTimeHorizon => "time_horizon_months must be between 1 and 600".to_string(),
             PortfolioError::NegativeInitialValue => "initial_value must not be negative".to_string(),
@@ -90,12 +87,14 @@ fn into_error_response(err: PortfolioError) -> (StatusCode, Json<PortfolioErrorR
 // --- Request/Response Types ---
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct PortfolioInput {
     pub holdings: Vec<Holding>,
     pub benchmark: Option<String>,
 }
 
 #[derive(Deserialize, Clone)]
+#[allow(dead_code)]
 pub struct Holding {
     pub symbol: String,
     pub weight: f64,
@@ -351,7 +350,7 @@ pub async fn correlation_matrix(
     validate_holdings(&input.holdings).map_err(into_error_response)?;
 
     if let Some(w) = input.window_days {
-        if w < 2 || w > 10_000 {
+        if !(2..=10_000).contains(&w) {
             return Err(into_error_response(PortfolioError::InvalidWindowDays));
         }
     }
