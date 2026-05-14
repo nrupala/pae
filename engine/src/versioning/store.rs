@@ -23,6 +23,7 @@ impl VersionStore {
     }
 
     /// Append a new version. Returns the version hash.
+    #[allow(clippy::too_many_arguments)]
     pub fn append(
         &self,
         entity_id: &str,
@@ -73,6 +74,7 @@ impl VersionStore {
     }
 
     /// Get a specific version by hash.
+    #[allow(dead_code)]
     pub fn get_by_hash(&self, version_hash: &str) -> Result<Option<VersionedRecord>, VersionStoreError> {
         let records = self.records.read()
             .map_err(|_| VersionStoreError::LockFailed)?;
@@ -119,6 +121,7 @@ impl VersionStore {
     }
 
     /// Count total versions across all entities.
+    #[allow(dead_code)]
     pub fn total_versions(&self) -> Result<usize, VersionStoreError> {
         let records = self.records.read()
             .map_err(|_| VersionStoreError::LockFailed)?;
@@ -151,6 +154,7 @@ impl VersionStore {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[allow(dead_code)]
 pub enum VersionStoreError {
     #[error("Failed to acquire lock on version store")]
     LockFailed,
