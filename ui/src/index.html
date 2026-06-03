@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PAE - Personal Analytics Engine</title>
+  <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="styles/tokens.css">
   <link rel="stylesheet" href="styles/components.css">
   <link rel="stylesheet" href="styles/themes.css">
@@ -25,5 +26,13 @@
   <script type="module" src="components/pae-disclaimer.js"></script>
   <script type="module" src="components/pae-dashboard.js"></script>
   <script type="module" src="components/pae-chart.js"></script>
+  <script type="module" src="components/pae-import.js"></script>
+
+  <script>
+    // Register service worker for PWA offline support
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
 </body>
 </html>
