@@ -1,42 +1,52 @@
 /**
  * PAE Dashboard Component.
- * Shows portfolio overview: metrics, allocation, performance.
- * Vanilla Web Component.
+ * Fetches real data from the Python API server and renders portfolio overview.
+ * Vanilla Web Component -- no framework, no dependencies.
  *
- * @element pae-dashboard
+ * API endpoints used:
+ * - GET /api/v1/dashboard/{portfolio_id} -> summary, allocation, top holdings
+ * - GET /api/v1/portfolios -> list of portfolios
  *
- * Fetches data from the Rust engine API and populates metric cards,
- * holdings table, and carry analysis section.
+ * The Python server (port 3002) handles data persistence and proxies
+ * risk calculations to the Rust engine (port 3001).
  */
 
-/** Shape of a single holding returned by the API or loaded from CSV. */
-interface DashboardHolding {
-  symbol: string;
-  market_value: number;
-  weight: number;
-  yield_pct?: number;
-  returns: number[];
+const API_BASE = 'http://localhost:3002';
+
+interface DashboardData {
+  summary: {
+    portfolio_id: string;
+    holding_count: number;
+    total_market_value: number;
+    total_cost_basis: number;
+    unrealized_pnl: number;
+    unrealized_pnl_pct: number;
+  };
+  allocation: Record<string, number>;
+  top_holdings: Array<{
+    symbol: string;
+    name: string;
+    market_value: number;
+    weight_pct: number;
+    yield_pct: number;
+    unrealized_pnl: number;
+  }>;
+  holding_count: number;
 }
 
-/** Shape of the /api/v1/portfolio/metrics response. */
-interface MetricsResponse {
-  total_return: number;
-  sharpe: number;
-  max_drawdown: number;
+interface PortfolioListItem {
+  id: string;
+  name: string;
+  holding_count: number;
+  total_market_value: number;
 }
-
-/** Shape of the /api/v1/portfolio/carry response (future). */
-interface CarryResponse {
-  total_annual_income: number;
-  total_annual_margin_cost: number;
-  net_carry: number;
-}
-
-const API_BASE = '/api/v1';
-const FETCH_TIMEOUT_MS = 15_000;
 
 class PaeDashboard extends HTMLElement {
   private shadow: ShadowRoot;
+  private portfolioId: string = '';
+  private data: DashboardData | null = null;
+  private error: string = '';
+  private loading: boolean = true;
 
   constructor() {
     super();
@@ -45,186 +55,231 @@ class PaeDashboard extends HTMLElement {
 
   connectedCallback(): void {
     this.render();
+    this.loadData();
   }
 
-  /**
-   * Update a metric card's displayed value.
-   * @param id - The element ID of the metric value span.
-   * @param value - The formatted string to display.
-   */
-  private setMetric(id: string, value: string): void {
-    const el = this.shadow.getElementById(id);
-    if (el) {
-      el.textContent = value;
-    }
-  }
-
-  /**
-   * Format a number as currency (USD).
-   * Returns '--' for non-finite values.
-   */
-  private formatCurrency(value: number): string {
-    if (!Number.isFinite(value)) return '--';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
-  }
-
-  /**
-   * Format a number as a percentage.
-   * Returns '--' for non-finite values.
-   */
-  private formatPercent(value: number): string {
-    if (!Number.isFinite(value)) return '--';
-    return (value * 100).toFixed(2) + '%';
-  }
-
-  /**
-   * Format a number with fixed decimal places.
-   * Returns '--' for non-finite values.
-   */
-  private formatNumber(value: number, decimals: number = 2): string {
-    if (!Number.isFinite(value)) return '--';
-    return value.toFixed(decimals);
-  }
-
-  /**
-   * Fetch data from the engine API with timeout and error handling.
-   * @param endpoint - API path relative to API_BASE (e.g., '/portfolio/metrics').
-   * @param body - Request payload.
-   * @returns Parsed JSON response, or null on error.
-   */
-  private async fetchApi<T>(endpoint: string, body: unknown): Promise<T | null> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  private async loadData(): Promise<void> {
+    this.loading = true;
+    this.error = '';
+    this.render();
 
     try {
-      const response = await fetch(`${API_BASE}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
+      // First, get the list of portfolios
+      const portfoliosResp = await fetch(`${API_BASE}/api/v1/portfolios`);
+      if (!portfoliosResp.ok) {
+        throw new Error(`Failed to fetch portfolios: ${portfoliosResp.status}`);
+      }
+      const portfoliosData = await portfoliosResp.json();
+      const portfolios: PortfolioListItem[] = portfoliosData.portfolios || [];
 
-      if (!response.ok) {
-        const errorBody = await response.text();
-        console.error(`PAE API error ${response.status} on ${endpoint}:`, errorBody);
-        return null;
+      if (portfolios.length === 0) {
+        this.loading = false;
+        this.error = '';
+        this.data = null;
+        this.render();
+        return;
       }
 
-      return await response.json() as T;
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        console.error(`PAE API timeout on ${endpoint}`);
-      } else {
-        console.error(`PAE API fetch error on ${endpoint}:`, error);
+      // Use the first portfolio (or a selected one)
+      this.portfolioId = portfolios[0].id;
+
+      // Fetch dashboard data
+      const dashResp = await fetch(`${API_BASE}/api/v1/dashboard/${this.portfolioId}`);
+      if (!dashResp.ok) {
+        throw new Error(`Failed to fetch dashboard: ${dashResp.status}`);
       }
-      return null;
-    } finally {
-      clearTimeout(timeoutId);
+      this.data = await dashResp.json();
+      this.loading = false;
+      this.error = '';
+    } catch (e) {
+      this.loading = false;
+      this.error = e instanceof Error ? e.message : 'Unknown error';
+      this.data = null;
     }
+
+    this.render();
   }
 
-  private render(): void {
-    this.shadow.innerHTML = `
-      <link rel="stylesheet" href="styles/tokens.css">
-      <link rel="stylesheet" href="styles/components.css">
-      <link rel="stylesheet" href="styles/themes.css">
+  private fmt(value: number, decimals: number = 2): string {
+    return value.toLocaleString('en-CA', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+  }
 
-      <div>
-        <h2 style="font-size:var(--font-size-xl);font-weight:700;margin:0 0 var(--space-6);color:var(--text-primary)">
-          Portfolio Dashboard
-        </h2>
+  private fmtCurrency(value: number): string {
+    return '$' + this.fmt(value);
+  }
 
-        <div class="pae-grid pae-grid-4" style="margin-bottom:var(--space-6)">
-          <div class="pae-card">
-            <div class="pae-metric">
-              <div class="pae-metric-label">Net Asset Value</div>
-              <div class="pae-metric-value" id="nav-value">--</div>
-            </div>
-          </div>
-          <div class="pae-card">
-            <div class="pae-metric">
-              <div class="pae-metric-label">Total Return</div>
-              <div class="pae-metric-value" id="return-value">--</div>
-            </div>
-          </div>
-          <div class="pae-card">
-            <div class="pae-metric">
-              <div class="pae-metric-label">Sharpe Ratio</div>
-              <div class="pae-metric-value" id="sharpe-value">--</div>
-            </div>
-          </div>
-          <div class="pae-card">
-            <div class="pae-metric">
-              <div class="pae-metric-label">Max Drawdown</div>
-              <div class="pae-metric-value" id="dd-value">--</div>
-            </div>
-          </div>
+  private fmtPct(value: number): string {
+    return this.fmt(value) + '%';
+  }
+
+  private pnlClass(value: number): string {
+    if (value > 0) return 'pae-metric-positive';
+    if (value < 0) return 'pae-metric-negative';
+    return '';
+  }
+
+  private renderLoading(): string {
+    return `
+      <div style="text-align:center;padding:var(--space-16);color:var(--text-tertiary)">
+        Loading portfolio data...
+      </div>
+    `;
+  }
+
+  private renderError(): string {
+    return `
+      <div style="text-align:center;padding:var(--space-16)">
+        <div style="color:var(--color-negative);margin-bottom:var(--space-4)">
+          Failed to load dashboard
         </div>
-
-        <div class="pae-grid pae-grid-2" style="margin-bottom:var(--space-6)">
-          <div class="pae-card">
-            <div class="pae-card-header">
-              <span class="pae-card-title">Allocation</span>
-            </div>
-            <canvas id="allocation-chart" width="400" height="300" role="img" aria-label="Portfolio allocation chart"></canvas>
-          </div>
-          <div class="pae-card">
-            <div class="pae-card-header">
-              <span class="pae-card-title">Performance</span>
-            </div>
-            <canvas id="performance-chart" width="400" height="300" role="img" aria-label="Portfolio performance chart"></canvas>
-          </div>
+        <div style="color:var(--text-tertiary);font-size:var(--font-size-sm)">
+          ${this.error}
         </div>
+        <div style="margin-top:var(--space-4);font-size:var(--font-size-sm);color:var(--text-tertiary)">
+          Make sure the Python server is running: <code>uvicorn pae.server:app --port 3002</code>
+        </div>
+        <button onclick="this.getRootNode().host.connectedCallback()"
+                style="margin-top:var(--space-4);padding:var(--space-2) var(--space-4);
+                       background:var(--accent-primary);color:white;border:none;
+                       border-radius:var(--radius-sm);cursor:pointer">
+          Retry
+        </button>
+      </div>
+    `;
+  }
 
+  private renderEmpty(): string {
+    return `
+      <div style="text-align:center;padding:var(--space-16)">
+        <div style="font-size:var(--font-size-xl);font-weight:700;color:var(--text-primary);margin-bottom:var(--space-4)">
+          Welcome to PAE
+        </div>
+        <div style="color:var(--text-secondary);margin-bottom:var(--space-6)">
+          Import your holdings to get started.
+        </div>
+        <div style="color:var(--text-tertiary);font-size:var(--font-size-sm)">
+          Upload a CSV from your broker (IBKR, Questrade, Wealthsimple) or add holdings manually.
+        </div>
+      </div>
+    `;
+  }
+
+  private renderDashboard(): string {
+    if (!this.data) return this.renderEmpty();
+
+    const s = this.data.summary;
+    const alloc = this.data.allocation;
+    const holdings = this.data.top_holdings;
+
+    const allocRows = Object.entries(alloc)
+      .sort((a, b) => b[1] - a[1])
+      .map(([cls, pct]) => `
+        <tr>
+          <td>${cls.replace('_', ' ')}</td>
+          <td class="numeric">${this.fmtPct(pct)}</td>
+          <td>
+            <div style="background:var(--bg-tertiary);border-radius:2px;height:8px;width:100%">
+              <div style="background:var(--accent-primary);border-radius:2px;height:8px;width:${Math.min(pct, 100)}%"></div>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+
+    const holdingRows = holdings.map(h => `
+      <tr>
+        <td><strong>${h.symbol}</strong></td>
+        <td style="color:var(--text-secondary);font-size:var(--font-size-xs)">${h.name}</td>
+        <td class="numeric">${this.fmtCurrency(h.market_value)}</td>
+        <td class="numeric">${this.fmtPct(h.weight_pct)}</td>
+        <td class="numeric">${this.fmtPct(h.yield_pct)}</td>
+        <td class="numeric ${this.pnlClass(h.unrealized_pnl)}">${this.fmtCurrency(h.unrealized_pnl)}</td>
+      </tr>
+    `).join('');
+
+    return `
+      <h2 style="font-size:var(--font-size-xl);font-weight:700;margin:0 0 var(--space-6);color:var(--text-primary)">
+        Portfolio Dashboard
+      </h2>
+
+      <!-- Key Metrics -->
+      <div class="pae-grid pae-grid-4" style="margin-bottom:var(--space-6)">
         <div class="pae-card">
-          <div class="pae-card-header">
-            <span class="pae-card-title">Holdings</span>
+          <div class="pae-metric">
+            <div class="pae-metric-label">Net Asset Value</div>
+            <div class="pae-metric-value">${this.fmtCurrency(s.total_market_value)}</div>
           </div>
-          <table class="pae-table">
-            <thead>
-              <tr>
-                <th>Symbol</th>
-                <th>Value</th>
-                <th>Weight</th>
-                <th>Yield</th>
-                <th>Return</th>
-              </tr>
-            </thead>
-            <tbody id="holdings-body">
-              <tr>
-                <td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:var(--space-8)">
-                  Import holdings via CSV or connect a brokerage to get started.
-                </td>
-              </tr>
-            </tbody>
-          </table>
         </div>
-
-        <div class="pae-card" style="margin-top:var(--space-4)">
-          <div class="pae-card-header">
-            <span class="pae-card-title">Margin Carry Analysis</span>
+        <div class="pae-card">
+          <div class="pae-metric">
+            <div class="pae-metric-label">Cost Basis</div>
+            <div class="pae-metric-value">${this.fmtCurrency(s.total_cost_basis)}</div>
           </div>
-          <div class="pae-grid pae-grid-3">
-            <div class="pae-metric">
-              <div class="pae-metric-label">Annual Income</div>
-              <div class="pae-metric-value" id="income-value">--</div>
+        </div>
+        <div class="pae-card">
+          <div class="pae-metric">
+            <div class="pae-metric-label">Unrealized P&L</div>
+            <div class="pae-metric-value ${this.pnlClass(s.unrealized_pnl)}">
+              ${this.fmtCurrency(s.unrealized_pnl)}
             </div>
-            <div class="pae-metric">
-              <div class="pae-metric-label">Margin Cost</div>
-              <div class="pae-metric-value" id="margin-cost-value">--</div>
-            </div>
-            <div class="pae-metric">
-              <div class="pae-metric-label">Net Carry</div>
-              <div class="pae-metric-value" id="net-carry-value">--</div>
+          </div>
+        </div>
+        <div class="pae-card">
+          <div class="pae-metric">
+            <div class="pae-metric-label">P&L %</div>
+            <div class="pae-metric-value ${this.pnlClass(s.unrealized_pnl_pct)}">
+              ${this.fmtPct(s.unrealized_pnl_pct)}
             </div>
           </div>
         </div>
       </div>
+
+      <!-- Allocation + Holdings -->
+      <div class="pae-grid pae-grid-2" style="margin-bottom:var(--space-6)">
+        <div class="pae-card">
+          <div class="pae-card-header">
+            <span class="pae-card-title">Asset Allocation</span>
+            <span style="font-size:var(--font-size-xs);color:var(--text-tertiary)">${s.holding_count} positions</span>
+          </div>
+          <table class="pae-table">
+            <thead><tr><th>Class</th><th>Weight</th><th></th></tr></thead>
+            <tbody>${allocRows || '<tr><td colspan="3" style="text-align:center;color:var(--text-tertiary)">No data</td></tr>'}</tbody>
+          </table>
+        </div>
+
+        <div class="pae-card">
+          <div class="pae-card-header">
+            <span class="pae-card-title">Top Holdings</span>
+          </div>
+          <table class="pae-table">
+            <thead><tr><th>Symbol</th><th>Name</th><th>Value</th><th>Weight</th><th>Yield</th><th>P&L</th></tr></thead>
+            <tbody>${holdingRows || '<tr><td colspan="6" style="text-align:center;color:var(--text-tertiary)">No holdings</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  private render(): void {
+    let content: string;
+
+    if (this.loading) {
+      content = this.renderLoading();
+    } else if (this.error) {
+      content = this.renderError();
+    } else if (!this.data || this.data.summary.holding_count === 0) {
+      content = this.renderEmpty();
+    } else {
+      content = this.renderDashboard();
+    }
+
+    this.shadow.innerHTML = `
+      <link rel="stylesheet" href="styles/tokens.css">
+      <link rel="stylesheet" href="styles/components.css">
+      <link rel="stylesheet" href="styles/themes.css">
+      <div>${content}</div>
     `;
   }
 }
