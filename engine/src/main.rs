@@ -1,6 +1,6 @@
 use anyhow::Result;
 use axum::{
-    routing::{get, post},
+    routing::{delete, get, post, put},
     Router,
 };
 use std::net::SocketAddr;
@@ -12,6 +12,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 mod api;
 mod crypto;
 mod risk;
+mod storage;
 mod versioning;
 
 #[tokio::main]
@@ -27,12 +28,42 @@ async fn main() -> Result<()> {
     // Shared state: version store (in-memory; production uses SQLite with WAL)
     let version_store = Arc::new(versioning::store::VersionStore::new());
 
-    // Routes that need shared state (versioning)
+    // Shared state: encrypted SQLite persistence layer (WAL mode).
+    // Path is configurable so deployments can point at a persistent volume;
+    // defaults to ~/.pae/pae.db, falling back to ./pae.db if HOME is unset.
+    let db_path = std::env::var("PAE_DB_PATH").unwrap_or_else(|_| {
+        match std::env::var("HOME") {
+            Ok(home) => format!("{home}/.pae/pae.db"),
+            Err(_) => "pae.db".to_string(),
+        }
+    });
+    if let Some(parent) = std::path::Path::new(&db_path).parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
+    let store = Arc::new(
+        storage::Store::open(&db_path)
+            .map_err(|e| anyhow::anyhow!("Failed to open PAE database at {db_path}: {e}"))?,
+    );
+    tracing::info!("PAE storage initialized at {}", db_path);
+
+    // Routes backed by the versioning store
     let versioned_routes = Router::new()
         .route("/api/v1/version", post(api::versioning_api::append_version))
         .route("/api/v1/version/history", post(api::versioning_api::get_history))
         .route("/api/v1/version/integrity/{entity_id}", get(api::versioning_api::verify_integrity))
         .with_state(version_store);
+
+    // Routes backed by the SQLite persistence store (holdings, portfolios, import)
+    let storage_routes = Router::new()
+        .route("/api/v1/holdings", get(api::holdings_api::list_holdings))
+        .route("/api/v1/holdings", post(api::holdings_api::create_holding))
+        .route("/api/v1/holdings/{id}", put(api::holdings_api::update_holding))
+        .route("/api/v1/holdings/{id}", delete(api::holdings_api::delete_holding))
+        .route("/api/v1/portfolios", get(api::holdings_api::list_portfolios))
+        .route("/api/v1/portfolios", post(api::holdings_api::create_portfolio))
+        .route("/api/v1/import/csv", post(api::import_api::import_csv))
+        .route("/api/v1/import/confirm", post(api::import_api::confirm_import))
+        .with_state(store);
 
     // Routes without shared state (stateless compute)
     let stateless_routes = Router::new()
@@ -49,6 +80,7 @@ async fn main() -> Result<()> {
 
     let app = Router::new()
         .merge(versioned_routes)
+        .merge(storage_routes)
         .merge(stateless_routes)
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
