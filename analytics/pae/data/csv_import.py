@@ -110,10 +110,10 @@ class CsvImportError(Exception):
 # logical field. Order within a list does not matter; first matching header
 # in the file wins.
 _SYMBOL_KEYS = {"symbol", "ticker", "instrument", "security", "stocksymbol"}
-_QUANTITY_KEYS = {"quantity", "qty", "shares", "units", "position", "amount"}
+_QUANTITY_KEYS = {"quantity", "qty", "shares", "units", "position", "amount", "openquantity"}
 _MARKET_VALUE_KEYS = {
     "marketvalue", "value", "currentvalue", "positionvalue",
-    "marketvaluebase", "totalvalue", "mktvalue",
+    "marketvaluebase", "totalvalue", "mktvalue", "currentmarketvalue",
 }
 _COST_BASIS_KEYS = {
     "costbasis", "cost", "bookvalue", "totalcost", "averagecost", "acb",
