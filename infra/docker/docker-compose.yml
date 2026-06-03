@@ -1,20 +1,51 @@
 # PAE Local Development Stack
 # `docker compose up` for full local environment.
+#
+# Three services:
+# - engine (Rust): risk calculations, crypto vault (port 3001)
+# - api (Python): data persistence, CSV import, analytics proxy (port 3002)
+# - ui (nginx): static file server for the dashboard (port 3000)
+#
+# Data persists in the pae-data volume across restarts.
 
 services:
   engine:
     build:
       context: ../../
       dockerfile: infra/docker/Dockerfile
+      target: runtime
     ports:
       - "3001:3001"
     environment:
       - PAE_ENGINE_PORT=3001
       - RUST_LOG=pae_engine=info,tower_http=info
-      - APP_ROOT=/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  api:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile.python
+    ports:
+      - "3002:3002"
+    environment:
+      - PAE_DB_PATH=/app/data/pae.db
+      - PAE_ENGINE_URL=http://engine:3001
     volumes:
       - pae-data:/app/data
+    depends_on:
+      engine:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   ui:
     image: nginx:alpine
@@ -23,7 +54,7 @@ services:
     volumes:
       - ../../ui/src:/usr/share/nginx/html:ro
     depends_on:
-      - engine
+      - api
     restart: unless-stopped
 
 volumes:
