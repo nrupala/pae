@@ -9,7 +9,7 @@ repository = "https://github.com/nrupala/pae"
 
 [dependencies]
 # Web framework
-axum = { version = "0.8", features = ["json", "ws"] }
+axum = { version = "0.8", features = ["json", "ws", "multipart"] }
 tokio = { version = "1", features = ["full"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
@@ -28,6 +28,7 @@ base64 = "0.22"
 # Data
 arrow = { version = "53", features = ["json"] }
 parquet = "53"
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 # Numerics
 ndarray = "0.16"
@@ -47,6 +48,7 @@ dotenvy = "0.15"
 axum-test = "16"
 tokio-test = "0.4"
 approx = "0.5"
+tempfile = "3"
 
 [profile.release]
 opt-level = 3
