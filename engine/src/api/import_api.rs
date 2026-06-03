@@ -157,7 +157,7 @@ pub struct ImportPreviewResponse {
 /// - 422 if the file decodes but no holdings can be parsed,
 /// - 200 with the preview otherwise (which may still carry per-row errors).
 pub async fn import_csv(
-    Multipart(multipart): Multipart,
+    multipart: Multipart,
 ) -> Result<Json<ImportPreviewResponse>, (StatusCode, Json<ImportErrorResponse>)> {
     let (filename, bytes) = read_upload(multipart).await.map_err(err_response)?;
 
