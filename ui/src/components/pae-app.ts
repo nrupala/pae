@@ -1,10 +1,12 @@
 /**
  * PAE Root Application Component.
  * Vanilla Web Component - no framework, no dependencies.
- * Manages layout, theme, and top-level routing.
+ * Manages layout, theme, and hash-based routing.
  *
- * @element pae-app
- * @fires theme-changed - When the user toggles between light and dark themes.
+ * Routes:
+ *   #dashboard  -> <pae-dashboard>
+ *   #import     -> <pae-import>
+ *   (others)    -> placeholder with coming soon message
  */
 
 const VALID_THEMES = ['light', 'dark'] as const;
@@ -29,19 +31,12 @@ class PaeApp extends HTMLElement {
     window.removeEventListener('hashchange', this._onHashChange);
   }
 
-  /**
-   * Initialize theme from localStorage. Falls back to 'dark' if
-   * no saved preference or an invalid value is stored.
-   */
   private initTheme(): void {
     const saved = localStorage.getItem('pae-theme');
     const theme: Theme = saved === 'light' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', theme);
   }
 
-  /**
-   * Toggle between light and dark themes. Persists choice to localStorage.
-   */
   private toggleTheme(): void {
     const current = document.documentElement.getAttribute('data-theme');
     const next: Theme = current === 'dark' ? 'light' : 'dark';
@@ -49,17 +44,13 @@ class PaeApp extends HTMLElement {
     try {
       localStorage.setItem('pae-theme', next);
     } catch {
-      // localStorage may be unavailable in private browsing; ignore
+      // localStorage may be unavailable in private browsing
     }
   }
 
-  /**
-   * Set up hash-based routing and listen for navigation changes.
-   */
   private setupRouting(): void {
     this._onHashChange = this._onHashChange.bind(this);
     window.addEventListener('hashchange', this._onHashChange);
-    // Handle initial hash
     this.handleRoute(window.location.hash);
   }
 
@@ -67,15 +58,11 @@ class PaeApp extends HTMLElement {
     this.handleRoute(window.location.hash);
   }
 
-  /**
-   * Handle a route change. Updates active nav item styling.
-   * @param hash - The URL hash (e.g., "#risk" or "#dashboard").
-   */
   private handleRoute(hash: string): void {
     const route = hash.replace('#', '') || 'dashboard';
     this._activeRoute = route;
 
-    // Update active nav item
+    // Update nav active state
     const navItems = this.shadow.querySelectorAll('.nav-item');
     navItems.forEach((item) => {
       const href = item.getAttribute('href') || '';
@@ -86,6 +73,26 @@ class PaeApp extends HTMLElement {
         item.classList.remove('active');
       }
     });
+
+    // Swap main content based on route
+    const main = this.shadow.querySelector('.pae-main');
+    if (!main) return;
+
+    const routeComponents: Record<string, string> = {
+      'dashboard': '<pae-dashboard></pae-dashboard>',
+      'import': '<pae-import></pae-import>',
+    };
+
+    const comingSoon = `
+      <div style="text-align:center;padding:var(--space-16)">
+        <div style="font-size:var(--font-size-xl);font-weight:700;color:var(--text-primary);margin-bottom:var(--space-4)">
+          ${route.charAt(0).toUpperCase() + route.slice(1).replace(/-/g, ' ')}
+        </div>
+        <div style="color:var(--text-tertiary)">Coming soon. Building the ${route} module.</div>
+      </div>
+    `;
+
+    main.innerHTML = routeComponents[route] || comingSoon;
   }
 
   private render(): void {
