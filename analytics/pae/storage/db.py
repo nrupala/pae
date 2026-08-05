@@ -96,7 +96,7 @@ class PAEDatabase:
         db.close()
     """
 
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
 
     def __init__(self, db_path: str | Path = "pae.db") -> None:
         self.db_path = Path(db_path)
@@ -157,7 +157,7 @@ class PAEDatabase:
             CREATE TABLE IF NOT EXISTS holdings (
                 id TEXT PRIMARY KEY,
                 portfolio_id TEXT NOT NULL,
-                account_id TEXT NOT NULL DEFAULT '',
+                account_id TEXT,
                 symbol TEXT NOT NULL,
                 name TEXT NOT NULL DEFAULT '',
                 asset_class TEXT NOT NULL DEFAULT 'equity',
@@ -171,16 +171,74 @@ class PAEDatabase:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY (portfolio_id) REFERENCES portfolios(id) ON DELETE CASCADE,
-                FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE SET DEFAULT
+                FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE SET NULL
             );
 
             CREATE INDEX IF NOT EXISTS idx_holdings_portfolio ON holdings(portfolio_id);
             CREATE INDEX IF NOT EXISTS idx_holdings_symbol ON holdings(symbol);
             CREATE INDEX IF NOT EXISTS idx_holdings_account ON holdings(account_id);
 
-            INSERT OR IGNORE INTO schema_version (version) VALUES (1);
         """)
+        self._apply_migrations(conn)
         logger.info("Database initialized (schema v%d)", self.SCHEMA_VERSION)
+
+    def _apply_migrations(self, conn: sqlite3.Connection) -> None:
+        """Stamp fresh DBs at the latest schema version; migrate older ones in place."""
+        row = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()
+        current = int(row[0]) if row and row[0] is not None else 0
+        if current >= self.SCHEMA_VERSION:
+            return
+        if 0 < current < 2:
+            self._migrate_v2_account_nullable(conn)
+        conn.execute(
+            "INSERT OR IGNORE INTO schema_version (version) VALUES (?)",
+            (self.SCHEMA_VERSION,),
+        )
+        conn.commit()
+
+    @staticmethod
+    def _migrate_v2_account_nullable(conn: sqlite3.Connection) -> None:
+        """v1 -> v2: holdings.account_id becomes nullable (FK ON DELETE SET NULL); '' -> NULL."""
+        conn.execute("PRAGMA foreign_keys=OFF")
+        try:
+            conn.executescript(
+                """
+                BEGIN;
+                CREATE TABLE holdings_v2 (
+                    id TEXT PRIMARY KEY,
+                    portfolio_id TEXT NOT NULL,
+                    account_id TEXT,
+                    symbol TEXT NOT NULL,
+                    name TEXT NOT NULL DEFAULT '',
+                    asset_class TEXT NOT NULL DEFAULT 'equity',
+                    quantity REAL NOT NULL DEFAULT 0.0,
+                    market_value REAL NOT NULL DEFAULT 0.0,
+                    cost_basis REAL NOT NULL DEFAULT 0.0,
+                    weight REAL NOT NULL DEFAULT 0.0,
+                    yield_pct REAL NOT NULL DEFAULT 0.0,
+                    currency TEXT NOT NULL DEFAULT 'CAD',
+                    returns_json TEXT NOT NULL DEFAULT '[]',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (portfolio_id) REFERENCES portfolios(id) ON DELETE CASCADE,
+                    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE SET NULL
+                );
+                INSERT INTO holdings_v2
+                    SELECT id, portfolio_id, NULLIF(account_id, ''), symbol, name, asset_class,
+                           quantity, market_value, cost_basis, weight, yield_pct, currency,
+                           returns_json, created_at, updated_at
+                    FROM holdings;
+                DROP TABLE holdings;
+                ALTER TABLE holdings_v2 RENAME TO holdings;
+                CREATE INDEX IF NOT EXISTS idx_holdings_portfolio ON holdings(portfolio_id);
+                CREATE INDEX IF NOT EXISTS idx_holdings_symbol ON holdings(symbol);
+                CREATE INDEX IF NOT EXISTS idx_holdings_account ON holdings(account_id);
+                COMMIT;
+                """
+            )
+        finally:
+            conn.execute("PRAGMA foreign_keys=ON")
+        logger.info("Migrated holdings schema to v2 (nullable account_id)")
 
     def close(self) -> None:
         """Close the database connection."""
@@ -264,7 +322,7 @@ class PAEDatabase:
                 "quantity, market_value, cost_basis, weight, yield_pct, "
                 "currency, returns_json, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (holding.id, holding.portfolio_id, holding.account_id,
+                (holding.id, holding.portfolio_id, holding.account_id or None,
                  holding.symbol, holding.name, holding.asset_class,
                  holding.quantity, holding.market_value, holding.cost_basis,
                  holding.weight, holding.yield_pct, holding.currency,
@@ -319,7 +377,7 @@ class PAEDatabase:
 
         query += " ORDER BY symbol"
         rows = conn.execute(query, params).fetchall()
-        return [Holding(**dict(row)) for row in rows]
+        return [Holding(**{**dict(row), "account_id": row["account_id"] or ""}) for row in rows]
 
     def get_holding_by_id(self, holding_id: str) -> Holding:
         """Get a single holding by ID."""
@@ -329,7 +387,7 @@ class PAEDatabase:
         ).fetchone()
         if row is None:
             raise NotFoundError(f"Holding not found: {holding_id}")
-        return Holding(**dict(row))
+        return Holding(**{**dict(row), "account_id": row["account_id"] or ""})
 
     def bulk_insert_holdings(self, holdings: list[Holding]) -> int:
         """Insert multiple holdings in a single transaction. Returns count inserted."""
@@ -344,7 +402,7 @@ class PAEDatabase:
                     "quantity, market_value, cost_basis, weight, yield_pct, "
                     "currency, returns_json, created_at, updated_at) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (h.id, h.portfolio_id, h.account_id, h.symbol, h.name,
+                    (h.id, h.portfolio_id, h.account_id or None, h.symbol, h.name,
                      h.asset_class, h.quantity, h.market_value, h.cost_basis,
                      h.weight, h.yield_pct, h.currency, h.returns_json,
                      h.created_at, h.updated_at),
