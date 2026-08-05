@@ -164,7 +164,7 @@ class DataCache:
 
         # Integrity check
         computed = _compute_checksum(raw_value)
-        if computed \!= stored_checksum:
+        if computed != stored_checksum:
             logger.warning(
                 "Cache integrity check failed for key '%s': "
                 "stored=%s computed=%s. Evicting entry.",

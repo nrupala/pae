@@ -18,7 +18,7 @@ from typing import Any
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from pae.data.cache import DataCache, TTL_FACTORS, TTL_MACRO
+from pae.data.cache import TTL_FACTORS, TTL_MACRO, DataCache
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ def _safe_download(url: str, description: str) -> bytes:
     try:
         req = Request(url, headers={"User-Agent": "PAE/0.1"})
         with urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
-            data = resp.read(MAX_DOWNLOAD_BYTES + 1)
+            data: bytes = resp.read(MAX_DOWNLOAD_BYTES + 1)
             if len(data) > MAX_DOWNLOAD_BYTES:
                 msg = f"{description}: download exceeds {MAX_DOWNLOAD_BYTES} bytes"
                 raise FactorDataError(msg)
@@ -288,7 +288,7 @@ class FactorAdapter:
 
             # Date column is first: YYYYMM format for monthly
             date_str = parts[0].strip()
-            if len(date_str) \!= 6 or not date_str.isdigit():
+            if len(date_str) != 6 or not date_str.isdigit():
                 # Reached annual data or footer -- stop
                 break
 
@@ -400,7 +400,7 @@ class FactorAdapter:
             name=name_map.get(series_id, series_id),
             dates=dates,
             values=values,
-            units="Percent" if series_id \!= "SP500" else "Index",
+            units="Percent" if series_id != "SP500" else "Index",
         )
 
         self._cache.put(

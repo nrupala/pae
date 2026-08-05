@@ -11,12 +11,12 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from numpy.typing import NDArray
 
-from pae.data.cache import DataCache, TTL_DAILY_PRICES, TTL_METADATA, TTL_QUOTES
+from pae.data.cache import TTL_DAILY_PRICES, TTL_METADATA, TTL_QUOTES, DataCache
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +176,7 @@ class YahooAdapter:
 
         def fetch() -> dict[str, Any]:
             ticker = yf.Ticker(symbol)
-            info = ticker.info
+            info: dict[str, Any] = ticker.info
             if not info or "regularMarketPrice" not in info:
                 msg = f"No quote data available for '{symbol}'"
                 raise YahooError(msg)
@@ -367,7 +367,7 @@ class YahooAdapter:
         cache_key = f"yahoo:search:{query.strip().lower()}:{limit}"
         cached = self._cache.get(cache_key)
         if cached is not None:
-            return cached.value
+            return cast(list[dict[str, Any]], cached.value)
 
         import yfinance as yf
 
@@ -378,7 +378,7 @@ class YahooAdapter:
             results: list[dict[str, Any]] = []
             try:
                 ticker = yf.Ticker(query.strip().upper())
-                info = ticker.info
+                info: dict[str, Any] = ticker.info
                 if info and "shortName" in info:
                     results.append({
                         "symbol": query.strip().upper(),
@@ -390,7 +390,7 @@ class YahooAdapter:
                 pass
             return results
 
-        results = self._fetch_with_retry(fetch, f"Search for '{query}'")
+        results: list[dict[str, Any]] = self._fetch_with_retry(fetch, f"Search for '{query}'")
 
         self._cache.put(cache_key, results, source="yahoo", ttl=TTL_METADATA)
         return results

@@ -10,10 +10,9 @@ All data is cached locally. No data leaves the user's machine after fetch.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
-from pae.data.cache import DataCache, TTL_DAILY_PRICES, TTL_QUOTES
+from pae.data.cache import DataCache
 from pae.data.yahoo import PriceHistory, QuoteData, YahooAdapter, YahooError
 
 logger = logging.getLogger(__name__)

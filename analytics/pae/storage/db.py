@@ -13,14 +13,15 @@ Design:
 """
 
 import json
-import sqlite3
-from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Generator
-import uuid
 import logging
+import sqlite3
+import uuid
+from collections.abc import Generator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ class Account:
     account_type: str = "taxable"  # rrsp, tfsa, lira, taxable, margin
     broker: str = ""
     currency: str = "CAD"
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 @dataclass
@@ -44,8 +45,8 @@ class Portfolio:
     id: str = field(default_factory=lambda: str(uuid.uuid4())[:12])
     name: str = "Default"
     description: str = ""
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 @dataclass
@@ -56,7 +57,8 @@ class Holding:
     account_id: str = ""
     symbol: str = ""
     name: str = ""
-    asset_class: str = "equity"  # equity, fixed_income, commodity, real_estate, cash, crypto, preferred
+    # equity, fixed_income, commodity, real_estate, cash, crypto, preferred
+    asset_class: str = "equity"
     quantity: float = 0.0
     market_value: float = 0.0
     cost_basis: float = 0.0
@@ -64,8 +66,8 @@ class Holding:
     yield_pct: float = 0.0
     currency: str = "CAD"
     returns_json: str = "[]"  # JSON array of periodic returns
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 # --- Database Manager ---
@@ -274,7 +276,7 @@ class PAEDatabase:
     def update_holding(self, holding: Holding) -> Holding:
         """Update an existing holding by ID."""
         self._validate_holding(holding)
-        holding.updated_at = datetime.now(timezone.utc).isoformat()
+        holding.updated_at = datetime.now(UTC).isoformat()
 
         with self._transaction() as cur:
             cur.execute(
@@ -352,7 +354,7 @@ class PAEDatabase:
 
     # --- Aggregate Queries ---
 
-    def get_portfolio_summary(self, portfolio_id: str) -> dict:
+    def get_portfolio_summary(self, portfolio_id: str) -> dict[str, Any]:
         """Get summary stats for a portfolio."""
         conn = self._get_conn()
         row = conn.execute(
@@ -378,7 +380,7 @@ class PAEDatabase:
             ),
         }
 
-    def get_holdings_for_engine(self, portfolio_id: str) -> list[dict]:
+    def get_holdings_for_engine(self, portfolio_id: str) -> list[dict[str, Any]]:
         """Get holdings formatted for the Rust risk engine API.
 
         Returns list of dicts matching the Rust Holding struct:
