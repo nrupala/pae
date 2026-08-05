@@ -14,7 +14,6 @@ All parsing is local. No data leaves the user's machine.
 
 import csv
 import io
-import json
 import logging
 import math
 from dataclasses import dataclass, field
@@ -129,7 +128,9 @@ def _parse_row(
     name_idx = _find_column(headers, ["name", "description", "financial instrument"])
     qty_idx = _find_column(headers, ["quantity", "position", "shares", "qty"])
     mv_idx = _find_column(headers, ["market value", "market_value", "current value"])
-    cb_idx = _find_column(headers, ["cost basis", "cost_basis", "book cost", "book value", "avg cost"])
+    cb_idx = _find_column(
+        headers, ["cost basis", "cost_basis", "book cost", "book value", "avg cost"]
+    )
     yield_idx = _find_column(headers, ["yield", "dividend yield", "yield_pct"])
     currency_idx = _find_column(headers, ["currency", "curr"])
     asset_idx = _find_column(headers, ["asset class", "asset_class", "type", "category"])
@@ -148,17 +149,37 @@ def _parse_row(
     quantity = parse_float(row[qty_idx] if qty_idx is not None and qty_idx < len(row) else "0")
     market_value = parse_float(row[mv_idx] if mv_idx is not None and mv_idx < len(row) else "0")
     cost_basis = parse_float(row[cb_idx] if cb_idx is not None and cb_idx < len(row) else "0")
-    yield_pct = parse_float(row[yield_idx] if yield_idx is not None and yield_idx < len(row) else "0")
-    currency = row[currency_idx].strip().upper() if currency_idx is not None and currency_idx < len(row) else "CAD"
-    asset_class = row[asset_idx].strip().lower() if asset_idx is not None and asset_idx < len(row) else "equity"
+    yield_pct = parse_float(
+        row[yield_idx] if yield_idx is not None and yield_idx < len(row) else "0"
+    )
+    currency = (
+        row[currency_idx].strip().upper()
+        if currency_idx is not None and currency_idx < len(row)
+        else "CAD"
+    )
+    asset_class = (
+        row[asset_idx].strip().lower()
+        if asset_idx is not None and asset_idx < len(row)
+        else "equity"
+    )
 
     # Validate
     if quantity < 0:
-        warnings.append(ImportWarning(row=row_num, field="quantity", message=f"Negative quantity: {quantity}"))
+        warnings.append(
+            ImportWarning(row=row_num, field="quantity", message=f"Negative quantity: {quantity}")
+        )
     if market_value < 0:
-        warnings.append(ImportWarning(row=row_num, field="market_value", message=f"Negative market value: {market_value}"))
+        warnings.append(
+            ImportWarning(
+                row=row_num, field="market_value", message=f"Negative market value: {market_value}"
+            )
+        )
     if market_value == 0 and quantity == 0:
-        warnings.append(ImportWarning(row=row_num, field="market_value", message="Zero value position, skipping"))
+        warnings.append(
+            ImportWarning(
+                row=row_num, field="market_value", message="Zero value position, skipping"
+            )
+        )
         return None, warnings, errors
 
     # Normalize asset class
@@ -172,7 +193,9 @@ def _parse_row(
         "preferred": "preferred", "pfd": "preferred",
     }
     asset_class = asset_class_map.get(asset_class, asset_class)
-    if asset_class not in ("equity", "fixed_income", "commodity", "real_estate", "cash", "crypto", "preferred"):
+    if asset_class not in (
+        "equity", "fixed_income", "commodity", "real_estate", "cash", "crypto", "preferred"
+    ):
         asset_class = "equity"
 
     holding = Holding(
@@ -220,7 +243,9 @@ def import_csv_string(
         return result
 
     if len(rows) < 2:
-        result.errors.append(ImportError(row=0, message="CSV must have at least a header row and one data row"))
+        result.errors.append(
+            ImportError(row=0, message="CSV must have at least a header row and one data row")
+        )
         return result
 
     headers = rows[0]
@@ -281,7 +306,7 @@ def import_csv_file(
         result.errors.append(ImportError(row=0, message=f"File not found: {path}"))
         return result
 
-    if not path.suffix.lower() in (".csv", ".tsv", ".txt"):
+    if path.suffix.lower() not in (".csv", ".tsv", ".txt"):
         result = ImportResult()
         result.errors.append(ImportError(row=0, message=f"Unsupported file type: {path.suffix}"))
         return result

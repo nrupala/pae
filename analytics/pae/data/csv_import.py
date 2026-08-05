@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 MAX_ROWS = 100_000
 
 
-class BrokerFormat(str, Enum):
+class BrokerFormat(str, Enum):  # noqa: UP042
     """Recognized import formats."""
 
     INTERACTIVE_BROKERS = "interactive_brokers"

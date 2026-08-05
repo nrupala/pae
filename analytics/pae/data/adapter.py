@@ -402,7 +402,8 @@ class DataAdapter:
         q = query.strip().lower()
 
         # Search known commodities
-        for key, info in self._commodities.list_commodities():
+        for info in self._commodities.list_commodities():
+            key = info["key"]
             if q in key or q in info.get("name", "").lower():
                 results.append({
                     "symbol": info["symbol"],
@@ -412,7 +413,8 @@ class DataAdapter:
                 })
 
         # Search known forex
-        for key, info in self._commodities.list_forex():
+        for info in self._commodities.list_forex():
+            key = info["key"]
             if q in key or q in info.get("name", "").lower():
                 results.append({
                     "symbol": info["symbol"],
@@ -422,7 +424,8 @@ class DataAdapter:
                 })
 
         # Search known indices
-        for key, info in self._commodities.list_indices():
+        for info in self._commodities.list_indices():
+            key = info["key"]
             if q in key or q in info.get("name", "").lower():
                 results.append({
                     "symbol": info["symbol"],

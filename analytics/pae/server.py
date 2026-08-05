@@ -15,8 +15,8 @@ Usage:
 import json
 import logging
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -26,7 +26,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from pae.models.carry import analyze_carry
-from pae.models.factor import decompose
 from pae.storage.csv_import import import_csv_string
 from pae.storage.db import (
     Account,
@@ -51,7 +50,7 @@ db: PAEDatabase | None = None
 
 
 @asynccontextmanager
-async def lifespan(application: FastAPI):  # noqa: ARG001
+async def lifespan(application: FastAPI) -> AsyncIterator[None]:  # noqa: ARG001
     """Initialize and teardown database on app start/stop."""
     global db  # noqa: PLW0603
     db = PAEDatabase(DB_PATH)
@@ -156,14 +155,17 @@ async def not_found_error_handler(request: Any, exc: NotFoundError) -> JSONRespo
 @app.exception_handler(DatabaseError)
 async def database_error_handler(request: Any, exc: DatabaseError) -> JSONResponse:  # noqa: ARG001
     logger.error("Database error: %s", exc)
-    return JSONResponse(status_code=500, content={"error": "Internal database error", "code": "DB_ERROR"})
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Internal database error", "code": "DB_ERROR"},
+    )
 
 
 # --- Health ---
 
 
 @app.get("/health")
-async def health():
+async def health() -> dict[str, Any]:
     """Health check for the Python server."""
     database = get_db()
     portfolio_count = len(database.get_portfolios())
@@ -179,7 +181,7 @@ async def health():
 
 
 @app.get("/api/v1/portfolios")
-async def list_portfolios():
+async def list_portfolios() -> dict[str, Any]:
     """List all portfolios with summary stats."""
     database = get_db()
     portfolios = database.get_portfolios()
@@ -191,7 +193,7 @@ async def list_portfolios():
 
 
 @app.post("/api/v1/portfolios", status_code=201)
-async def create_portfolio(req: PortfolioCreate):
+async def create_portfolio(req: PortfolioCreate) -> dict[str, Any]:
     """Create a new portfolio."""
     database = get_db()
     portfolio = database.insert_portfolio(Portfolio(name=req.name, description=req.description))
@@ -199,7 +201,7 @@ async def create_portfolio(req: PortfolioCreate):
 
 
 @app.delete("/api/v1/portfolios/{portfolio_id}")
-async def delete_portfolio(portfolio_id: str):
+async def delete_portfolio(portfolio_id: str) -> dict[str, Any]:
     """Delete a portfolio and all its holdings."""
     database = get_db()
     database.delete_portfolio(portfolio_id)
@@ -210,7 +212,7 @@ async def delete_portfolio(portfolio_id: str):
 
 
 @app.get("/api/v1/accounts")
-async def list_accounts():
+async def list_accounts() -> dict[str, Any]:
     """List all accounts."""
     database = get_db()
     accounts = database.get_accounts()
@@ -219,7 +221,7 @@ async def list_accounts():
 
 
 @app.post("/api/v1/accounts", status_code=201)
-async def create_account(req: AccountCreate):
+async def create_account(req: AccountCreate) -> dict[str, Any]:
     """Create a new brokerage/investment account."""
     database = get_db()
     account = database.insert_account(Account(
@@ -236,7 +238,7 @@ async def create_account(req: AccountCreate):
 async def list_holdings(
     portfolio_id: str | None = Query(None),
     account_id: str | None = Query(None),
-):
+) -> dict[str, Any]:
     """List holdings, optionally filtered by portfolio and/or account."""
     database = get_db()
     holdings = database.get_holdings(portfolio_id=portfolio_id, account_id=account_id)
@@ -272,7 +274,7 @@ async def list_holdings(
 
 
 @app.post("/api/v1/holdings", status_code=201)
-async def create_holding(req: HoldingCreate):
+async def create_holding(req: HoldingCreate) -> dict[str, Any]:
     """Add a new holding to a portfolio."""
     database = get_db()
     holding = database.insert_holding(Holding(
@@ -292,7 +294,7 @@ async def create_holding(req: HoldingCreate):
 
 
 @app.put("/api/v1/holdings/{holding_id}")
-async def update_holding(holding_id: str, req: HoldingUpdate):
+async def update_holding(holding_id: str, req: HoldingUpdate) -> dict[str, Any]:
     """Update an existing holding."""
     database = get_db()
     existing = database.get_holding_by_id(holding_id)
@@ -321,7 +323,7 @@ async def update_holding(holding_id: str, req: HoldingUpdate):
 
 
 @app.delete("/api/v1/holdings/{holding_id}")
-async def delete_holding(holding_id: str):
+async def delete_holding(holding_id: str) -> dict[str, Any]:
     """Delete a holding."""
     database = get_db()
     database.delete_holding(holding_id)
@@ -336,7 +338,7 @@ async def import_csv(
     file: UploadFile = File(...),
     portfolio_id: str = Query(...),
     account_id: str = Query(""),
-):
+) -> dict[str, Any]:
     """Upload and parse a CSV file. Returns parsed holdings for review before saving.
 
     The user reviews the parsed data, then calls /api/v1/import/confirm to save.
@@ -354,7 +356,9 @@ async def import_csv(
         try:
             text = content.decode("latin-1")
         except UnicodeDecodeError:
-            raise HTTPException(status_code=400, detail="Cannot decode file (tried UTF-8 and Latin-1)")
+            raise HTTPException(
+                status_code=400, detail="Cannot decode file (tried UTF-8 and Latin-1)"
+            )
 
     result = import_csv_string(text, portfolio_id, account_id)
 
@@ -377,7 +381,9 @@ async def import_csv(
             }
             for h in result.holdings
         ],
-        "warnings": [{"row": w.row, "field": w.field, "message": w.message} for w in result.warnings],
+        "warnings": [
+            {"row": w.row, "field": w.field, "message": w.message} for w in result.warnings
+        ],
         "errors": [{"row": e.row, "message": e.message} for e in result.errors],
     }
 
@@ -387,7 +393,7 @@ async def confirm_import(
     file: UploadFile = File(...),
     portfolio_id: str = Query(...),
     account_id: str = Query(""),
-):
+) -> dict[str, Any]:
     """Parse and save CSV holdings to database in one step.
 
     Use /api/v1/import/csv first for preview, then this endpoint to save.
@@ -423,7 +429,7 @@ async def confirm_import(
 
 
 @app.post("/api/v1/analytics/risk")
-async def compute_risk(portfolio_id: str = Query(...)):
+async def compute_risk(portfolio_id: str = Query(...)) -> Any:
     """Compute risk metrics by sending holdings to the Rust engine."""
     database = get_db()
     holdings_data = database.get_holdings_for_engine(portfolio_id)
@@ -446,7 +452,7 @@ async def compute_risk(portfolio_id: str = Query(...)):
 
 
 @app.post("/api/v1/analytics/metrics")
-async def compute_metrics(portfolio_id: str = Query(...)):
+async def compute_metrics(portfolio_id: str = Query(...)) -> Any:
     """Compute performance metrics via the Rust engine."""
     database = get_db()
     holdings_data = database.get_holdings_for_engine(portfolio_id)
@@ -472,7 +478,7 @@ async def compute_metrics(portfolio_id: str = Query(...)):
 
 
 @app.post("/api/v1/analytics/carry")
-async def compute_carry(req: CarryRequest):
+async def compute_carry(req: CarryRequest) -> dict[str, Any]:
     """Compute margin carry analysis (Python-native, no Rust engine needed)."""
     database = get_db()
     holdings = database.get_holdings(portfolio_id=req.portfolio_id)
@@ -515,7 +521,7 @@ async def compute_carry(req: CarryRequest):
 
 
 @app.get("/api/v1/dashboard/{portfolio_id}")
-async def get_dashboard(portfolio_id: str):
+async def get_dashboard(portfolio_id: str) -> dict[str, Any]:
     """Get complete dashboard data for a portfolio.
 
     Single endpoint that the UI calls on load. Returns everything needed
@@ -548,7 +554,9 @@ async def get_dashboard(portfolio_id: str):
                 "symbol": h.symbol,
                 "name": h.name,
                 "market_value": round(h.market_value, 2),
-                "weight_pct": round(h.market_value / total_value * 100, 2) if total_value > 0 else 0.0,
+                "weight_pct": (
+                    round(h.market_value / total_value * 100, 2) if total_value > 0 else 0.0
+                ),
                 "yield_pct": h.yield_pct,
                 "unrealized_pnl": round(h.market_value - h.cost_basis, 2),
             }
