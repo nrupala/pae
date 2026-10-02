@@ -69,6 +69,10 @@ impl From<rusqlite::Error> for StorageError {
 
 /// Registered account types. Modeled as an enum so illegal account
 /// types are unrepresentable once parsed.
+// Accounts feature scaffold: not yet wired to an API endpoint, so this is
+// currently unused. Kept (not deleted) for the author's roadmap; silenced
+// so the `-D warnings` gate stays meaningful.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AccountType {
     /// Registered Retirement Savings Plan (Canada).
@@ -83,6 +87,7 @@ pub enum AccountType {
     Margin,
 }
 
+#[allow(dead_code)] // see AccountType above
 impl AccountType {
     /// Canonical lowercase string for persistence.
     pub fn as_str(&self) -> &'static str {
@@ -113,6 +118,7 @@ impl AccountType {
 
 /// An account row. `name` and `broker` are encrypted client-side; only
 /// the non-sensitive `id`, `account_type`, and timestamps are plaintext.
+#[allow(dead_code)] // see AccountType above
 #[derive(Debug, Clone)]
 pub struct Account {
     pub id: String,
@@ -173,6 +179,8 @@ pub struct NewHolding {
 /// Clone-free by design: share it behind an `Arc` (as Axum shared state).
 pub struct Store {
     pool: Mutex<Vec<Connection>>,
+    // Kept for diagnostics; no reader yet (silenced for `-D warnings`).
+    #[allow(dead_code)]
     path: PathBuf,
 }
 
@@ -248,6 +256,7 @@ impl Store {
     }
 
     /// Path the store was opened at (for diagnostics).
+    #[allow(dead_code)] // no reader yet; silenced for `-D warnings`
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -329,6 +338,7 @@ impl Store {
     /// # Errors
     /// [`StorageError::Validation`] if encrypted blobs are empty;
     /// [`StorageError::Sqlite`] on a database write failure.
+    #[allow(dead_code)] // accounts feature scaffold; silenced for `-D warnings`
     pub fn insert_account(
         &self,
         name_encrypted: &[u8],
@@ -608,6 +618,7 @@ impl Store {
     ///
     /// # Errors
     /// [`StorageError::NotFound`] if no holding has the given `id`.
+    #[allow(dead_code)] // used by the versioning layer roadmap; silenced for `-D warnings`
     pub fn get_holding(&self, id: &str) -> Result<Holding, StorageError> {
         self.with_conn(|conn| {
             conn.query_row(
@@ -634,6 +645,7 @@ impl Store {
     ///
     /// Because `created_at`/`updated_at` are stored as RFC3339 strings,
     /// lexical comparison is also chronological, so a string `<=` is correct.
+    #[allow(dead_code)] // used by the versioning layer roadmap; silenced for `-D warnings`
     pub fn get_portfolio_snapshot_at(
         &self,
         portfolio_id: &str,

@@ -33,7 +33,7 @@ use crate::storage::{NewHolding, Store};
 const MAX_FILE_BYTES: usize = 10 * 1024 * 1024;
 
 /// Standard error response body for import endpoints.
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct ImportErrorResponse {
     pub error: String,
     pub code: String,
