@@ -29,7 +29,10 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "pytest-asyncio>=0.24",
-    "mypy>=1.8",
+    # numpy>=2.x stubs use PEP 695 `type` syntax (3.12+); mypy<2.4 aborts on
+    # them when targeting our 3.11 floor. mypy>=2.4 parses third-party
+    # stubs with the running interpreter, so the strict gate stays intact.
+    "mypy>=2.4",
     "ruff>=0.3",
     "httpx>=0.28",
 ]

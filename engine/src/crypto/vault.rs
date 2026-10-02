@@ -144,7 +144,7 @@ pub fn decrypt(ciphertext_b64: &str, nonce_b64: &str, key_b64: &str) -> Result<S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base64::Engine as _;
+    // (no local import: `base64::Engine` trait is in scope via `super::*`)
 
     #[test]
     fn test_encrypt_decrypt_roundtrip() {
