@@ -44,8 +44,8 @@ def create_mcp_server(
         version=SERVER_VERSION,
         description=(
             "PAE (Personal Analytics Engine) — educational investment "
-            "analytics for individuals: risk, factors, scenarios, decision "
-            "journal. " + DISCLOSURE
+            "analytics for individuals: risk, factors, attribution, "
+            "scenarios, decision journal. " + DISCLOSURE
         ),
     )
     for tool_name, description in TOOL_SPECS:

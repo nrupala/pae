@@ -38,6 +38,7 @@ EXPECTED_TOOLS = [
     "monte_carlo",
     "stress_test",
     "factor_decompose",
+    "brinson_attribution",
     "journal_log",
     "holdings_create",
     "holdings_list",
@@ -172,6 +173,64 @@ async def test_factor_decompose_rejects_bad_input(mcp_server: MCPServer) -> None
         mcp_server,
         "factor_decompose",
         {"portfolio_returns": [0.01, 0.02], "factor_returns": {"MKT-RF": [0.01]}},
+    )
+    assert result.is_error
+    assert "Traceback" not in "".join(c.text for c in result.content)
+
+
+@pytest.mark.asyncio()
+async def test_brinson_attribution_via_mcp(mcp_server: MCPServer) -> None:
+    """Hand-computed values (see tests/test_brinson.py) through the MCP wire."""
+    result = await _call(
+        mcp_server,
+        "brinson_attribution",
+        {
+            "portfolio_segments": [
+                {"segment": "Equities", "weight": 0.50, "return": 0.08},
+                {"segment": "Bonds", "weight": 0.30, "return": 0.04},
+                {"segment": "Cash", "weight": 0.20, "return": 0.02},
+            ],
+            "benchmark_segments": [
+                {"segment": "Equities", "weight": 0.60, "return": 0.10},
+                {"segment": "Bonds", "weight": 0.30, "return": 0.03},
+                {"segment": "Cash", "weight": 0.10, "return": 0.02},
+            ],
+        },
+    )
+    assert not result.is_error
+    payload = _structured(result)
+    assert payload["method"].startswith("Brinson-Hood-Beebower")
+    assert payload["disclosure"] == DISCLOSURE
+    assert payload["active_return"] == pytest.approx(-0.015)
+    assert payload["total_allocation"] == pytest.approx(-0.0080)
+    assert payload["total_selection"] == pytest.approx(-0.0090)
+    assert payload["total_interaction"] == pytest.approx(0.0020)
+    segs = {s["segment"]: s for s in payload["segments"]}
+    eq = segs["Equities"]
+    assert eq["allocation_effect"] == pytest.approx(-0.0029)
+    assert eq["selection_effect"] == pytest.approx(-0.0120)
+    assert eq["interaction_effect"] == pytest.approx(0.0020)
+    # No recommendations ever ride along: effects only.
+    for s in payload["segments"]:
+        assert set(s) == {
+            "segment",
+            "portfolio_weight",
+            "benchmark_weight",
+            "portfolio_return",
+            "benchmark_return",
+            "allocation_effect",
+            "selection_effect",
+            "interaction_effect",
+            "active_contribution",
+        }
+
+
+@pytest.mark.asyncio()
+async def test_brinson_attribution_rejects_bad_input(mcp_server: MCPServer) -> None:
+    result = await _call(
+        mcp_server,
+        "brinson_attribution",
+        {"portfolio_segments": [], "benchmark_segments": []},
     )
     assert result.is_error
     assert "Traceback" not in "".join(c.text for c in result.content)

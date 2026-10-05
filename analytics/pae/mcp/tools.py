@@ -27,6 +27,8 @@ import httpx
 import numpy as np
 
 from pae.decision.journal import DecisionEntry, validate_entry
+from pae.models.brinson import BrinsonError
+from pae.models.brinson import attribute as brinson_attribute
 from pae.models.factor import FactorError, decompose
 from pae.storage.db import (
     DatabaseError,
@@ -180,6 +182,48 @@ class PAETools:
                 for e in result.exposures
             ],
             "residual_risk_pct": result.residual_risk_pct,
+        }
+
+    async def brinson_attribution(
+        self,
+        portfolio_segments: list[dict[str, Any]],
+        benchmark_segments: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Attribute active return vs. a benchmark (Brinson-Hood-Beebower).
+
+        Each side is a list of {"segment", "weight", "return"} dicts with
+        weights summing to 1.0. Returns per-segment allocation, selection,
+        and interaction effects plus totals summing to the active return.
+        Educational performance-explanation analytics — explains what drove
+        the difference vs. the benchmark; no recommendations, no advice.
+        """
+        try:
+            result = brinson_attribute(portfolio_segments, benchmark_segments)
+        except (ValueError, BrinsonError) as exc:
+            raise PAEToolError(str(exc)) from exc
+        return {
+            "method": "Brinson-Hood-Beebower (arithmetic)",
+            "disclosure": DISCLOSURE,
+            "portfolio_return": result.portfolio_return,
+            "benchmark_return": result.benchmark_return,
+            "active_return": result.active_return,
+            "total_allocation": result.total_allocation,
+            "total_selection": result.total_selection,
+            "total_interaction": result.total_interaction,
+            "segments": [
+                {
+                    "segment": s.segment,
+                    "portfolio_weight": s.portfolio_weight,
+                    "benchmark_weight": s.benchmark_weight,
+                    "portfolio_return": s.portfolio_return,
+                    "benchmark_return": s.benchmark_return,
+                    "allocation_effect": s.allocation_effect,
+                    "selection_effect": s.selection_effect,
+                    "interaction_effect": s.interaction_effect,
+                    "active_contribution": s.active_contribution,
+                }
+                for s in result.segments
+            ],
         }
 
     # --- Decision journal ---
@@ -428,6 +472,13 @@ TOOL_SPECS: list[tuple[str, str]] = [
         "Decompose portfolio returns into Fama-French factor exposures "
         "(market, size, value, profitability, investment) via OLS. "
         + DISCLOSURE,
+    ),
+    (
+        "brinson_attribution",
+        "Attribute portfolio active return vs. a benchmark by segment "
+        "(Brinson-Hood-Beebower): allocation, selection, and interaction "
+        "effects. Pure performance explanation — what drove the "
+        "difference vs. the benchmark; no recommendations. " + DISCLOSURE,
     ),
     (
         "journal_log",
