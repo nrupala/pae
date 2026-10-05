@@ -66,4 +66,73 @@ jobs:
 
       - name: Test
         working-directory: analytics
-        run: pytest tests/ -v
+        # The live-engine composition test needs a running engine; it is
+        # covered by the `integration` job below. Deselect it here so the
+        # unit job stays hermetic.
+        run: pytest tests/ -v --deselect tests/test_mcp_server.py::test_engine_tools_against_live_engine
+
+  ui:
+    name: UI Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ui
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        working-directory: ui
+        run: npx tsc --noEmit
+
+      # NOTE: ui/e2e-crypto.mjs is intentionally NOT a CI step. It derives
+      # at production Argon2id params (600K iterations, 64 MiB), which takes
+      # minutes single-threaded in WASM — too slow/flaky for per-run CI.
+      # Run it manually against a local engine; see its header comment.
+
+  integration:
+    name: Live-engine integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build engine (debug)
+        working-directory: engine
+        run: cargo build
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install analytics
+        working-directory: analytics
+        run: pip install -e ".[dev]"
+
+      - name: Start engine
+        run: |
+          PAE_DB_PATH=/tmp/pae-int.db ./engine/target/debug/pae-engine &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3001/health && break || sleep 2
+          done
+          curl -sf http://localhost:3001/health
+
+      # Behavior-verifies the full stack the unit jobs can't: MCP tool ->
+      # httpx -> live Rust engine -> correct numbers. The engine's own math
+      # is covered by `cargo test` in the engine job; this covers the
+      # composition.
+      - name: Live-engine MCP tests
+        working-directory: analytics
+        env:
+          PAE_ENGINE_URL: http://localhost:3001
+        run: pytest tests/test_mcp_server.py::test_engine_tools_against_live_engine -v

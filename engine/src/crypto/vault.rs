@@ -2,12 +2,9 @@ use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
     Aes256Gcm, Nonce,
 };
-use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 use rand::RngCore;
 use thiserror::Error;
-
-const ARGON2_ITERATIONS: u32 = 600_000;
 
 /// Errors that can occur during cryptographic operations.
 #[derive(Debug, Error)]
@@ -17,12 +14,6 @@ pub enum CryptoError {
 
     #[error("Invalid key length: expected 32 bytes")]
     InvalidKeyLength,
-
-    #[error("Invalid salt: {0}")]
-    InvalidSalt(String),
-
-    #[error("Key derivation failed: {0}")]
-    DerivationFailed(String),
 
     #[error("Encryption failed: {0}")]
     EncryptionFailed(String),
@@ -35,48 +26,18 @@ pub enum CryptoError {
 
     #[error("Invalid UTF-8 in decrypted plaintext")]
     InvalidUtf8,
-
-    #[error("Empty passphrase is not allowed")]
-    EmptyPassphrase,
-
-    #[error("Invalid Argon2 parameters: {0}")]
-    InvalidParams(String),
 }
 
-/// Derive a 256-bit key from a passphrase using Argon2id.
-///
-/// Returns `(key_hash_b64, salt_b64)`.
-/// Uses 600K iterations (6x Google's standard) per the PAE/mykey security spec.
-///
-/// # Errors
-///
-/// Returns `CryptoError::EmptyPassphrase` if the passphrase is empty.
-/// Returns `CryptoError::InvalidSalt` if `existing_salt` is not valid base64.
-/// Returns `CryptoError::DerivationFailed` if Argon2 hashing fails.
-pub fn derive_key(passphrase: &str, existing_salt: Option<&str>) -> Result<(String, String), CryptoError> {
-    if passphrase.is_empty() {
-        return Err(CryptoError::EmptyPassphrase);
-    }
-
-    let salt = match existing_salt {
-        Some(s) => SaltString::from_b64(s)
-            .map_err(|e| CryptoError::InvalidSalt(e.to_string()))?,
-        None => SaltString::generate(&mut OsRng),
-    };
-
-    let argon2 = Argon2::new(
-        argon2::Algorithm::Argon2id,
-        argon2::Version::V0x13,
-        argon2::Params::new(65536, ARGON2_ITERATIONS, 4, Some(32))
-            .map_err(|e| CryptoError::InvalidParams(e.to_string()))?,
-    );
-
-    let hash = argon2
-        .hash_password(passphrase.as_bytes(), &salt)
-        .map_err(|e| CryptoError::DerivationFailed(e.to_string()))?;
-
-    Ok((hash.to_string(), salt.to_string()))
-}
+// NOTE (2026-10-05, zero-knowledge fix): this module used to contain
+// `derive_key()`, a server-side Argon2id passphrase-derivation function
+// exposed via POST /api/v1/crypto/derive-key. That inverted the threat
+// model: a deployed operator saw every passphrase submitted. Key
+// derivation now happens exclusively client-side
+// (ui/src/crypto/vault-client.ts) against the parameters served by
+// GET /api/v1/crypto/kdf-params. The server holds NO passphrase-
+// derivation code path, so the passphrase-related error variants
+// (InvalidSalt, DerivationFailed, EmptyPassphrase, InvalidParams)
+// were removed 2026-10-05 along with it.
 
 /// Encrypt plaintext with AES-256-GCM.
 ///
@@ -157,26 +118,6 @@ mod tests {
         let result = decrypt(&ct, &nonce, &key_b64).unwrap();
 
         assert_eq!(result, plaintext);
-    }
-
-    /// This test runs Argon2id with 600K iterations (production spec).
-    /// Takes ~30s per call on CI runners. Run manually: `cargo test -- --ignored`
-    #[test]
-    #[ignore]
-    fn test_derive_key_deterministic_with_salt() {
-        let passphrase = "test-passphrase-for-pae";
-        let (_, salt) = derive_key(passphrase, None).unwrap();
-        let (hash1, _) = derive_key(passphrase, Some(&salt)).unwrap();
-        let (hash2, _) = derive_key(passphrase, Some(&salt)).unwrap();
-
-        assert_eq!(hash1, hash2);
-    }
-
-    #[test]
-    fn test_empty_passphrase_rejected() {
-        let result = derive_key("", None);
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), CryptoError::EmptyPassphrase));
     }
 
     #[test]

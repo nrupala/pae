@@ -23,6 +23,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from pae.decision.journal import DecisionEntry
+
 logger = logging.getLogger(__name__)
 
 # --- Data Models ---
@@ -177,6 +179,30 @@ class PAEDatabase:
             CREATE INDEX IF NOT EXISTS idx_holdings_portfolio ON holdings(portfolio_id);
             CREATE INDEX IF NOT EXISTS idx_holdings_symbol ON holdings(symbol);
             CREATE INDEX IF NOT EXISTS idx_holdings_account ON holdings(account_id);
+
+            CREATE TABLE IF NOT EXISTS journal_entries (
+                entry_id TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                action TEXT NOT NULL DEFAULT '',
+                symbols_affected TEXT NOT NULL DEFAULT '[]',
+                rationale TEXT NOT NULL DEFAULT '',
+                alternatives_considered TEXT NOT NULL DEFAULT '[]',
+                thesis TEXT NOT NULL DEFAULT '',
+                confidence INTEGER NOT NULL DEFAULT 5,
+                time_horizon TEXT NOT NULL DEFAULT '',
+                what_could_go_wrong TEXT NOT NULL DEFAULT '',
+                max_acceptable_loss_pct REAL NOT NULL DEFAULT 0.0,
+                emotional_state TEXT NOT NULL DEFAULT 'neutral',
+                market_context TEXT NOT NULL DEFAULT '',
+                trigger TEXT NOT NULL DEFAULT '',
+                outcome_30d REAL,
+                outcome_90d REAL,
+                outcome_180d REAL,
+                outcome_notes TEXT NOT NULL DEFAULT '',
+                was_thesis_correct INTEGER
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_journal_timestamp ON journal_entries(timestamp);
 
         """)
         self._apply_migrations(conn)
@@ -469,6 +495,102 @@ class PAEDatabase:
             })
 
         return result
+
+    # --- Decision Journal ---
+
+    def insert_journal_entry(self, entry: DecisionEntry) -> DecisionEntry:
+        """Persist a decision journal entry. Returns the entry."""
+        with self._transaction() as cur:
+            cur.execute(
+                "INSERT INTO journal_entries "
+                "(entry_id, timestamp, action, symbols_affected, rationale, "
+                "alternatives_considered, thesis, confidence, time_horizon, "
+                "what_could_go_wrong, max_acceptable_loss_pct, emotional_state, "
+                "market_context, trigger, outcome_30d, outcome_90d, outcome_180d, "
+                "outcome_notes, was_thesis_correct) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    entry.entry_id,
+                    entry.timestamp,
+                    entry.action,
+                    json.dumps(entry.symbols_affected),
+                    entry.rationale,
+                    json.dumps(entry.alternatives_considered),
+                    entry.thesis,
+                    entry.confidence,
+                    entry.time_horizon,
+                    entry.what_could_go_wrong,
+                    entry.max_acceptable_loss_pct,
+                    entry.emotional_state,
+                    entry.market_context,
+                    entry.trigger,
+                    entry.outcome_30d,
+                    entry.outcome_90d,
+                    entry.outcome_180d,
+                    entry.outcome_notes,
+                    (
+                        None
+                        if entry.was_thesis_correct is None
+                        else int(entry.was_thesis_correct)
+                    ),
+                ),
+            )
+        logger.info("Inserted journal entry: %s", entry.entry_id)
+        return entry
+
+    def get_journal_entry(self, entry_id: str) -> DecisionEntry:
+        """Get a single journal entry by ID."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM journal_entries WHERE entry_id = ?", (entry_id,)
+        ).fetchone()
+        if row is None:
+            raise NotFoundError(f"Journal entry not found: {entry_id}")
+        return self._row_to_journal_entry(row)
+
+    def get_journal_entries(self, limit: int = 100) -> list[DecisionEntry]:
+        """Get journal entries, newest first."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM journal_entries ORDER BY timestamp DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [self._row_to_journal_entry(row) for row in rows]
+
+    @staticmethod
+    def _row_to_journal_entry(row: sqlite3.Row) -> DecisionEntry:
+        """Convert a DB row to a DecisionEntry."""
+        data = dict(row)
+        try:
+            symbols = json.loads(data.get("symbols_affected") or "[]")
+        except json.JSONDecodeError:
+            symbols = []
+        try:
+            alternatives = json.loads(data.get("alternatives_considered") or "[]")
+        except json.JSONDecodeError:
+            alternatives = []
+        thesis_flag = data.get("was_thesis_correct")
+        return DecisionEntry(
+            entry_id=data["entry_id"],
+            timestamp=data["timestamp"],
+            action=data.get("action") or "",
+            symbols_affected=symbols if isinstance(symbols, list) else [],
+            rationale=data.get("rationale") or "",
+            alternatives_considered=alternatives if isinstance(alternatives, list) else [],
+            thesis=data.get("thesis") or "",
+            confidence=int(data["confidence"]),
+            time_horizon=data.get("time_horizon") or "",
+            what_could_go_wrong=data.get("what_could_go_wrong") or "",
+            max_acceptable_loss_pct=float(data["max_acceptable_loss_pct"]),
+            emotional_state=data.get("emotional_state") or "neutral",
+            market_context=data.get("market_context") or "",
+            trigger=data.get("trigger") or "",
+            outcome_30d=data.get("outcome_30d"),
+            outcome_90d=data.get("outcome_90d"),
+            outcome_180d=data.get("outcome_180d"),
+            outcome_notes=data.get("outcome_notes") or "",
+            was_thesis_correct=None if thesis_flag is None else bool(thesis_flag),
+        )
 
     # --- Validation ---
 
