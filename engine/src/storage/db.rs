@@ -15,7 +15,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use chrono::Utc;
+use rand::RngCore;
 use rusqlite::{Connection, OpenFlags};
 use thiserror::Error;
 use uuid::Uuid;
@@ -25,6 +27,12 @@ const DEFAULT_POOL_SIZE: usize = 4;
 
 /// Busy-wait timeout (ms) before SQLite returns SQLITE_BUSY.
 const BUSY_TIMEOUT_MS: u32 = 5_000;
+
+/// Length of the per-database Argon2id KDF salt, in bytes (128 bits).
+const KDF_SALT_LEN: usize = 16;
+
+/// `meta` key under which the per-database KDF salt is persisted.
+const KDF_SALT_META_KEY: &str = "kdf_salt";
 
 /// Errors that can occur in the storage layer.
 ///
@@ -325,9 +333,57 @@ impl Store {
                     ON holdings(account_id);
                 CREATE INDEX IF NOT EXISTS idx_holdings_updated
                     ON holdings(updated_at);
+
+                -- Opaque key/value store for engine-level metadata
+                -- (e.g. the per-database KDF salt served to clients).
+                CREATE TABLE IF NOT EXISTS meta (
+                    key   TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
                 "#,
             )?;
             Ok(())
+        })
+    }
+
+    // --- Meta (opaque engine-level key/value store) ---
+
+    /// Read a `meta` value by key. Returns `Ok(None)` when absent.
+    fn meta_get(conn: &Connection, key: &str) -> Result<Option<String>, StorageError> {
+        let mut stmt = conn.prepare("SELECT value FROM meta WHERE key = ?1")?;
+        let mut rows = stmt.query(rusqlite::params![key])?;
+        rows.next()?
+            .map(|row| row.get(0).map_err(StorageError::from))
+            .transpose()
+    }
+
+    /// Insert or replace a `meta` value.
+    fn meta_set(conn: &Connection, key: &str, value: &str) -> Result<(), StorageError> {
+        conn.execute(
+            "INSERT INTO meta (key, value) VALUES (?1, ?2) \
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            rusqlite::params![key, value],
+        )?;
+        Ok(())
+    }
+
+    /// Return the per-database Argon2id KDF salt (base64), generating a
+    /// fresh 16-byte salt via `OsRng` and persisting it on first call.
+    ///
+    /// The salt is NOT secret: it is served to clients via
+    /// `GET /api/v1/crypto/kdf-params` so they can derive keys with the
+    /// production parameters. What matters is stability across restarts,
+    /// hence SQLite persistence in the `meta` table.
+    pub fn get_kdf_salt(&self) -> Result<String, StorageError> {
+        self.with_conn(|conn| {
+            if let Some(existing) = Self::meta_get(conn, KDF_SALT_META_KEY)? {
+                return Ok(existing);
+            }
+            let mut salt = [0u8; KDF_SALT_LEN];
+            rand::rngs::OsRng.fill_bytes(&mut salt);
+            let salt_b64 = B64.encode(salt);
+            Self::meta_set(conn, KDF_SALT_META_KEY, &salt_b64)?;
+            Ok(salt_b64)
         })
     }
 
@@ -855,5 +911,28 @@ mod tests {
         seed_portfolio(&store);
         seed_portfolio(&store);
         assert_eq!(store.list_portfolios().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_kdf_salt_stable_across_calls() {
+        let store = Store::open_in_memory().unwrap();
+        let s1 = store.get_kdf_salt().unwrap();
+        let s2 = store.get_kdf_salt().unwrap();
+        assert_eq!(s1, s2, "KDF salt must be stable across calls");
+        // 16 bytes -> 24 base64 chars (STANDARD alphabet, padded)
+        assert_eq!(s1.len(), 24);
+        // sanity: it decodes back to 16 bytes
+        let raw = B64.decode(&s1).unwrap();
+        assert_eq!(raw.len(), 16);
+    }
+
+    #[test]
+    fn test_kdf_salt_survives_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("pae.db");
+        let s1 = Store::open(&path).unwrap().get_kdf_salt().unwrap();
+        // Reopen the same file: the stored salt must come back unchanged.
+        let s2 = Store::open(&path).unwrap().get_kdf_salt().unwrap();
+        assert_eq!(s1, s2, "KDF salt must persist across restarts");
     }
 }

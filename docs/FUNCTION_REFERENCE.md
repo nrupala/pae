@@ -63,18 +63,23 @@ Error type for all cryptographic operations.
 
 ---
 
-### `derive_key`
+### `derive_key` — REMOVED 2026-10-05
 
 | Field | Value |
 |-------|-------|
-| **Signature** | `pub fn derive_key(passphrase: &str, existing_salt: Option<&str>) -> Result<(String, String), CryptoError>` |
-| **Purpose** | Derive a 256-bit key from a passphrase using Argon2id with 600K iterations. |
-| **Parameters** | `passphrase`: non-empty string. `existing_salt`: optional base64-encoded salt for deterministic re-derivation. |
-| **Valid ranges** | `passphrase`: any non-empty `&str`. `existing_salt`: valid base64 or `None`. |
-| **Returns** | `Ok((key_hash_b64, salt_b64))` on success. |
-| **Error conditions** | `EmptyPassphrase` if passphrase is `""`. `InvalidSalt` if salt is not valid base64. `DerivationFailed` if Argon2 hashing fails. `InvalidParams` if Argon2 config is invalid. |
-| **Edge cases** | `None` salt generates a new random salt via `OsRng`. Same passphrase + same salt produces identical output (deterministic). |
-| **Dependencies** | `argon2::Argon2`, `SaltString`, `OsRng` |
+| **Status** | **Deleted.** Server-side passphrase derivation was removed as part of the zero-knowledge fix: the server must never receive a passphrase. |
+| **Replacement** | Key derivation happens exclusively client-side (`ui/src/crypto/vault-client.ts`, vendored hash-wasm Argon2id) against `GET /api/v1/crypto/kdf-params`. See `docs/THREAT_MODEL.md`. |
+
+---
+
+### `kdf_params` (handler)
+
+| Field | Value |
+|-------|-------|
+| **Signature** | `pub async fn kdf_params(State(store): State<Arc<Store>>) -> Json<KdfParamsResponse>` |
+| **Route** | `GET /api/v1/crypto/kdf-params` |
+| **Purpose** | Serve the Argon2id parameters and the per-database salt so clients can derive keys locally. Salt is stable per database (SQLite `meta` table) and is NOT secret. |
+| **Response** | `200 { "algorithm": "argon2id", "version": 19, "memory_kib": 65536, "iterations": 600000, "parallelism": 4, "output_bytes": 32, "salt_b64": string }` |
 
 ---
 
@@ -114,17 +119,11 @@ Error type for all cryptographic operations.
 
 HTTP endpoints for the crypto vault. All handlers return `Result` with proper HTTP status codes.
 
-### `derive_key` (handler)
+### `derive_key` (handler) — REMOVED 2026-10-05
 
 | Field | Value |
 |-------|-------|
-| **Signature** | `pub async fn derive_key(Json(req): Json<DeriveKeyRequest>) -> Result<Json<DeriveKeyResponse>, (StatusCode, Json<CryptoErrorResponse>)>` |
-| **Route** | `POST /api/v1/crypto/derive-key` |
-| **Purpose** | HTTP wrapper for `vault::derive_key`. |
-| **Request body** | `{ "passphrase": string, "salt": string | null }` |
-| **Response** | `200 { "key_hash": string, "salt": string }` |
-| **Error responses** | `400` for empty passphrase or invalid salt. `422` for derivation failure. `500` for invalid Argon2 params. |
-| **Dependencies** | `vault::derive_key` |
+| **Status** | **Deleted.** `POST /api/v1/crypto/derive-key` no longer exists (returns 404). It took the raw passphrase server-side, which inverted the threat model. See `docs/THREAT_MODEL.md`. |
 
 ### `encrypt` (handler)
 
