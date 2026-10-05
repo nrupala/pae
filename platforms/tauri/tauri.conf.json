@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.nrupala.pae",
   "build": {
-    "frontendDist": "../../ui/src",
+    "frontendDist": "../../ui/dist",
     "devUrl": "http://localhost:3000",
     "beforeBuildCommand": "",
     "beforeDevCommand": ""
