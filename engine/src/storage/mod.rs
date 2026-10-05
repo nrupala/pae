@@ -10,5 +10,5 @@
 pub mod db;
 
 pub use db::{
-    Account, AccountType, Holding, NewHolding, Portfolio, Store, StorageError,
+    Holding, NewHolding, Portfolio, Store, StorageError,
 };
