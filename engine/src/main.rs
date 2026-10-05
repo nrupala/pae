@@ -186,7 +186,8 @@ mod tests {
         );
     }
 
-    /// deny_unknown_fields: a "passphrase" field on /encrypt is a 400.
+    /// deny_unknown_fields: a "passphrase" field on /encrypt is rejected.
+    /// (axum 0.8 maps serde deserialization failures to 422.)
     #[tokio::test]
     async fn encrypt_rejects_passphrase_field() {
         let server = test_server();
@@ -200,12 +201,13 @@ mod tests {
             .await;
         assert_eq!(
             resp.status_code().as_u16(),
-            400,
-            "encrypt must reject unknown fields with 400"
+            422,
+            "encrypt must reject unknown fields"
         );
     }
 
-    /// deny_unknown_fields: a "passphrase" field on /decrypt is a 400.
+    /// deny_unknown_fields: a "passphrase" field on /decrypt is rejected.
+    /// (axum 0.8 maps serde deserialization failures to 422.)
     #[tokio::test]
     async fn decrypt_rejects_passphrase_field() {
         let server = test_server();
@@ -220,8 +222,8 @@ mod tests {
             .await;
         assert_eq!(
             resp.status_code().as_u16(),
-            400,
-            "decrypt must reject unknown fields with 400"
+            422,
+            "decrypt must reject unknown fields"
         );
     }
 

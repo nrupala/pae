@@ -74,7 +74,7 @@
 | Key recovery | **[NOT IMPLEMENTED]** — Shamir 3-of-5 was spec-only. Lost passphrase = inaccessible data. |
 | No server-side recovery | By design. Lost passphrase = inaccessible data. |
 | CORS | Restrictive: origin from `PAE_CORS_ORIGIN` (default `http://localhost:3000`), methods GET/POST, `Content-Type` header only |
-| Unknown request fields | Rejected with 400 (`deny_unknown_fields` on crypto request bodies — a `passphrase` field can never be smuggled in) |
+| Unknown request fields | Rejected with 422 (`deny_unknown_fields` on crypto request bodies — a `passphrase` field can never be smuggled in; axum maps serde failures to 422) |
 
 ## Residual risks (read before any hosted deployment)
 
