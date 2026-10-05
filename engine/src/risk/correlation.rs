@@ -1,9 +1,15 @@
 use crate::api::portfolio::{CorrelationInput, CorrelationResponse};
+use crate::num_ffi;
 
 /// Compute pairwise correlation matrix for holdings.
 ///
 /// Builds an NxN Pearson correlation matrix where N = number of holdings.
 /// Diagonal is always 1.0 (self-correlation). Matrix is symmetric.
+///
+/// The O(N^2 * window) core runs through the C numerical core
+/// ([`num_ffi::correlation_matrix`], BLAS `dgemm_` covariance) by default;
+/// the pure-Rust pairwise path below remains as the fallback and as the
+/// reference implementation for the cross-check tests.
 ///
 /// # Parameters
 /// - `input.holdings`: portfolio holdings with return histories
@@ -12,9 +18,15 @@ use crate::api::portfolio::{CorrelationInput, CorrelationResponse};
 /// # Edge cases
 /// - Empty holdings: returns empty matrix and symbols
 /// - Single holding: returns 1x1 matrix with `[[1.0]]`
-/// - Mismatched return lengths: uses the shorter of the two series
 /// - Constant returns (zero variance): correlation is 0.0
 /// - NaN/Infinity in returns: produces 0.0 correlation for affected pairs
+///
+/// # Alignment note
+/// The BLAS kernel needs one common observation window, so all series are
+/// aligned to the trailing `m = min(len, window)` observations. For
+/// equal-length series (the normal case) this reproduces the old per-pair
+/// computation exactly; for mixed-length histories the longer series are
+/// truncated to the common window instead of using per-pair minima.
 pub fn compute_matrix(input: &CorrelationInput) -> CorrelationResponse {
     let n = input.holdings.len();
     let window = input.window_days.unwrap_or(90).max(2);
@@ -28,6 +40,81 @@ pub fn compute_matrix(input: &CorrelationInput) -> CorrelationResponse {
         };
     }
 
+    // Fast path: BLAS covariance kernel via the C numerical core.
+    if let Some(matrix) = correlation_via_native(input, window) {
+        return CorrelationResponse {
+            symbols,
+            matrix,
+            window_days: window,
+        };
+    }
+
+    // Fallback: pure-Rust pairwise computation (also the test reference).
+    CorrelationResponse {
+        symbols,
+        matrix: pairwise_matrix(input, window),
+        window_days: window,
+    }
+}
+
+/// Correlation matrix via the C/BLAS numerical core.
+///
+/// Returns `None` when the native call cannot run (degenerate input), in
+/// which case the caller falls back to the pure-Rust path.
+fn correlation_via_native(input: &CorrelationInput, window: usize) -> Option<Vec<Vec<f64>>> {
+    let n = input.holdings.len();
+    if n < 2 {
+        // 0/1 holdings: the diagonal-only matrix below is already exact.
+        let mut matrix = vec![vec![0.0_f64; n]; n];
+        for (i, row) in matrix.iter_mut().enumerate() {
+            row[i] = 1.0;
+        }
+        return Some(matrix);
+    }
+
+    let m = input
+        .holdings
+        .iter()
+        .map(|h| h.returns.len().min(window))
+        .min()
+        .unwrap_or(0);
+    if m < 2 {
+        // Fewer than 2 common observations: every pair is undefined (0.0),
+        // diagonal stays 1.0 -- matches the pairwise contract exactly.
+        let mut matrix = vec![vec![0.0_f64; n]; n];
+        for (i, row) in matrix.iter_mut().enumerate() {
+            row[i] = 1.0;
+        }
+        return Some(matrix);
+    }
+
+    // Align every series to the trailing m observations.
+    let aligned: Vec<&[f64]> = input
+        .holdings
+        .iter()
+        .map(|h| {
+            let len = h.returns.len();
+            let take = m.min(len);
+            &h.returns[len - take..]
+        })
+        .collect();
+
+    let mut matrix = num_ffi::correlation_matrix(&aligned).ok()?;
+    // Restore the unconditional 1.0 self-correlation (the C kernel reports
+    // 0.0 on the diagonal for degenerate series; the engine contract keeps
+    // the diagonal at 1.0, as before).
+    for (i, row) in matrix.iter_mut().enumerate() {
+        row[i] = 1.0;
+    }
+    Some(matrix)
+}
+
+/// Pure-Rust pairwise correlation matrix.
+///
+/// Kept as the fallback for `compute_matrix` and as the reference
+/// implementation for the FFI cross-check tests.
+fn pairwise_matrix(input: &CorrelationInput, window: usize) -> Vec<Vec<f64>> {
+    let n = input.holdings.len();
     let mut matrix = vec![vec![0.0_f64; n]; n];
 
     #[allow(clippy::needless_range_loop)]
@@ -48,12 +135,7 @@ pub fn compute_matrix(input: &CorrelationInput) -> CorrelationResponse {
             }
         }
     }
-
-    CorrelationResponse {
-        symbols,
-        matrix,
-        window_days: window,
-    }
+    matrix
 }
 
 /// Clamp a correlation value to [-1.0, 1.0].
@@ -191,5 +273,140 @@ mod tests {
     fn test_clamp_correlation_normal() {
         assert_eq!(clamp_correlation(0.85), 0.85);
         assert_eq!(clamp_correlation(-0.5), -0.5);
+    }
+
+    // ---- FFI cross-checks: the default path runs through the C/BLAS core.
+    //
+    // These tests prove (a) the native kernel path is actually exercised by
+    // `compute_matrix` -- a stubbed C layer returning zeros/identity cannot
+    // produce these exact non-trivial values -- and (b) it agrees with the
+    // pure-Rust reference to 1e-12 on representative inputs.
+
+    fn sample_holdings(n: usize, m: usize) -> Vec<crate::api::portfolio::Holding> {
+        use crate::api::portfolio::Holding;
+        (0..n)
+            .map(|j| Holding {
+                symbol: format!("S{}", j),
+                weight: 1.0 / n as f64,
+                returns: (0..m)
+                    .map(|i| {
+                        (i as f64 * 0.37 + j as f64 * 1.7).sin()
+                            + 0.5 * ((i * (j + 3)) as f64 * 0.11).cos()
+                    })
+                    .collect(),
+                yield_pct: None,
+                cost_basis: None,
+                market_value: 1000.0,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_compute_matrix_uses_native_path() {
+        let holdings = sample_holdings(5, 60);
+        let input = CorrelationInput {
+            holdings,
+            window_days: Some(60),
+        };
+        // The native path must be taken (not the fallback): Some, not None.
+        let native = correlation_via_native(&input, 60);
+        assert!(native.is_some(), "native BLAS path was not exercised");
+        let matrix = native.unwrap();
+        // Non-trivial values: a stubbed kernel cannot produce these.
+        assert!(matrix.iter().flatten().any(|&v| v.abs() > 0.01 && v.abs() < 1.0));
+        for i in 0..5 {
+            assert_eq!(matrix[i][i], 1.0);
+            for j in 0..5 {
+                assert!((matrix[i][j] - matrix[j][i]).abs() < 1e-15, "symmetric");
+                assert!(matrix[i][j] >= -1.0 && matrix[i][j] <= 1.0, "clamped");
+            }
+        }
+    }
+
+    #[test]
+    fn test_compute_matrix_matches_pure_rust_reference() {
+        // Equal-length series: the aligned BLAS computation must reproduce
+        // the old pairwise computation to 1e-12.
+        let holdings = sample_holdings(6, 90);
+        let input = CorrelationInput {
+            holdings,
+            window_days: Some(90),
+        };
+        let result = compute_matrix(&input);
+        let reference = pairwise_matrix(&input, 90);
+        assert_eq!(result.matrix.len(), reference.len());
+        let max_diff = result
+            .matrix
+            .iter()
+            .zip(reference.iter())
+            .flat_map(|(a, b)| a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()))
+            .fold(0.0, f64::max);
+        assert!(
+            max_diff < 1e-12,
+            "FFI path diverged from pure-Rust reference: {}",
+            max_diff
+        );
+    }
+
+    #[test]
+    fn test_compute_matrix_degenerate_inputs() {
+        use crate::api::portfolio::Holding;
+        // Constant + NaN series: affected pairs are 0.0, diagonal stays 1.0.
+        let holdings = vec![
+            Holding {
+                symbol: "C".to_string(),
+                weight: 0.5,
+                returns: vec![0.01; 20],
+                yield_pct: None,
+                cost_basis: None,
+                market_value: 1000.0,
+            },
+            Holding {
+                symbol: "N".to_string(),
+                weight: 0.5,
+                returns: vec![0.01, f64::NAN, 0.03, 0.02, 0.01, 0.02, 0.03, 0.01,
+                              0.02, 0.03, 0.01, 0.02, 0.03, 0.01, 0.02, 0.03,
+                              0.01, 0.02, 0.03, 0.02],
+                yield_pct: None,
+                cost_basis: None,
+                market_value: 1000.0,
+            },
+        ];
+        let result = compute_matrix(&CorrelationInput {
+            holdings,
+            window_days: Some(20),
+        });
+        assert_eq!(result.matrix[0][0], 1.0);
+        assert_eq!(result.matrix[1][1], 1.0);
+        assert_eq!(result.matrix[0][1], 0.0);
+        assert_eq!(result.matrix[1][0], 0.0);
+        // And the pure-Rust fallback agrees exactly on this input too.
+        let reference = pairwise_matrix(
+            &CorrelationInput {
+                holdings: vec![
+                    Holding {
+                        symbol: "C".to_string(),
+                        weight: 0.5,
+                        returns: vec![0.01; 20],
+                        yield_pct: None,
+                        cost_basis: None,
+                        market_value: 1000.0,
+                    },
+                    Holding {
+                        symbol: "N".to_string(),
+                        weight: 0.5,
+                        returns: vec![0.01, f64::NAN, 0.03, 0.02, 0.01, 0.02, 0.03, 0.01,
+                                      0.02, 0.03, 0.01, 0.02, 0.03, 0.01, 0.02, 0.03,
+                                      0.01, 0.02, 0.03, 0.02],
+                        yield_pct: None,
+                        cost_basis: None,
+                        market_value: 1000.0,
+                    },
+                ],
+                window_days: Some(20),
+            },
+            20,
+        );
+        assert_eq!(result.matrix, reference);
     }
 }
