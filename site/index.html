@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PAE — Personal Analytics Engine | Zero-knowledge investment analytics for individuals</title>
+  <meta name="description" content="PAE (Personal Analytics Engine) is a zero-knowledge, institutional-grade investment analytics tool for individuals: VaR/CVaR, factor exposure, Monte Carlo, drawdown and stress tests on your own holdings. Your passphrase never leaves your device; the server stores ciphertext only. Educational analytics — the tool calculates, you decide.">
+  <meta name="keywords" content="PAE, Personal Analytics Engine, zero-knowledge, investment analytics, portfolio risk, VaR, CVaR, factor exposure, Monte Carlo, stress testing, drawdown">
+  <meta name="author" content="Nrupal Akolkar">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="PAE — Personal Analytics Engine">
+  <meta property="og:description" content="Zero-knowledge, institutional-grade investment analytics for individuals. VaR/CVaR, factor exposure, Monte Carlo, stress tests. Your data never leaves your control.">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="PAE — Personal Analytics Engine">
+  <meta name="twitter:description" content="Zero-knowledge, institutional-grade investment analytics for individuals. The tool calculates; you decide.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="nav">
+    <a class="brand" href="index.html">PAE<span>.</span></a>
+    <nav aria-label="Primary">
+      <a class="nav-link" href="#what">What it is</a>
+      <a class="nav-link" href="#zero-knowledge">Zero-knowledge</a>
+      <a class="nav-link" href="#surfaces">Surfaces</a>
+      <a class="nav-link" href="#screenshots">Screenshots</a>
+      <a class="nav-link" href="#docs">Docs</a>
+      <a class="nav-link" href="#disclosures">Disclosures</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- ============ HERO ============ -->
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="wrap">
+      <span class="kicker">Personal Analytics Engine</span>
+      <h1 id="hero-title">Know what risk <span class="accent">you</span> are actually carrying.</h1>
+      <p class="lede">PAE is a zero-knowledge, institutional-grade investment-analytics engine for individuals. It X-rays what you own — risk, factor exposure, drawdown, scenarios — while your data never leaves your control.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#surfaces">Explore the surfaces</a>
+        <a class="btn btn-ghost" href="https://github.com/nrupala/pae/tree/main/docs">Read the docs</a>
+      </div>
+      <p class="hero-note">Educational analytics tool, not a financial advisor. The tool calculates; you decide.</p>
+    </div>
+  </section>
+
+  <!-- ============ WHAT PAE IS ============ -->
+  <section id="what" aria-labelledby="what-title">
+    <div class="wrap">
+      <p class="eyebrow">What PAE is</p>
+      <h2 id="what-title">Inside-out quantitative analytics</h2>
+      <p class="section-sub">PAE is not a research report about what the world says — it is a measurement instrument for your own book. Import your holdings, and PAE computes the quantities a risk desk would: what you could lose, where the exposure concentrates, and what breaks under stress.</p>
+
+      <div class="grid cols-3">
+        <article class="card">
+          <h3>Risk measurement</h3>
+          <p>Value-at-Risk and Conditional VaR, drawdown analysis, correlation structure — quantified on your actual holdings, not a model portfolio.</p>
+        </article>
+        <article class="card">
+          <h3>Factor exposure</h3>
+          <p>Decompose returns into factor loadings so you can see which bets — value, size, momentum, sector, rates — are really driving the book.</p>
+        </article>
+        <article class="card">
+          <h3>Monte Carlo scenarios</h3>
+          <p>Forward-looking outcome distributions from simulated paths: the range of what could happen, with probabilities, not point forecasts.</p>
+        </article>
+        <article class="card">
+          <h3>Stress tests</h3>
+          <p>Historical and hypothetical shocks applied to your positions. See the portfolio's breaking points before the market finds them.</p>
+        </article>
+        <article class="card">
+          <h3>Decision journal</h3>
+          <p>Log the rationale behind each decision alongside the numbers, so hindsight has evidence instead of stories.</p>
+        </article>
+        <article class="card">
+          <h3>Analytics companions</h3>
+          <p>The same analytics as standalone Excel and Google Sheet workbooks for offline or spreadsheet-native workflows — with one explicit boundary: spreadsheets are <strong>not</strong> zero-knowledge encrypted.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ZERO-KNOWLEDGE ============ -->
+  <section id="zero-knowledge" aria-labelledby="zk-title">
+    <div class="wrap">
+      <p class="eyebrow">Privacy architecture</p>
+      <h2 id="zk-title">Zero-knowledge: what that actually means here</h2>
+      <p class="section-sub">Your holdings are the most sensitive data you own. PAE is built so that even the operator of the server cannot read them. Here is the mechanism, stated plainly:</p>
+
+      <div class="zk">
+        <ol>
+          <li><strong>Key derivation happens in your browser.</strong> Your passphrase is stretched with Argon2id — client-side, in the dashboard app. The passphrase never leaves your device.</li>
+          <li><strong>Encryption is AES-256-GCM.</strong> Holdings are encrypted with a 256-bit key derived from your passphrase before anything is transmitted.</li>
+          <li><strong>The server stores ciphertext only.</strong> The engine keeps encrypted blobs; it holds no passphrase, no derived key, and no decryption path.</li>
+          <li><strong>No recovery service exists.</strong> Because nobody holds your key, nobody — including us — can recover your data. Lose the passphrase and the data is unrecoverable. That is the price of real zero-knowledge, stated up front.</li>
+        </ol>
+      </div>
+
+      <div class="zk-boundary" role="note" aria-label="What we do not claim">
+        <strong>What we do not claim.</strong> There is no Shamir secret-sharing recovery, no DEK/KEK key hierarchy, and no separate cryptographic core — those do not exist in this build, and we will not claim them. The privacy guarantee is exactly the four points above.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SURFACES ============ -->
+  <section id="surfaces" aria-labelledby="surfaces-title">
+    <div class="wrap">
+      <p class="eyebrow">One engine, many doors</p>
+      <h2 id="surfaces-title">Surfaces</h2>
+      <p class="section-sub">PAE serves both humans and AI agents. The same analytics engine is reachable through every surface below.</p>
+
+      <div class="grid cols-3">
+        <article class="card">
+          <span class="tag">Humans</span>
+          <h3>Webapp dashboard</h3>
+          <p>The interactive dashboard: import a holdings CSV, see risk, drawdown, factors and scenarios rendered in the browser. Client-side vault unlock.</p>
+        </article>
+        <article class="card">
+          <span class="tag">Humans</span>
+          <h3>Product site</h3>
+          <p>This site — what PAE is, how the zero-knowledge design works, screenshots, and documentation entry points.</p>
+        </article>
+        <article class="card">
+          <span class="tag">Humans · offline</span>
+          <h3>Excel + Google Sheet companions</h3>
+          <p>Standalone workbooks implementing the analytics for spreadsheet-native workflows. Plain disclosure: <strong>spreadsheets are not zero-knowledge encrypted</strong> — they are separate artifacts and carry that disclosure on their own pages.</p>
+        </article>
+        <article class="card">
+          <span class="tag">Humans + agents</span>
+          <h3>REST API</h3>
+          <p>Nineteen routes across the engine and analytics layers: holdings CRUD, risk, Monte Carlo, stress, factors, journal, crypto parameters. Discovery via <code>/.well-known</code> and <code>llms.txt</code>.</p>
+        </article>
+        <article class="card">
+          <span class="tag">Agents</span>
+          <h3>MCP server</h3>
+          <p>Model Context Protocol tools — <code>compute_risk</code>, <code>monte_carlo</code>, <code>stress_test</code>, <code>factor_decompose</code>, <code>journal_log</code>, holdings CRUD — so an AI assistant can run PAE analytics directly over the REST layer.</p>
+        </article>
+        <article class="card">
+          <span class="tag">Agents</span>
+          <h3>A2A agent card</h3>
+          <p>Agent-to-agent discovery card describing PAE's capabilities, so other agents can find and compose with the engine.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SCREENSHOTS ============ -->
+  <section id="screenshots" aria-labelledby="shots-title">
+    <div class="wrap">
+      <p class="eyebrow">The dashboard</p>
+      <h2 id="shots-title">Screenshots</h2>
+      <p class="section-sub">Live captures from the webapp dashboard. Each chart below is generated by the dashboard team during the current polish pass — placeholders mark the images still being produced.</p>
+
+      <div class="shots-grid">
+        <figure class="shot">
+          <div class="shot-placeholder" role="img" aria-label="Placeholder: dashboard overview chart not yet produced">
+            <div class="inner">
+              <span class="file">assets/dashboard-overview.svg</span>
+              <p>Screenshot placeholder — the dashboard overview capture is being produced in the current polish pass.</p>
+            </div>
+          </div>
+          <figcaption><strong>Dashboard overview</strong><p>The landing view: portfolio summary, key risk figures, and navigation.</p></figcaption>
+        </figure>
+        <figure class="shot">
+          <div class="shot-placeholder" role="img" aria-label="Placeholder: risk and drawdown chart not yet produced">
+            <div class="inner">
+              <span class="file">assets/risk-drawdown.svg</span>
+              <p>Screenshot placeholder — the risk &amp; drawdown capture is being produced in the current polish pass.</p>
+            </div>
+          </div>
+          <figcaption><strong>Risk &amp; drawdown</strong><p>VaR/CVaR readouts with the drawdown curve over the portfolio history.</p></figcaption>
+        </figure>
+        <figure class="shot">
+          <div class="shot-placeholder" role="img" aria-label="Placeholder: Monte Carlo fan chart not yet produced">
+            <div class="inner">
+              <span class="file">assets/mc-fan.svg</span>
+              <p>Screenshot placeholder — the Monte Carlo fan capture is being produced in the current polish pass.</p>
+            </div>
+          </div>
+          <figcaption><strong>Monte Carlo fan</strong><p>Simulated outcome distribution: percentile bands over the forecast horizon.</p></figcaption>
+        </figure>
+        <figure class="shot">
+          <div class="shot-placeholder" role="img" aria-label="Placeholder: factor exposure chart not yet produced">
+            <div class="inner">
+              <span class="file">assets/factor-exposure.svg</span>
+              <p>Screenshot placeholder — the factor exposure capture is being produced in the current polish pass.</p>
+            </div>
+          </div>
+          <figcaption><strong>Factor exposure</strong><p>Factor loadings decomposition: which bets drive the book's returns.</p></figcaption>
+        </figure>
+        <figure class="shot">
+          <div class="shot-placeholder" role="img" aria-label="Placeholder: stress test chart not yet produced">
+            <div class="inner">
+              <span class="file">assets/stress.svg</span>
+              <p>Screenshot placeholder — the stress test capture is being produced in the current polish pass.</p>
+            </div>
+          </div>
+          <figcaption><strong>Stress tests</strong><p>Historical and hypothetical shocks applied to the current positions.</p></figcaption>
+        </figure>
+        <figure class="shot">
+          <div class="shot-placeholder" role="img" aria-label="Placeholder: performance benchmark chart not yet produced">
+            <div class="inner">
+              <span class="file">assets/performance-benchmark.svg</span>
+              <p>Screenshot placeholder — the performance benchmark capture is being produced in the current polish pass.</p>
+            </div>
+          </div>
+          <figcaption><strong>Performance benchmark</strong><p>Portfolio performance against reference benchmarks, risk-adjusted.</p></figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DOCS ============ -->
+  <section id="docs" aria-labelledby="docs-title">
+    <div class="wrap">
+      <p class="eyebrow">Go deeper</p>
+      <h2 id="docs-title">Documentation</h2>
+      <p class="section-sub">Design docs, API references and the threat model live in the PAE repository.</p>
+      <ul class="doc-list">
+        <li>
+          <a href="https://github.com/nrupala/pae/tree/main/docs">
+            <span class="doc-name">Architecture</span>
+            <span class="doc-desc">System design: engine, analytics layer, surfaces, data flow.</span>
+            <span class="doc-url">github.com/nrupala/pae/tree/main/docs</span>
+          </a>
+        </li>
+        <li>
+          <a href="https://github.com/nrupala/pae/blob/main/docs/THREAT_MODEL.md">
+            <span class="doc-name">Threat model</span>
+            <span class="doc-desc">What PAE protects against, what it assumes, and the trust boundaries.</span>
+            <span class="doc-url">github.com/nrupala/pae/blob/main/docs/THREAT_MODEL.md</span>
+          </a>
+        </li>
+        <li>
+          <a href="https://github.com/nrupala/pae/blob/main/docs/FUNCTION_REFERENCE.md">
+            <span class="doc-name">Function reference</span>
+            <span class="doc-desc">The analytics functions: risk metrics, factors, Monte Carlo, stress.</span>
+            <span class="doc-url">github.com/nrupala/pae/blob/main/docs/FUNCTION_REFERENCE.md</span>
+          </a>
+        </li>
+        <li>
+          <a href="https://github.com/nrupala/pae/blob/main/docs/PLAN_DECISION_JOURNAL.md">
+            <span class="doc-name">Decision journal</span>
+            <span class="doc-desc">Design decisions and the reasoning behind them.</span>
+            <span class="doc-url">github.com/nrupala/pae/blob/main/docs/PLAN_DECISION_JOURNAL.md</span>
+          </a>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ DISCLOSURES ============ -->
+  <section id="disclosures" class="disclosures" aria-labelledby="disc-title">
+    <div class="wrap">
+      <p class="eyebrow">Standing disclosures</p>
+      <h2 id="disc-title">The fine print, up front</h2>
+      <div class="disclosure-box">
+        <ul>
+          <li><strong>Educational analytics tool, not a financial advisor.</strong> PAE computes risk numbers; it does not give investment advice.</li>
+          <li><strong>The tool calculates; you decide.</strong> Every number on this site and in the dashboard is a measurement, never a recommendation.</li>
+          <li><strong>No buy/sell recommendations.</strong> PAE outputs analytics, not trade signals. It will never tell you what to buy or sell.</li>
+          <li><strong>We never sell user data.</strong> And under the zero-knowledge design, there is nothing readable to sell — the server holds ciphertext only.</li>
+          <li><strong>Spreadsheets are not zero-knowledge encrypted.</strong> The Excel and Google Sheet companions are separate, standalone artifacts without PAE's encryption guarantees.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="footer-grid">
+    <div>
+      <p><strong style="color:#eef2f7">PAE — Personal Analytics Engine.</strong> Zero-knowledge, institutional-grade investment analytics for individuals.</p>
+      <p class="footer-note">Docs: <a href="https://github.com/nrupala/pae/tree/main/docs">github.com/nrupala/pae/tree/main/docs</a></p>
+    </div>
+    <div>
+      <p class="footer-note">Owned by Nrupal Akolkar · Built with Muse by Meta.<br>Educational analytics tool, not a financial advisor.</p>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
