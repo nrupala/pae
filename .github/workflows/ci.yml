@@ -20,6 +20,14 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install BLAS/LAPACK dev libraries
+        # The engine's C numerical core (engine/c/) links the system BLAS and
+        # LAPACK; the -dev packages provide the headers-independent link
+        # symlinks the build needs (see engine/build.rs).
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libblas-dev liblapack-dev
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -105,6 +113,12 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install BLAS/LAPACK dev libraries
+        # Same as the engine job: the C numerical core links system BLAS/LAPACK.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libblas-dev liblapack-dev
 
       - name: Build engine (debug)
         working-directory: engine

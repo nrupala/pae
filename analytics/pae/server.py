@@ -29,7 +29,9 @@ from pydantic import BaseModel, Field
 from pae.auth import api_key_or_none
 from pae.mcp import TOOL_SPECS, get_tool_manifest, run_agent_tool
 from pae.mcp.tools import DISCLOSURE, PAETools
+from pae.models.brinson import attribute as brinson_attribute
 from pae.models.carry import analyze_carry
+from pae.models.optimize import OptimizeError, holdings_to_inputs, optimize
 from pae.storage.csv_import import import_csv_string
 from pae.storage.db import (
     Account,
@@ -142,6 +144,34 @@ class CarryRequest(BaseModel):
     total_margin: float = 0.0
     margin_rate: float = 0.058
 
+
+class OptimizeRequest(BaseModel):
+    """Long-only portfolio optimization request.
+
+    Either ``portfolio_id`` (expected returns and covariance are derived
+    from the holdings' stored return series) or explicit ``symbols`` +
+    ``expected_returns`` + ``covariance``.
+    """
+
+    portfolio_id: str | None = None
+    symbols: list[str] | None = None
+    expected_returns: list[float] | None = None
+    covariance: list[list[float]] | None = None
+    risk_free_rate: float = 0.0
+    frontier_points: int = Field(default=25, ge=2, le=100)
+
+
+class AttributionSegment(BaseModel):
+    segment: str = Field(min_length=1, max_length=200)
+    weight: float
+    segment_return: float = Field(
+        description="Period return as a decimal fraction (0.05 = 5%)"
+    )
+
+
+class AttributionRequest(BaseModel):
+    portfolio_segments: list[AttributionSegment] = Field(min_length=1)
+    benchmark_segments: list[AttributionSegment] = Field(min_length=1)
 
 # --- Error Handlers ---
 
@@ -520,6 +550,120 @@ async def compute_carry(req: CarryRequest) -> dict[str, Any]:
         ],
     }
 
+
+@app.post("/api/v1/analytics/optimize")
+async def optimize_portfolio_endpoint(req: OptimizeRequest) -> dict[str, Any]:
+    """Long-only portfolio optimization (Python-native, no Rust engine needed).
+
+    Computes maximum-Sharpe, minimum-variance, and risk-parity mixes plus
+    the efficient frontier. Either pass ``portfolio_id`` (expected returns
+    and covariance are derived from the holdings' stored return series)
+    or pass ``symbols`` + ``expected_returns`` + ``covariance`` explicitly.
+
+    Educational analytics only: expected risk/return trade-offs for the
+    given inputs. The tool calculates; the user decides. No advice.
+    """
+    try:
+        if req.portfolio_id:
+            database = get_db()
+            holdings = database.get_holdings(portfolio_id=req.portfolio_id)
+            if not holdings:
+                raise HTTPException(
+                    status_code=404, detail="No holdings found"
+                )
+            symbols, mu, cov = holdings_to_inputs(
+                [(h.symbol, h.returns_json) for h in holdings]
+            )
+        else:
+            if (
+                not req.symbols
+                or not req.expected_returns
+                or not req.covariance
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Provide portfolio_id or symbols + expected_returns "
+                        "+ covariance"
+                    ),
+                )
+            symbols, mu, cov = (
+                req.symbols,
+                req.expected_returns,
+                req.covariance,
+            )
+        result = optimize(
+            symbols,
+            mu,
+            cov,
+            risk_free_rate=req.risk_free_rate,
+            frontier_points=req.frontier_points,
+        )
+    except OptimizeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    body = result.as_dict()
+    body["disclosure"] = DISCLOSURE
+    return body
+
+
+@app.post("/api/v1/analytics/attribution")
+async def compute_attribution(req: AttributionRequest) -> dict[str, Any]:
+    """Brinson-Hood-Beebower attribution of portfolio vs. benchmark.
+
+    Python-native. Decomposes the active return into allocation, selection,
+    and interaction effects per segment. Educational analytics only —
+    explains what drove the difference vs. the benchmark; no investment
+    advice and no recommendations.
+    """
+    try:
+        result = brinson_attribute(
+            [
+                {
+                    "segment": s.segment,
+                    "weight": s.weight,
+                    "return": s.segment_return,
+                }
+                for s in req.portfolio_segments
+            ],
+            [
+                {
+                    "segment": s.segment,
+                    "weight": s.weight,
+                    "return": s.segment_return,
+                }
+                for s in req.benchmark_segments
+            ],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return {
+        "disclosure": DISCLOSURE,
+        "method": "Brinson-Hood-Beebower (arithmetic)",
+        "portfolio_return": result.portfolio_return,
+        "benchmark_return": result.benchmark_return,
+        "active_return": result.active_return,
+        "total_allocation": result.total_allocation,
+        "total_selection": result.total_selection,
+        "total_interaction": result.total_interaction,
+        "segments": [
+            {
+                "segment": s.segment,
+                "portfolio_weight": s.portfolio_weight,
+                "benchmark_weight": s.benchmark_weight,
+                "portfolio_return": s.portfolio_return,
+                "benchmark_return": s.benchmark_return,
+                "allocation_effect": s.allocation_effect,
+                "selection_effect": s.selection_effect,
+                "interaction_effect": s.interaction_effect,
+                "active_contribution": s.active_contribution,
+            }
+            for s in result.segments
+        ],
+    }
 
 # --- Return series, factor decomposition, Monte Carlo, stress (UI views) ---
 

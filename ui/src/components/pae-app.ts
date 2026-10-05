@@ -6,6 +6,7 @@
  * Routes:
  *   #dashboard  -> <pae-dashboard>
  *   #import     -> <pae-import>
+ *   #optimize / #optimizer -> <pae-optimize>
  *   (others)    -> placeholder with coming soon message
  */
 
@@ -83,6 +84,8 @@ class PaeApp extends HTMLElement {
       'factors': '<pae-factors></pae-factors>',
       'montecarlo': '<pae-scenarios view="montecarlo"></pae-scenarios>',
       'stress': '<pae-scenarios view="stress"></pae-scenarios>',
+      'optimize': '<pae-optimize></pae-optimize>',
+      'optimizer': '<pae-optimize></pae-optimize>',
     };
 
     const comingSoon = `

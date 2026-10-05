@@ -27,7 +27,10 @@ import httpx
 import numpy as np
 
 from pae.decision.journal import DecisionEntry, validate_entry
+from pae.models.brinson import BrinsonError
+from pae.models.brinson import attribute as brinson_attribute
 from pae.models.factor import FactorError, decompose
+from pae.models.optimize import OptimizeError, holdings_to_inputs, optimize
 from pae.storage.db import (
     DatabaseError,
     Holding,
@@ -180,6 +183,97 @@ class PAETools:
                 for e in result.exposures
             ],
             "residual_risk_pct": result.residual_risk_pct,
+        }
+
+    # --- Portfolio optimization ---
+
+    async def optimize_portfolio(
+        self,
+        symbols: list[str] | None = None,
+        expected_returns: list[float] | None = None,
+        covariance: list[list[float]] | None = None,
+        portfolio_id: str | None = None,
+        risk_free_rate: float = 0.0,
+        frontier_points: int = 25,
+    ) -> dict[str, Any]:
+        """Compute long-only optimal mixes and the efficient frontier.
+
+        Either pass ``portfolio_id`` (expected returns and covariance are
+        derived from the holdings' stored return series) or pass
+        ``symbols`` + ``expected_returns`` + ``covariance`` explicitly.
+        Returns maximum-Sharpe, minimum-variance, and risk-parity mixes
+        plus efficient-frontier points. Analytics only -- no advice.
+        """
+        try:
+            if portfolio_id:
+                holdings = self._db.get_holdings(portfolio_id=portfolio_id)
+                if not holdings:
+                    raise PAEToolError(
+                        f"No holdings found for portfolio '{portfolio_id}'"
+                    )
+                syms, mu, cov = holdings_to_inputs(
+                    [(h.symbol, h.returns_json) for h in holdings]
+                )
+            else:
+                if not symbols or not expected_returns or not covariance:
+                    raise PAEToolError(
+                        "Provide portfolio_id or symbols + expected_returns "
+                        "+ covariance"
+                    )
+                syms, mu, cov = symbols, expected_returns, covariance
+            result = optimize(
+                syms,
+                mu,
+                cov,
+                risk_free_rate=risk_free_rate,
+                frontier_points=frontier_points,
+            )
+        except OptimizeError as exc:
+            raise PAEToolError(str(exc)) from exc
+        except ValueError as exc:
+            raise PAEToolError(str(exc)) from exc
+        return result.as_dict()
+
+    async def brinson_attribution(
+        self,
+        portfolio_segments: list[dict[str, Any]],
+        benchmark_segments: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Attribute active return vs. a benchmark (Brinson-Hood-Beebower).
+
+        Each side is a list of {"segment", "weight", "return"} dicts with
+        weights summing to 1.0. Returns per-segment allocation, selection,
+        and interaction effects plus totals summing to the active return.
+        Educational performance-explanation analytics — explains what drove
+        the difference vs. the benchmark; no recommendations, no advice.
+        """
+        try:
+            result = brinson_attribute(portfolio_segments, benchmark_segments)
+        except (ValueError, BrinsonError) as exc:
+            raise PAEToolError(str(exc)) from exc
+        return {
+            "method": "Brinson-Hood-Beebower (arithmetic)",
+            "disclosure": DISCLOSURE,
+            "portfolio_return": result.portfolio_return,
+            "benchmark_return": result.benchmark_return,
+            "active_return": result.active_return,
+            "total_allocation": result.total_allocation,
+            "total_selection": result.total_selection,
+            "total_interaction": result.total_interaction,
+            "segments": [
+                {
+                    "segment": s.segment,
+                    "portfolio_weight": s.portfolio_weight,
+                    "benchmark_weight": s.benchmark_weight,
+                    "portfolio_return": s.portfolio_return,
+                    "benchmark_return": s.benchmark_return,
+                    "allocation_effect": s.allocation_effect,
+                    "selection_effect": s.selection_effect,
+                    "interaction_effect": s.interaction_effect,
+                    "active_contribution": s.active_contribution,
+                }
+                for s in result.segments
+            ],
         }
 
     # --- Decision journal ---
@@ -428,6 +522,20 @@ TOOL_SPECS: list[tuple[str, str]] = [
         "Decompose portfolio returns into Fama-French factor exposures "
         "(market, size, value, profitability, investment) via OLS. "
         + DISCLOSURE,
+    ),
+    (
+        "optimize_portfolio",
+        "Compute long-only optimal portfolio mixes -- maximum-Sharpe, "
+        "minimum-variance, and risk-parity -- plus the efficient frontier, "
+        "from expected returns and a covariance matrix (or derive them "
+        "from a portfolio's stored holding returns). " + DISCLOSURE,
+    ),
+    (
+        "brinson_attribution",
+        "Attribute portfolio active return vs. a benchmark by segment "
+        "(Brinson-Hood-Beebower): allocation, selection, and interaction "
+        "effects. Pure performance explanation — what drove the "
+        "difference vs. the benchmark; no recommendations. " + DISCLOSURE,
     ),
     (
         "journal_log",

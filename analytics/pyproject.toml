@@ -14,9 +14,14 @@ dependencies = [
     "pandas>=2.2",
     "scipy>=1.12",
     "scikit-learn>=1.4",
-    "cvxpy>=1.5",
     "pyarrow>=15.0",
-    "sentence-transformers>=3.0",
+    "fastembed>=0.8",
+    "sqlite-vec>=0.1.9",
+    # AES-256-GCM chunk-text encryption for the PKE store
+    # (pae.pke.store). Declared unconditionally rather than as an extra
+    # because store.py imports it at module level; the env already carries
+    # cryptography>=41 with wheels for all supported platforms.
+    "cryptography>=41.0",
     "yfinance>=0.2",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
