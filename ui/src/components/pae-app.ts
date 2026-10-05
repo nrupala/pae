@@ -14,7 +14,6 @@ type Theme = typeof VALID_THEMES[number];
 
 class PaeApp extends HTMLElement {
   private shadow: ShadowRoot;
-  private _activeRoute: string = 'dashboard';
 
   constructor() {
     super();
@@ -60,7 +59,6 @@ class PaeApp extends HTMLElement {
 
   private handleRoute(hash: string): void {
     const route = hash.replace('#', '') || 'dashboard';
-    this._activeRoute = route;
 
     // Update nav active state
     const navItems = this.shadow.querySelectorAll('.nav-item');
