@@ -24,7 +24,7 @@ PAE is an open-source tool that aggregates portfolio data, runs risk analytics, 
 - **No investment advice.** Ever. The tool calculates; you decide.
 - **No recommendations.** No "buy X" or "sell Y" outputs.
 - **No personalized suggestions.** All parameters are user-specified.
-- **No data exfiltration.** All encryption/decryption happens client-side — **Planned** (the storage layer holds ciphertext only; client-side key handling is roadmap — see Security Model above).
+- **No data exfiltration.** Passphrases never leave the client — key derivation runs client-side in the browser (`ui/src/crypto/vault-client.ts`, Argon2id via vendored hash-wasm); the server exposes no passphrase-derivation endpoint. The engine stores ciphertext only; its `/encrypt` and `/decrypt` endpoints are caller-supplied-key oracles for local-first deployments (see Security Model).
 
 ## Architecture
 
@@ -58,7 +58,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full details.
 - **AES-256-GCM** encryption for all stored data
 - **Argon2id** key derivation (600K iterations, 64MB memory, 4 threads)
 - Per-record Data Encryption Keys (DEKs) wrapped with user's Key Encryption Key (KEK) — **Planned** (today: single key per vault operation, no DEK/KEK hierarchy)
-- KEK derived client-side from passphrase -- **never transmitted** — **Planned** (today: key derivation runs server-side via `/api/v1/crypto/derive-key`; client-side derivation is roadmap)
+- KEK derived client-side from passphrase — **never transmitted** (`ui/src/crypto/vault-client.ts`; `POST /api/v1/crypto/derive-key` was removed 2026-10-05 — no server-side derivation path exists)
 - Optional **Shamir's Secret Sharing** (3-of-5) for key recovery — **Planned**
 - Server compromise yields ciphertext only
 
