@@ -1,3 +1,4 @@
+pub mod bonds;
 pub mod crypto_api;
 pub mod health;
 pub mod holdings_api;

@@ -12,6 +12,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod api;
 mod crypto;
+mod num_ffi;
 mod risk;
 mod storage;
 mod versioning;
@@ -81,6 +82,7 @@ fn create_app(store: Arc<storage::Store>) -> Router {
         .route("/api/v1/portfolio/stress", post(api::portfolio::stress_test))
         .route("/api/v1/portfolio/correlation", post(api::portfolio::correlation_matrix))
         .route("/api/v1/portfolio/montecarlo", post(api::portfolio::monte_carlo))
+        .route("/api/v1/analytics/bond", post(api::bonds::bond_analytics))
         .route("/api/v1/version/snapshot", post(api::versioning_api::get_snapshot));
 
     Router::new()
@@ -350,6 +352,45 @@ mod tests {
                 400,
                 "dek-envelope must reject {name}"
             );
+        }
+    }
+
+    /// POST /api/v1/analytics/bond prices a par bond through the C core:
+    /// YTM must equal the coupon rate and the price must round-trip.
+    #[tokio::test]
+    async fn bond_endpoint_par_bond() {
+        let server = test_server();
+        let cash_flows: Vec<serde_json::Value> = (1..=10)
+            .map(|t| {
+                serde_json::json!({
+                    "time_years": t as f64,
+                    "amount": if t == 10 { 105.0 } else { 5.0 },
+                })
+            })
+            .collect();
+        let resp = server
+            .post("/api/v1/analytics/bond")
+            .json(&serde_json::json!({ "cash_flows": cash_flows, "price": 100.0 }))
+            .await;
+        assert_eq!(resp.status_code().as_u16(), 200);
+        let body: serde_json::Value = resp.json();
+        assert!((body["ytm_annual"].as_f64().unwrap() - 0.05).abs() < 1e-9);
+        assert!((body["npv"].as_f64().unwrap() - 100.0).abs() < 1e-6);
+        assert!((body["macaulay_duration_years"].as_f64().unwrap() - 8.107_822).abs() < 1e-4);
+    }
+
+    /// POST /api/v1/analytics/bond rejects a request with both/neither of
+    /// price and yield_annual.
+    #[tokio::test]
+    async fn bond_endpoint_rejects_ambiguous_pricing_input() {
+        let server = test_server();
+        let cf = serde_json::json!([{ "time_years": 1.0, "amount": 105.0 }]);
+        for payload in [
+            serde_json::json!({ "cash_flows": cf, "price": 100.0, "yield_annual": 0.05 }),
+            serde_json::json!({ "cash_flows": cf }),
+        ] {
+            let resp = server.post("/api/v1/analytics/bond").json(&payload).await;
+            assert_eq!(resp.status_code().as_u16(), 400);
         }
     }
 }
