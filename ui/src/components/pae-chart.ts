@@ -47,6 +47,26 @@ interface FanData {
   yLabel?: string;
 }
 
+interface ScatterPoint {
+  x: number;
+  y: number;
+}
+
+interface ScatterMarker {
+  x: number;
+  y: number;
+  label: string;
+  color: string;
+}
+
+interface ScatterData {
+  points: ScatterPoint[];
+  markers: ScatterMarker[];
+  xLabel?: string;
+  yLabel?: string;
+  lineColor: string;
+}
+
 const PALETTE = [
   '#38bdf8', '#a78bfa', '#f472b6', '#fbbf24', '#34d399',
   '#fb7185', '#60a5fa', '#f97316', '#2dd4bf', '#e879f9',
@@ -306,8 +326,69 @@ class PaeChart extends HTMLElement {
       ]),
     );
   }
+  /** Scatter plot with an (x, y) polyline plus labelled markers.
+
+  Used for the efficient frontier: x = volatility, y = expected return,
+  markers = the optimal mixes. */
+  public setScatter(data: ScatterData): void {
+    const w = 640, h = 360;
+    const pad = { top: 28, right: 16, bottom: 44, left: 64 };
+    const xs = [...data.points.map(p => p.x), ...data.markers.map(m => m.x)]
+      .filter(Number.isFinite);
+    const ys = [...data.points.map(p => p.y), ...data.markers.map(m => m.y)]
+      .filter(Number.isFinite);
+    if (!xs.length || !ys.length) {
+      this.finish(
+        `<svg viewBox="0 0 ${w} ${h}"><title>${esc(this.chartTitle)}</title>` +
+        `<text x="${w / 2}" y="${h / 2}" text-anchor="middle" font-size="13" fill="#94a3b8">No data</text></svg>`,
+        '',
+      );
+      return;
+    }
+    let minX = Math.min(...xs), maxX = Math.max(...xs);
+    let minY = Math.min(...ys), maxY = Math.max(...ys);
+    if (minX === maxX) { minX -= 1; maxX += 1; }
+    if (minY === maxY) { minY -= 1; maxY += 1; }
+    const px = (v: number): number =>
+      pad.left + ((v - minX) / (maxX - minX)) * (w - pad.left - pad.right);
+    const py = (v: number): number =>
+      pad.top + (h - pad.top - pad.bottom) * (1 - (v - minY) / (maxY - minY));
+
+    let body = '';
+    for (let i = 0; i <= 4; i++) {
+      const vx = minX + ((maxX - minX) / 4) * i;
+      const vy = minY + ((maxY - minY) / 4) * i;
+      const xx = px(vx), yy = py(vy);
+      body += `<line x1="${xx.toFixed(1)}" y1="${pad.top}" x2="${xx.toFixed(1)}" y2="${h - pad.bottom}" stroke="rgba(148,163,184,0.25)" stroke-width="1"/>`;
+      body += `<line x1="${pad.left}" y1="${yy.toFixed(1)}" x2="${w - pad.right}" y2="${yy.toFixed(1)}" stroke="rgba(148,163,184,0.25)" stroke-width="1"/>`;
+      body += `<text x="${xx.toFixed(1)}" y="${h - 26}" text-anchor="middle" font-size="10" fill="#94a3b8">${fmtTick(vx)}</text>`;
+      body += `<text x="${pad.left - 8}" y="${(yy + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="#94a3b8">${fmtTick(vy)}</text>`;
+    }
+    if (data.xLabel) {
+      body += `<text x="${w - pad.right}" y="${h - 8}" text-anchor="end" font-size="10" fill="#94a3b8">${esc(data.xLabel)}</text>`;
+    }
+    if (data.yLabel) {
+      body += `<text x="12" y="${pad.top - 6}" font-size="10" fill="#94a3b8">${esc(data.yLabel)}</text>`;
+    }
+
+    const ordered = [...data.points].sort((a, b) => a.x - b.x);
+    const path = ordered
+      .map((p, k) => `${k === 0 ? 'M' : 'L'}${px(p.x).toFixed(1)},${py(p.y).toFixed(1)}`)
+      .join(' ');
+    body += `<path d="${path}" fill="none" stroke="${data.lineColor}" stroke-width="2"/>`;
+
+    for (const m of data.markers) {
+      if (!Number.isFinite(m.x) || !Number.isFinite(m.y)) continue;
+      body += `<circle cx="${px(m.x).toFixed(1)}" cy="${py(m.y).toFixed(1)}" r="6" fill="${m.color}" stroke="#0f172a" stroke-width="1.5"><title>${esc(m.label)}</title></circle>`;
+    }
+
+    this.finish(
+      `<svg viewBox="0 0 ${w} ${h}" role="img"><title>${esc(this.chartTitle)}</title>${body}</svg>`,
+      this.legendFor(data.markers.map(m => ({ label: m.label, color: m.color }))),
+    );
+  }
 }
 
 customElements.define('pae-chart', PaeChart);
 
-export { PaeChart, ChartData, ChartDataset, ChartType, PieSlice, FanData, PALETTE };
+export { PaeChart, ChartData, ChartDataset, ChartType, PieSlice, FanData, PALETTE, ScatterData, ScatterMarker, ScatterPoint };

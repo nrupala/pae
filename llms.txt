@@ -37,6 +37,7 @@ scenarios — while your data never leaves your control.
 | `monte_carlo` | Monte Carlo simulation of portfolio value via the Rust engine |
 | `stress_test` | Stress-test scenarios via the Rust engine |
 | `factor_decompose` | Fama-French factor exposure decomposition (OLS, Python-native) |
+| `optimize_portfolio` | Long-only optimal mixes (max-Sharpe, min-variance, risk-parity) + efficient frontier (Python-native) |
 | `journal_log` | Log a decision-journal entry (rationale, confidence, pre-mortem) |
 | `holdings_create` | Add a holding to a portfolio |
 | `holdings_list` | List holdings, optionally filtered |

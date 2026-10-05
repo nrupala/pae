@@ -28,6 +28,7 @@ import numpy as np
 
 from pae.decision.journal import DecisionEntry, validate_entry
 from pae.models.factor import FactorError, decompose
+from pae.models.optimize import OptimizeError, holdings_to_inputs, optimize
 from pae.storage.db import (
     DatabaseError,
     Holding,
@@ -181,6 +182,55 @@ class PAETools:
             ],
             "residual_risk_pct": result.residual_risk_pct,
         }
+
+    # --- Portfolio optimization ---
+
+    async def optimize_portfolio(
+        self,
+        symbols: list[str] | None = None,
+        expected_returns: list[float] | None = None,
+        covariance: list[list[float]] | None = None,
+        portfolio_id: str | None = None,
+        risk_free_rate: float = 0.0,
+        frontier_points: int = 25,
+    ) -> dict[str, Any]:
+        """Compute long-only optimal mixes and the efficient frontier.
+
+        Either pass ``portfolio_id`` (expected returns and covariance are
+        derived from the holdings' stored return series) or pass
+        ``symbols`` + ``expected_returns`` + ``covariance`` explicitly.
+        Returns maximum-Sharpe, minimum-variance, and risk-parity mixes
+        plus efficient-frontier points. Analytics only -- no advice.
+        """
+        try:
+            if portfolio_id:
+                holdings = self._db.get_holdings(portfolio_id=portfolio_id)
+                if not holdings:
+                    raise PAEToolError(
+                        f"No holdings found for portfolio '{portfolio_id}'"
+                    )
+                syms, mu, cov = holdings_to_inputs(
+                    [(h.symbol, h.returns_json) for h in holdings]
+                )
+            else:
+                if not symbols or not expected_returns or not covariance:
+                    raise PAEToolError(
+                        "Provide portfolio_id or symbols + expected_returns "
+                        "+ covariance"
+                    )
+                syms, mu, cov = symbols, expected_returns, covariance
+            result = optimize(
+                syms,
+                mu,
+                cov,
+                risk_free_rate=risk_free_rate,
+                frontier_points=frontier_points,
+            )
+        except OptimizeError as exc:
+            raise PAEToolError(str(exc)) from exc
+        except ValueError as exc:
+            raise PAEToolError(str(exc)) from exc
+        return result.as_dict()
 
     # --- Decision journal ---
 
@@ -428,6 +478,13 @@ TOOL_SPECS: list[tuple[str, str]] = [
         "Decompose portfolio returns into Fama-French factor exposures "
         "(market, size, value, profitability, investment) via OLS. "
         + DISCLOSURE,
+    ),
+    (
+        "optimize_portfolio",
+        "Compute long-only optimal portfolio mixes -- maximum-Sharpe, "
+        "minimum-variance, and risk-parity -- plus the efficient frontier, "
+        "from expected returns and a covariance matrix (or derive them "
+        "from a portfolio's stored holding returns). " + DISCLOSURE,
     ),
     (
         "journal_log",

@@ -30,6 +30,7 @@ from pae.auth import api_key_or_none
 from pae.mcp import TOOL_SPECS, get_tool_manifest, run_agent_tool
 from pae.mcp.tools import DISCLOSURE, PAETools
 from pae.models.carry import analyze_carry
+from pae.models.optimize import OptimizeError, holdings_to_inputs, optimize
 from pae.storage.csv_import import import_csv_string
 from pae.storage.db import (
     Account,
@@ -141,6 +142,22 @@ class CarryRequest(BaseModel):
     portfolio_id: str
     total_margin: float = 0.0
     margin_rate: float = 0.058
+
+
+class OptimizeRequest(BaseModel):
+    """Long-only portfolio optimization request.
+
+    Either ``portfolio_id`` (expected returns and covariance are derived
+    from the holdings' stored return series) or explicit ``symbols`` +
+    ``expected_returns`` + ``covariance``.
+    """
+
+    portfolio_id: str | None = None
+    symbols: list[str] | None = None
+    expected_returns: list[float] | None = None
+    covariance: list[list[float]] | None = None
+    risk_free_rate: float = 0.0
+    frontier_points: int = Field(default=25, ge=2, le=100)
 
 
 # --- Error Handlers ---
@@ -519,6 +536,64 @@ async def compute_carry(req: CarryRequest) -> dict[str, Any]:
             for p in result.positions
         ],
     }
+
+
+@app.post("/api/v1/analytics/optimize")
+async def optimize_portfolio_endpoint(req: OptimizeRequest) -> dict[str, Any]:
+    """Long-only portfolio optimization (Python-native, no Rust engine needed).
+
+    Computes maximum-Sharpe, minimum-variance, and risk-parity mixes plus
+    the efficient frontier. Either pass ``portfolio_id`` (expected returns
+    and covariance are derived from the holdings' stored return series)
+    or pass ``symbols`` + ``expected_returns`` + ``covariance`` explicitly.
+
+    Educational analytics only: expected risk/return trade-offs for the
+    given inputs. The tool calculates; the user decides. No advice.
+    """
+    try:
+        if req.portfolio_id:
+            database = get_db()
+            holdings = database.get_holdings(portfolio_id=req.portfolio_id)
+            if not holdings:
+                raise HTTPException(
+                    status_code=404, detail="No holdings found"
+                )
+            symbols, mu, cov = holdings_to_inputs(
+                [(h.symbol, h.returns_json) for h in holdings]
+            )
+        else:
+            if (
+                not req.symbols
+                or not req.expected_returns
+                or not req.covariance
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Provide portfolio_id or symbols + expected_returns "
+                        "+ covariance"
+                    ),
+                )
+            symbols, mu, cov = (
+                req.symbols,
+                req.expected_returns,
+                req.covariance,
+            )
+        result = optimize(
+            symbols,
+            mu,
+            cov,
+            risk_free_rate=req.risk_free_rate,
+            frontier_points=req.frontier_points,
+        )
+    except OptimizeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    body = result.as_dict()
+    body["disclosure"] = DISCLOSURE
+    return body
 
 
 # --- Return series, factor decomposition, Monte Carlo, stress (UI views) ---

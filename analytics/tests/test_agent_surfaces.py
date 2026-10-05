@@ -29,6 +29,7 @@ EXPECTED_TOOLS = [
     "monte_carlo",
     "stress_test",
     "factor_decompose",
+    "optimize_portfolio",
     "journal_log",
     "holdings_create",
     "holdings_list",
