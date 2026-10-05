@@ -2,7 +2,7 @@
 
 ## Overview
 
-PAE uses a three-language stratified architecture where each language handles what it does best.
+PAE uses a three-language stratified architecture where each language handles what it does best. (The C numerical core is **Planned** — roadmap, not yet implemented.)
 
 ```
 +------------------+     +-------------------+     +------------------+
@@ -15,9 +15,10 @@ PAE uses a three-language stratified architecture where each language handles wh
                                   |
                           +-------+-------+
                           | C Numerical   |
+                          | (Planned)     |
                           | BLAS/LAPACK   |
                           | QuantLib (FFI)|
-                          +---------------+
+                          +-------+-------+
 ```
 
 ## Layer Responsibilities
@@ -33,14 +34,15 @@ PAE uses a three-language stratified architecture where each language handles wh
 
 ### Python Analytics (Research Layer)
 - Factor models: Fama-French 5-Factor OLS decomposition
-- Portfolio optimization: Skfolio/CVXPY integration (100+ models)
-- Performance attribution: Brinson-Fachler, currency attribution
+- Portfolio optimization: Skfolio/CVXPY integration (100+ models) — **Planned** (declared as dependencies, not yet wired in)
+- Performance attribution: Brinson-Fachler, currency attribution — **Planned** (not yet implemented)
 - Carry analysis: Margin intelligence, income coverage ratios
-- Personal Knowledge Engine: Document ingestion, embedding, retrieval
+- Personal Knowledge Engine: Document ingestion, embedding (**Planned** — chunk/theme pipeline exists, embedding generation not yet implemented), retrieval
 - Decision Intelligence: Journal, calibration, bias detection
 - Latency target: < 1s per analysis
 
-### C Numerical Core (Primitives)
+### C Numerical Core (Primitives) — Planned
+> **Roadmap, not yet implemented.** No C sources exist in the repo today; numerics are pure Rust (`ndarray`/`statrs`).
 - Matrix operations: BLAS/LAPACK via Rust FFI
 - Bond pricing: QuantLib yield curves, duration, convexity
 - Numerical optimization: Low-level solvers
@@ -78,10 +80,12 @@ User Input (holdings, parameters)
 
 ## Zero-Knowledge Guarantee
 
+> **Status: target architecture (partially Planned).** The storage schema holds ciphertext today and the holdings API accepts only pre-encrypted blobs, so the engine never sees plaintext *on the storage path*. But client-side key derivation and encryption are **not yet implemented** — the only in-repo key-derivation path is server-side (`POST /api/v1/crypto/derive-key` takes the raw passphrase), and the DEK/KEK hierarchy and Shamir recovery below are roadmap items. See `docs/THREAT_MODEL.md` and the 2026-10-05 threat-model audit notes before making public security claims.
+
 The server never sees plaintext financial data. Encryption and decryption happen exclusively in the client. The server stores and transmits only ciphertext.
 
 This is enforced architecturally:
 - No server-side function accepts plaintext financial data
 - All API endpoints operate on encrypted payloads or derived analytics
-- Key material (KEK) exists only in client memory during active sessions
+- Key material (KEK) exists only in client memory during active sessions — **Planned** (no client-side key handling exists yet)
 - Argon2id with 600K iterations derives the KEK from the user's passphrase

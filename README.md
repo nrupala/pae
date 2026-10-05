@@ -24,7 +24,7 @@ PAE is an open-source tool that aggregates portfolio data, runs risk analytics, 
 - **No investment advice.** Ever. The tool calculates; you decide.
 - **No recommendations.** No "buy X" or "sell Y" outputs.
 - **No personalized suggestions.** All parameters are user-specified.
-- **No data exfiltration.** All encryption/decryption happens client-side.
+- **No data exfiltration.** All encryption/decryption happens client-side — **Planned** (the storage layer holds ciphertext only; client-side key handling is roadmap — see Security Model above).
 
 ## Architecture
 
@@ -39,15 +39,16 @@ PAE is an open-source tool that aggregates portfolio data, runs risk analytics, 
                                   |
                           +-------+-------+
                           | C Numerical   |
+                          | (Planned)     |
                           | BLAS/LAPACK   |
                           | QuantLib (FFI)|
-                          +---------------+
+                          +-------+-------+
 ```
 
 Three languages, each doing what it does best:
 - **Rust** (hot path): Risk calculations, Monte Carlo, crypto vault, API server
-- **Python** (research layer): Factor models, portfolio optimization, PKE, decision intelligence
-- **C** (primitives): BLAS/LAPACK matrix ops, QuantLib bond pricing via FFI
+- **Python** (research layer): Factor models, portfolio optimization (**Planned** — optimizer integration not yet implemented), PKE, decision intelligence
+- **C** (primitives, **Planned**): BLAS/LAPACK matrix ops, QuantLib bond pricing via FFI — roadmap item, not yet implemented (numerics today are pure Rust via `ndarray`/`statrs`)
 - **Vanilla TypeScript** (presentation): Web Components, Canvas/SVG charts, < 200KB total
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full details.
@@ -56,9 +57,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full details.
 
 - **AES-256-GCM** encryption for all stored data
 - **Argon2id** key derivation (600K iterations, 64MB memory, 4 threads)
-- Per-record Data Encryption Keys (DEKs) wrapped with user's Key Encryption Key (KEK)
-- KEK derived client-side from passphrase -- **never transmitted**
-- Optional **Shamir's Secret Sharing** (3-of-5) for key recovery
+- Per-record Data Encryption Keys (DEKs) wrapped with user's Key Encryption Key (KEK) — **Planned** (today: single key per vault operation, no DEK/KEK hierarchy)
+- KEK derived client-side from passphrase -- **never transmitted** — **Planned** (today: key derivation runs server-side via `/api/v1/crypto/derive-key`; client-side derivation is roadmap)
+- Optional **Shamir's Secret Sharing** (3-of-5) for key recovery — **Planned**
 - Server compromise yields ciphertext only
 
 See [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for the full threat model.
