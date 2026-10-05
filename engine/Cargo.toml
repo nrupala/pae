@@ -44,7 +44,9 @@ anyhow = "1"
 dotenvy = "0.15"
 
 [dev-dependencies]
-axum-test = "16"
+# axum-test 17.x is the axum 0.8 line (16.x targets axum 0.7 — mixing them
+# puts two axum versions in the graph and breaks IntoTransportLayer).
+axum-test = "17"
 tokio-test = "0.4"
 approx = "0.5"
 tempfile = "3"
