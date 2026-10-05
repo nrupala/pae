@@ -441,7 +441,7 @@ async def compute_risk(portfolio_id: str = Query(...)) -> Any:
     if not holdings_data:
         raise HTTPException(status_code=404, detail="No holdings found for this portfolio")
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
         try:
             resp = await client.post(
                 f"{RUST_ENGINE_URL}/api/v1/portfolio/risk",
@@ -464,7 +464,7 @@ async def compute_metrics(portfolio_id: str = Query(...)) -> Any:
     if not holdings_data:
         raise HTTPException(status_code=404, detail="No holdings found for this portfolio")
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
         try:
             resp = await client.post(
                 f"{RUST_ENGINE_URL}/api/v1/portfolio/metrics",
@@ -519,6 +519,224 @@ async def compute_carry(req: CarryRequest) -> dict[str, Any]:
             for p in result.positions
         ],
     }
+
+
+# --- Return series, factor decomposition, Monte Carlo, stress (UI views) ---
+
+
+def _portfolio_period_returns(portfolio_id: str) -> tuple[list[float], int]:
+    """Build the weight-weighted portfolio return series from holdings.
+
+    Uses each holding's stored returns series (returns_json), truncated to the
+    longest common tail across holdings, weighted by current market-value
+    weights. Returns (series, n_periods). Raises HTTPException on empty data.
+    """
+    database = get_db()
+    holdings = database.get_holdings(portfolio_id=portfolio_id)
+    if not holdings:
+        raise HTTPException(status_code=404, detail="No holdings found")
+
+    total_value = sum(h.market_value for h in holdings)
+    if total_value <= 0:
+        raise HTTPException(status_code=404, detail="Portfolio has no market value")
+
+    series_list: list[list[float]] = []
+    weights: list[float] = []
+    for h in holdings:
+        try:
+            rets = json.loads(h.returns_json)
+        except (json.JSONDecodeError, TypeError):
+            rets = []
+        clean = [float(r) for r in rets if isinstance(r, (int, float)) and r == r]
+        if not clean:
+            continue
+        series_list.append(clean)
+        weights.append(h.market_value / total_value)
+
+    if not series_list:
+        raise HTTPException(
+            status_code=422, detail="Holdings have no usable return series"
+        )
+
+    n = min(len(s) for s in series_list)
+    tails = [s[-n:] for s in series_list]
+    wsum = sum(weights)
+    portfolio = [
+        sum(tails[i][t] * weights[i] for i in range(len(tails))) / wsum
+        for t in range(n)
+    ]
+    return portfolio, n
+
+
+def _cumulative_growth(period_returns: list[float]) -> list[float]:
+    out: list[float] = []
+    value = 1.0
+    for r in period_returns:
+        value *= 1.0 + r
+        out.append(value)
+    return out
+
+
+def _drawdown_series(cumulative: list[float]) -> list[float]:
+    out: list[float] = []
+    peak = cumulative[0] if cumulative else 1.0
+    for v in cumulative:
+        if v > peak:
+            peak = v
+        out.append((v - peak) / peak if peak else 0.0)
+    return out
+
+
+@app.get("/api/v1/analytics/series")
+async def portfolio_series(portfolio_id: str = Query(...)) -> dict[str, Any]:
+    """Per-period portfolio returns plus cumulative growth and drawdown series.
+
+    Python-native (no Rust engine needed). Powers the risk-view drawdown chart
+    and the performance-vs-benchmark chart's portfolio leg.
+    """
+    portfolio, n = _portfolio_period_returns(portfolio_id)
+    cumulative = _cumulative_growth(portfolio)
+    return {
+        "n_periods": n,
+        "period_returns": portfolio,
+        "cumulative": cumulative,
+        "drawdown": _drawdown_series(cumulative),
+        "note": (
+            "Weight-weighted series from holdings' stored returns, "
+            "truncated to the common tail."
+        ),
+    }
+
+
+@app.post("/api/v1/analytics/factor")
+async def factor_decomposition(portfolio_id: str = Query(...)) -> dict[str, Any]:
+    """Fama-French 5-factor OLS decomposition of the portfolio return series.
+
+    Python-native. Factor data comes from the Ken French data library via
+    FactorAdapter (cached); the series are aligned to the overlapping tail.
+    Also returns the market-factor (Mkt-RF + RF) cumulative series as the
+    performance-chart benchmark leg.
+    """
+    import numpy as np
+
+    from pae.data.factors import FactorAdapter, FactorDataError
+    from pae.models.factor import FactorError, decompose
+
+    portfolio, n = _portfolio_period_returns(portfolio_id)
+
+    try:
+        factors = FactorAdapter().get_ff5_factors()
+    except FactorDataError as exc:
+        raise HTTPException(
+            status_code=502, detail=f"Factor data unavailable: {exc}"
+        ) from exc
+
+    factor_names = ["Mkt-RF", "SMB", "HML", "RMW", "CMA"]
+    m = min(n, min(len(factors[name].returns) for name in factor_names))
+    if m < 12:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Insufficient overlapping periods for OLS (have {m}, need >= 12)",
+        )
+    port = portfolio[-m:]
+    factor_rets = {name: factors[name].returns[-m:] for name in factor_names}
+
+    try:
+        result = decompose(
+            np.asarray(port, dtype=np.float64),
+            {
+                name: np.asarray(rets, dtype=np.float64)
+                for name, rets in factor_rets.items()
+            },
+        )
+    except (ValueError, FactorError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    rf = factors["RF"].returns[-m:]
+    market_total = [a + b for a, b in zip(factor_rets["Mkt-RF"], rf)]
+
+    return {
+        "n_periods": m,
+        "alpha": result.alpha,
+        "alpha_t_stat": result.alpha_t_stat,
+        "r_squared": result.r_squared,
+        "residual_risk_pct": result.residual_risk_pct,
+        "exposures": [
+            {
+                "factor_name": e.factor_name,
+                "beta": e.beta,
+                "t_stat": e.t_stat,
+                "contribution_pct": e.contribution_pct,
+            }
+            for e in result.exposures
+        ],
+        "portfolio_cumulative": _cumulative_growth(port),
+        "benchmark_cumulative": _cumulative_growth(market_total),
+        "benchmark_name": "Fama-French market factor (Mkt-RF + RF)",
+        "factor_source": "Ken French data library, Fama-French 5-factor monthly",
+        "note": (
+            "Series aligned to the overlapping tail of holding returns and "
+            "monthly factor data; treat as educational, not precise attribution."
+        ),
+    }
+
+
+async def _proxy_engine_post(path: str, payload: dict[str, Any]) -> Any:
+    """POST to the Rust engine and return its JSON, mapping failures to HTTP."""
+    async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
+        try:
+            resp = await client.post(
+                f"{RUST_ENGINE_URL}{path}", json=payload
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.ConnectError as exc:
+            raise HTTPException(
+                status_code=502, detail="Rust engine not reachable"
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(
+                status_code=exc.response.status_code, detail=exc.response.text
+            ) from exc
+
+
+@app.post("/api/v1/analytics/montecarlo")
+async def run_montecarlo(
+    portfolio_id: str = Query(...),
+    num_simulations: int = Query(default=1000, ge=100, le=100000),
+    time_horizon_months: int = Query(default=12, ge=1, le=120),
+) -> Any:
+    """Monte Carlo percentile fan via the Rust engine. Powers the scenario view."""
+    database = get_db()
+    holdings_data = database.get_holdings_for_engine(portfolio_id)
+    if not holdings_data:
+        raise HTTPException(status_code=404, detail="No holdings found for this portfolio")
+    summary = database.get_portfolio_summary(portfolio_id)
+    return await _proxy_engine_post(
+        "/api/v1/portfolio/montecarlo",
+        {
+            "holdings": holdings_data,
+            "num_simulations": num_simulations,
+            "time_horizon_months": time_horizon_months,
+            "initial_value": summary["total_market_value"],
+        },
+    )
+
+
+@app.post("/api/v1/analytics/stress")
+async def run_stress(
+    portfolio_id: str = Query(...),
+    scenario: str = Query(default="2008"),
+) -> Any:
+    """Stress-test scenario via the Rust engine. Powers the scenario view."""
+    database = get_db()
+    holdings_data = database.get_holdings_for_engine(portfolio_id)
+    if not holdings_data:
+        raise HTTPException(status_code=404, detail="No holdings found for this portfolio")
+    return await _proxy_engine_post(
+        "/api/v1/portfolio/stress",
+        {"holdings": holdings_data, "scenario": scenario},
+    )
 
 
 # --- Portfolio Dashboard (Aggregated) ---
