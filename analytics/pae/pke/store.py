@@ -31,7 +31,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import sqlite_vec  # type: ignore[import-untyped]
+import sqlite_vec
 
 from pae.pke import embeddings
 from pae.pke import ingest as ingest_mod

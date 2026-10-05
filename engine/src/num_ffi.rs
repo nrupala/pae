@@ -486,9 +486,8 @@ mod tests {
             .map(|j| {
                 (0..m)
                     .map(|i| {
-                        let x = (i as f64 * 0.37 + j as f64 * 1.7).sin()
-                            + 0.5 * ((i * (j + 3)) as f64 * 0.11).cos();
-                        x
+                        (i as f64 * 0.37 + j as f64 * 1.7).sin()
+                            + 0.5 * ((i * (j + 3)) as f64 * 0.11).cos()
                     })
                     .collect()
             })
@@ -576,7 +575,7 @@ mod tests {
 
     #[test]
     fn test_correlation_constant_series_is_zero() {
-        let data = vec![vec![0.01; 20], vec![0.02, 0.03, 0.01, 0.04, 0.02, 0.03, 0.01, 0.04, 0.02, 0.03, 0.01, 0.04, 0.02, 0.03, 0.01, 0.04, 0.02, 0.03, 0.01, 0.05]];
+        let data = [vec![0.01; 20], vec![0.02, 0.03, 0.01, 0.04, 0.02, 0.03, 0.01, 0.04, 0.02, 0.03, 0.01, 0.04, 0.02, 0.03, 0.01, 0.04, 0.02, 0.03, 0.01, 0.05]];
         let refs: Vec<&[f64]> = data.iter().map(|s| s.as_slice()).collect();
         let corr = correlation_matrix(&refs).unwrap();
         assert_eq!(corr[0][0], 1.0);
@@ -605,21 +604,21 @@ mod tests {
         assert!(max_abs_diff(&cov, &rust_covariance(&data)) < 1e-12);
 
         // Cholesky of a known SPD matrix.
-        let l = cholesky(&vec![vec![4.0, 2.0], vec![2.0, 3.0]]).unwrap();
+        let l = cholesky(&[vec![4.0, 2.0], vec![2.0, 3.0]]).unwrap();
         assert!((l[0][0] - 2.0).abs() < 1e-12);
         assert!((l[1][0] - 1.0).abs() < 1e-12);
         assert!((l[1][1] - 2.0_f64.sqrt()).abs() < 1e-12);
         assert_eq!(l[0][1], 0.0);
 
         // Eigenvalues of diag(2, 5).
-        let w = eigen_sym(&vec![vec![2.0, 0.0], vec![0.0, 5.0]]).unwrap();
+        let w = eigen_sym(&[vec![2.0, 0.0], vec![0.0, 5.0]]).unwrap();
         assert!((w[0] - 2.0).abs() < 1e-12 && (w[1] - 5.0).abs() < 1e-12);
     }
 
     #[test]
     fn test_cholesky_rejects_non_positive_definite() {
         // [[1, 2], [2, 1]] has eigenvalues 3 and -1: not PD.
-        let r = cholesky(&vec![vec![1.0, 2.0], vec![2.0, 1.0]]);
+        let r = cholesky(&[vec![1.0, 2.0], vec![2.0, 1.0]]);
         assert_eq!(r, Err(NumError::NativeCallFailed));
     }
 
@@ -703,6 +702,6 @@ mod tests {
         assert!(bonds::ytm(&t, &cf, 0.0).is_none());
         assert!(bonds::macaulay_duration(&t, &cf, -1.0).is_none());
         assert!(bonds::convexity(&[], &[], 0.05).is_none());
-        assert!(bonds::npv(&cf, &vec![1.0; 9]).is_none()); // length mismatch
+        assert!(bonds::npv(&cf, &[1.0; 9]).is_none()); // length mismatch
     }
 }

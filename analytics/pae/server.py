@@ -29,8 +29,8 @@ from pydantic import BaseModel, Field
 from pae.auth import api_key_or_none
 from pae.mcp import TOOL_SPECS, get_tool_manifest, run_agent_tool
 from pae.mcp.tools import DISCLOSURE, PAETools
-from pae.models.carry import analyze_carry
 from pae.models.brinson import attribute as brinson_attribute
+from pae.models.carry import analyze_carry
 from pae.models.optimize import OptimizeError, holdings_to_inputs, optimize
 from pae.storage.csv_import import import_csv_string
 from pae.storage.db import (

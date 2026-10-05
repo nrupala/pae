@@ -39,16 +39,15 @@ PAE is an open-source tool that aggregates portfolio data, runs risk analytics, 
                                   |
                           +-------+-------+
                           | C Numerical   |
-                          | (Planned)     |
                           | BLAS/LAPACK   |
-                          | QuantLib (FFI)|
+                          | Bond analytics|
                           +-------+-------+
 ```
 
 Three languages, each doing what it does best:
 - **Rust** (hot path): Risk calculations, Monte Carlo, crypto vault, API server
-- **Python** (research layer): Factor models, portfolio optimization (**Planned** — optimizer integration not yet implemented), PKE, decision intelligence
-- **C** (primitives, **Planned**): BLAS/LAPACK matrix ops, QuantLib bond pricing via FFI — roadmap item, not yet implemented (numerics today are pure Rust via `ndarray`/`statrs`)
+- **Python** (research layer): Factor models, portfolio optimization (max-Sharpe, min-variance, and risk-parity mixes + efficient frontier), PKE, decision intelligence
+- **C** (primitives): BLAS/LAPACK matrix ops and bond analytics — `engine/c/pae_num.c` (covariance via `dgemm_`, Cholesky via `dpotrf_`, symmetric eigendecomposition via `dsyev_`, exposed through safe Rust FFI in `engine/src/num_ffi.rs`; the correlation matrix is computed through this path by default) and `engine/c/pae_bonds.c` (discount-curve NPV, yield-to-maturity, duration, convexity — standard bond mathematics following QuantLib's bond methodology; served at `POST /api/v1/analytics/bond`). Linking the full QuantLib C++ library was probed and deliberately not taken: ~436k LOC / ~2,400 files plus a Boost dependency and hours-long builds, for analytics the engine needs in ~200 lines of standard math (probe: QuantLib is modified-BSD, license-compatible with AGPL-3.0, but disproportionate here).
 - **Vanilla TypeScript** (presentation): Web Components, Canvas/SVG charts, < 200KB total
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full details.
@@ -57,9 +56,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full details.
 
 - **AES-256-GCM** encryption for all stored data
 - **Argon2id** key derivation (600K iterations, 64MB memory, 4 threads)
-- Per-record Data Encryption Keys (DEKs) wrapped with user's Key Encryption Key (KEK) — **Planned** (today: single key per vault operation, no DEK/KEK hierarchy)
+- Per-vault Data Encryption Keys (DEKs) wrapped with user's Key Encryption Key (KEK) — random 32-byte DEK generated client-side, wrapped with the KEK via AES-256-GCM (WebCrypto); versioned v2 envelope stored opaquely server-side (`ui/src/crypto/vault-client.ts`, `GET/POST /api/v1/crypto/dek-envelope`); v1 vaults (direct-KEK) remain readable. Per-record DEKs remain a documented extension via the envelope's `kid` field.
 - KEK derived client-side from passphrase — **never transmitted** (`ui/src/crypto/vault-client.ts`; `POST /api/v1/crypto/derive-key` was removed 2026-10-05 — no server-side derivation path exists)
-- Optional **Shamir's Secret Sharing** (3-of-5) for key recovery — **Planned**
+- Optional **Shamir's Secret Sharing** (3-of-5) for key recovery — implemented client-side (`ui/src/crypto/shamir.ts`); the KEK never leaves the browser
 - Server compromise yields ciphertext only
 
 See [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for the full threat model.

@@ -314,11 +314,11 @@ mod tests {
         let matrix = native.unwrap();
         // Non-trivial values: a stubbed kernel cannot produce these.
         assert!(matrix.iter().flatten().any(|&v| v.abs() > 0.01 && v.abs() < 1.0));
-        for i in 0..5 {
-            assert_eq!(matrix[i][i], 1.0);
-            for j in 0..5 {
-                assert!((matrix[i][j] - matrix[j][i]).abs() < 1e-15, "symmetric");
-                assert!(matrix[i][j] >= -1.0 && matrix[i][j] <= 1.0, "clamped");
+        for (i, row) in matrix.iter().enumerate() {
+            assert_eq!(row[i], 1.0);
+            for (j, v) in row.iter().enumerate() {
+                assert!((v - matrix[j][i]).abs() < 1e-15, "symmetric");
+                assert!(*v >= -1.0 && *v <= 1.0, "clamped");
             }
         }
     }

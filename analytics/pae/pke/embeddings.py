@@ -9,7 +9,7 @@ and every embedding after that is computed locally.
     We evaluated fastembed first, per the Phase 4 brief, and it is suitable:
     ONNX runtime only, no torch, ~67 MB model, 384 dimensions, quality on par
     with the classic MiniLM baselines for retrieval. Alternatives rejected:
-    sentence-transformers (already in pyproject but unused; drags in torch,
+    sentence-transformers (rejected; drags in torch,
     ~2 GB — violates the dependency-light rule), hosted APIs (OpenAI/Cohere
     embeddings — violate the PKE zero-knowledge posture: document text would
     leave the machine). If fastembed ever becomes unsuitable, the next pick is
