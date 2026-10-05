@@ -79,6 +79,10 @@ class PaeApp extends HTMLElement {
     const routeComponents: Record<string, string> = {
       'dashboard': '<pae-dashboard></pae-dashboard>',
       'import': '<pae-import></pae-import>',
+      'risk': '<pae-risk></pae-risk>',
+      'factors': '<pae-factors></pae-factors>',
+      'montecarlo': '<pae-scenarios view="montecarlo"></pae-scenarios>',
+      'stress': '<pae-scenarios view="stress"></pae-scenarios>',
     };
 
     const comingSoon = `
@@ -153,6 +157,15 @@ class PaeApp extends HTMLElement {
         <main class="pae-main">
           <pae-dashboard></pae-dashboard>
         </main>
+
+        <nav class="pae-mobile-nav" aria-label="Mobile navigation">
+          <a class="nav-item" href="#dashboard">Dashboard</a>
+          <a class="nav-item" href="#risk">Risk</a>
+          <a class="nav-item" href="#factors">Factors</a>
+          <a class="nav-item" href="#montecarlo">Monte Carlo</a>
+          <a class="nav-item" href="#stress">Stress</a>
+          <a class="nav-item" href="#import">Import</a>
+        </nav>
       </div>
 
       <style>
@@ -182,6 +195,26 @@ class PaeApp extends HTMLElement {
         .nav-item:focus-visible {
           outline: 2px solid var(--accent-primary);
           outline-offset: 2px;
+        }
+        .pae-mobile-nav {
+          display: none;
+        }
+        @media (max-width: 1024px) {
+          .pae-mobile-nav {
+            display: flex;
+            gap: 4px;
+            overflow-x: auto;
+            padding: var(--space-2);
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            position: sticky;
+            bottom: 0;
+            z-index: 10;
+          }
+          .pae-mobile-nav .nav-item {
+            white-space: nowrap;
+            flex-shrink: 0;
+          }
         }
       </style>
     `;
