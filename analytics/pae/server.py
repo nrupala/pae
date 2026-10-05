@@ -30,6 +30,7 @@ from pae.auth import api_key_or_none
 from pae.mcp import TOOL_SPECS, get_tool_manifest, run_agent_tool
 from pae.mcp.tools import DISCLOSURE, PAETools
 from pae.models.carry import analyze_carry
+from pae.models.brinson import attribute as brinson_attribute
 from pae.models.optimize import OptimizeError, holdings_to_inputs, optimize
 from pae.storage.csv_import import import_csv_string
 from pae.storage.db import (
@@ -159,6 +160,18 @@ class OptimizeRequest(BaseModel):
     risk_free_rate: float = 0.0
     frontier_points: int = Field(default=25, ge=2, le=100)
 
+
+class AttributionSegment(BaseModel):
+    segment: str = Field(min_length=1, max_length=200)
+    weight: float
+    segment_return: float = Field(
+        description="Period return as a decimal fraction (0.05 = 5%)"
+    )
+
+
+class AttributionRequest(BaseModel):
+    portfolio_segments: list[AttributionSegment] = Field(min_length=1)
+    benchmark_segments: list[AttributionSegment] = Field(min_length=1)
 
 # --- Error Handlers ---
 
@@ -595,6 +608,62 @@ async def optimize_portfolio_endpoint(req: OptimizeRequest) -> dict[str, Any]:
     body["disclosure"] = DISCLOSURE
     return body
 
+
+@app.post("/api/v1/analytics/attribution")
+async def compute_attribution(req: AttributionRequest) -> dict[str, Any]:
+    """Brinson-Hood-Beebower attribution of portfolio vs. benchmark.
+
+    Python-native. Decomposes the active return into allocation, selection,
+    and interaction effects per segment. Educational analytics only —
+    explains what drove the difference vs. the benchmark; no investment
+    advice and no recommendations.
+    """
+    try:
+        result = brinson_attribute(
+            [
+                {
+                    "segment": s.segment,
+                    "weight": s.weight,
+                    "return": s.segment_return,
+                }
+                for s in req.portfolio_segments
+            ],
+            [
+                {
+                    "segment": s.segment,
+                    "weight": s.weight,
+                    "return": s.segment_return,
+                }
+                for s in req.benchmark_segments
+            ],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return {
+        "disclosure": DISCLOSURE,
+        "method": "Brinson-Hood-Beebower (arithmetic)",
+        "portfolio_return": result.portfolio_return,
+        "benchmark_return": result.benchmark_return,
+        "active_return": result.active_return,
+        "total_allocation": result.total_allocation,
+        "total_selection": result.total_selection,
+        "total_interaction": result.total_interaction,
+        "segments": [
+            {
+                "segment": s.segment,
+                "portfolio_weight": s.portfolio_weight,
+                "benchmark_weight": s.benchmark_weight,
+                "portfolio_return": s.portfolio_return,
+                "benchmark_return": s.benchmark_return,
+                "allocation_effect": s.allocation_effect,
+                "selection_effect": s.selection_effect,
+                "interaction_effect": s.interaction_effect,
+                "active_contribution": s.active_contribution,
+            }
+            for s in result.segments
+        ],
+    }
 
 # --- Return series, factor decomposition, Monte Carlo, stress (UI views) ---
 
