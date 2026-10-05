@@ -56,6 +56,22 @@ pub struct KdfParamsResponse {
     pub salt_b64: String,
 }
 
+/// Request body for `POST /api/v1/crypto/dek-envelope`. The envelope is
+/// the client's KEK-wrapped DEK as a JSON string — opaque ciphertext to
+/// the engine. Unknown fields (e.g. "passphrase", "kek") are rejected.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SetDekEnvelopeRequest {
+    pub envelope: String,
+}
+
+/// Response body for `GET /api/v1/crypto/dek-envelope`. `envelope` is
+/// `None` for v1 vaults that have no DEK envelope yet.
+#[derive(Serialize)]
+pub struct DekEnvelopeResponse {
+    pub envelope: Option<String>,
+}
+
 /// Standard error response body for crypto endpoints.
 #[derive(Serialize)]
 pub struct CryptoErrorResponse {
@@ -165,4 +181,79 @@ pub async fn decrypt(
     let plaintext = vault::decrypt(&req.ciphertext_b64, &req.nonce_b64, &req.key_b64)
         .map_err(into_error_response)?;
     Ok(Json(DecryptResponse { plaintext }))
+}
+
+/// GET /api/v1/crypto/dek-envelope
+///
+/// Returns the stored v2 DEK envelope JSON (opaque to the engine — the
+/// client's KEK-wrapped DEK), or `{"envelope": null}` when the vault has
+/// no envelope yet (v1 vaults: records encrypted directly with the
+/// KEK-derived key).
+pub async fn get_dek_envelope(
+    State(store): State<Arc<Store>>,
+) -> Result<Json<DekEnvelopeResponse>, (StatusCode, Json<CryptoErrorResponse>)> {
+    let envelope = store.get_dek_envelope().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(CryptoErrorResponse {
+                error: format!("failed to load DEK envelope: {e}"),
+                code: "DEK_ENVELOPE_UNAVAILABLE".to_string(),
+            }),
+        )
+    })?;
+    Ok(Json(DekEnvelopeResponse { envelope }))
+}
+
+/// Validate the envelope JSON shape opaquely: it must be an object with
+/// `v == 2` and non-empty base64 wrap fields. The engine cannot (and must
+/// not) inspect the wrapped key material — this is a client-bug guard,
+/// not a cryptographic check.
+fn validate_envelope_shape(envelope: &str) -> Result<(), String> {
+    let v: serde_json::Value =
+        serde_json::from_str(envelope).map_err(|e| format!("envelope is not valid JSON: {e}"))?;
+    let obj = v
+        .as_object()
+        .ok_or_else(|| "envelope must be a JSON object".to_string())?;
+    if obj.get("v").and_then(serde_json::Value::as_u64) != Some(2) {
+        return Err("envelope.v must be 2".to_string());
+    }
+    for field in ["wrapped_dek_b64", "dek_nonce_b64"] {
+        match obj.get(field).and_then(serde_json::Value::as_str) {
+            Some(s) if !s.is_empty() => {}
+            _ => return Err(format!("envelope.{field} must be a non-empty string")),
+        }
+    }
+    Ok(())
+}
+
+/// POST /api/v1/crypto/dek-envelope
+///
+/// Stores the client's KEK-wrapped DEK envelope verbatim. The envelope is
+/// opaque ciphertext — the engine never sees the passphrase, the KEK, or
+/// the unwrapped DEK. Returns 400 if the envelope JSON is malformed;
+/// unknown request fields (e.g. "passphrase", "kek") are rejected with
+/// 422 by `deny_unknown_fields`.
+pub async fn set_dek_envelope(
+    State(store): State<Arc<Store>>,
+    Json(req): Json<SetDekEnvelopeRequest>,
+) -> Result<StatusCode, (StatusCode, Json<CryptoErrorResponse>)> {
+    if let Err(msg) = validate_envelope_shape(&req.envelope) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(CryptoErrorResponse {
+                error: msg,
+                code: "INVALID_ENVELOPE".to_string(),
+            }),
+        ));
+    }
+    store.set_dek_envelope(&req.envelope).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(CryptoErrorResponse {
+                error: format!("failed to store DEK envelope: {e}"),
+                code: "DEK_ENVELOPE_UNAVAILABLE".to_string(),
+            }),
+        )
+    })?;
+    Ok(StatusCode::NO_CONTENT)
 }

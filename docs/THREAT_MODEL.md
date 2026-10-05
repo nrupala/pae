@@ -70,7 +70,7 @@
 | Server-side derivation | **REMOVED 2026-10-05** — `POST /api/v1/crypto/derive-key` deleted |
 | Key length | 256 bits |
 | Nonce | 96 bits, random per encryption |
-| DEK wrapping | **[NOT IMPLEMENTED]** — records are encrypted directly with the caller-supplied key. No per-record DEK/KEK hierarchy, no wrapping, no rotation exists. |
+| DEK wrapping | **Implemented (v2 envelope, 2026-10-05).** Per-vault DEK (random 32-byte) wrapped with the user's KEK via AES-256-GCM, all client-side (`ui/src/crypto/vault-client.ts`: `wrapDEK`/`unwrapDEK`); the versioned envelope (`{v:2, alg, kid, wrapped_dek_b64, dek_nonce_b64}`) is stored opaquely in the engine `meta` table (`dek_envelope_v2`, GET/POST `/api/v1/crypto/dek-envelope`). v1 vaults (records encrypted directly with the KEK-derived key) remain readable via `unlockVault`. Granularity rationale (per-vault, not per-record) is documented in `vault-client.ts`. |
 | Key recovery | **[NOT IMPLEMENTED]** — Shamir 3-of-5 was spec-only. Lost passphrase = inaccessible data. |
 | No server-side recovery | By design. Lost passphrase = inaccessible data. |
 | CORS | Restrictive: origin from `PAE_CORS_ORIGIN` (default `http://localhost:3000`), methods GET/POST, `Content-Type` header only |
@@ -92,6 +92,8 @@
    non-browser callers ignore it. Localhost deployment is the current
    access-control story; a hosted deployment needs real auth first.
 3. **No TLS in the engine.** See Man-in-the-Middle above.
-4. **Single-key model.** There is no DEK/KEK separation: one passphrase-
-   derived key protects everything. Key rotation means re-encrypting all
-   records under a new key — no tooling for that exists yet.
+4. **Single-DEK model.** The vault uses one per-vault DEK wrapped by the KEK
+   (per-vault, not per-record — the granularity justification is in
+   `ui/src/crypto/vault-client.ts`). KEK rotation re-wraps only the envelope;
+   DEK rotation still means re-encrypting all records under the new DEK — no
+   rotation tooling exists yet.
