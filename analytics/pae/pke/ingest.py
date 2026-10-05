@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pae.pke import embeddings
+
 logger = logging.getLogger(__name__)
 
 THEMES = [
@@ -192,6 +194,43 @@ def generate_chunk_id(source: str, text: str) -> str:
     """
     content = f"{source}:{text[:200]}"
     return hashlib.sha256(content.encode()).hexdigest()[:16]
+
+
+def embed_chunks(
+    chunks: list[KnowledgeChunk],
+    embed_fn: embeddings.EmbeddingFn | None = None,
+    batch_size: int = embeddings.EMBEDDING_BATCH_SIZE,
+) -> list[KnowledgeChunk]:
+    """Generate embeddings for chunks in place, batched.
+
+    Embeddings are produced LOCALLY by the ONNX model in
+    :mod:`pae.pke.embeddings` — chunk text never leaves the machine. Vectors
+    are L2-normalized so cosine similarity is a dot product.
+
+    Args:
+        chunks: Knowledge chunks to embed; ``chunk.embedding`` is populated
+            in place and the same list is returned.
+        embed_fn: Optional injectable embedding function (tests use a
+            deterministic fake to avoid the model download).
+        batch_size: Batch size for the local ONNX session.
+
+    Returns:
+        The same chunk list, with ``embedding`` populated.
+
+    Raises:
+        EmbeddingsUnavailableError: If the local model cannot be loaded and no
+            ``embed_fn`` was supplied. Callers (see
+            :meth:`pae.pke.store.KnowledgeStore.add_chunks`) catch this and
+            store the chunks without vectors so keyword fallback still works.
+    """
+    if not chunks:
+        return chunks
+    texts = [chunk.text for chunk in chunks]
+    logger.info("PKE: embedding %d chunks locally (batched)", len(chunks))
+    vectors = embeddings.embed_texts(texts, batch_size=batch_size, embed_fn=embed_fn)
+    for chunk, vector in zip(chunks, vectors, strict=True):
+        chunk.embedding = vector
+    return chunks
 
 
 def classify_themes(text: str) -> list[str]:
