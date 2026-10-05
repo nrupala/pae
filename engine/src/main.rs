@@ -69,6 +69,8 @@ fn create_app(store: Arc<storage::Store>) -> Router {
         .route("/api/v1/crypto/kdf-params", get(api::crypto_api::kdf_params))
         .route("/api/v1/crypto/encrypt", post(api::crypto_api::encrypt))
         .route("/api/v1/crypto/decrypt", post(api::crypto_api::decrypt))
+        .route("/api/v1/crypto/dek-envelope", get(api::crypto_api::get_dek_envelope))
+        .route("/api/v1/crypto/dek-envelope", post(api::crypto_api::set_dek_envelope))
         .with_state(store);
 
     // Routes without shared state (stateless compute)
@@ -186,45 +188,67 @@ mod tests {
         );
     }
 
-    /// deny_unknown_fields: a "passphrase" field on /encrypt is rejected.
+    /// deny_unknown_fields: key-material fields on /encrypt are rejected.
     /// (axum 0.8 maps serde deserialization failures to 422.)
     #[tokio::test]
-    async fn encrypt_rejects_passphrase_field() {
+    async fn encrypt_rejects_key_material_fields() {
         let server = test_server();
-        let resp = server
-            .post("/api/v1/crypto/encrypt")
-            .json(&serde_json::json!({
-                "plaintext": "hello",
-                "key_b64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-                "passphrase": "must-not-be-accepted",
-            }))
-            .await;
-        assert_eq!(
-            resp.status_code().as_u16(),
-            422,
-            "encrypt must reject unknown fields"
-        );
+        let base = serde_json::json!({
+            "plaintext": "hello",
+            "key_b64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        });
+        for field in ["passphrase", "kek", "dek", "unwrapped_dek"] {
+            let mut body = base.clone();
+            body[field] = serde_json::json!("must-not-be-accepted");
+            let resp = server.post("/api/v1/crypto/encrypt").json(&body).await;
+            assert_eq!(
+                resp.status_code().as_u16(),
+                422,
+                "encrypt must reject field '{field}'"
+            );
+        }
     }
 
-    /// deny_unknown_fields: a "passphrase" field on /decrypt is rejected.
-    /// (axum 0.8 maps serde deserialization failures to 422.)
+    /// deny_unknown_fields: key-material fields on /decrypt are rejected.
     #[tokio::test]
-    async fn decrypt_rejects_passphrase_field() {
+    async fn decrypt_rejects_key_material_fields() {
         let server = test_server();
-        let resp = server
-            .post("/api/v1/crypto/decrypt")
-            .json(&serde_json::json!({
-                "ciphertext_b64": "AA==",
-                "nonce_b64": "AAAAAAAAAAAAAAAA",
-                "key_b64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-                "passphrase": "must-not-be-accepted",
-            }))
-            .await;
-        assert_eq!(
-            resp.status_code().as_u16(),
-            422,
-            "decrypt must reject unknown fields"
-        );
+        let base = serde_json::json!({
+            "ciphertext_b64": "AA==",
+            "nonce_b64": "AAAAAAAAAAAAAAAA",
+            "key_b64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        });
+        for field in ["passphrase", "kek", "dek", "unwrapped_dek"] {
+            let mut body = base.clone();
+            body[field] = serde_json::json!("must-not-be-accepted");
+            let resp = server.post("/api/v1/crypto/decrypt").json(&body).await;
+            assert_eq!(
+                resp.status_code().as_u16(),
+                422,
+                "decrypt must reject field '{field}'"
+            );
+        }
+    }
+
+    /// deny_unknown_fields: key-material fields on /dek-envelope are rejected.
+    #[tokio::test]
+    async fn dek_envelope_rejects_key_material_fields() {
+        let server = test_server();
+        for field in ["passphrase", "kek", "dek", "unwrapped_dek"] {
+            let mut body = serde_json::json!({
+                "envelope": "{\"v\":2,\"wrapped_dek_b64\":\"AA==\",\"dek_nonce_b64\":\"AAAAAAAAAAAAAAAA\"}",
+            });
+            body[field] = serde_json::json!("must-not-be-accepted");
+            let resp = server
+                .post("/api/v1/crypto/dek-envelope")
+                .json(&body)
+                .await;
+            assert_eq!(
+                resp.status_code().as_u16(),
+                422,
+                "dek-envelope must reject field '{field}'"
+            );
+        }
     }
 
     /// The oracle endpoints still work for well-formed bodies.
@@ -267,5 +291,65 @@ mod tests {
             salt1,
             "kdf salt must be stable across calls"
         );
+    }
+
+    /// GET /dek-envelope on a fresh vault returns {"envelope": null}.
+    #[tokio::test]
+    async fn dek_envelope_absent_returns_null() {
+        let server = test_server();
+        let resp = server.get("/api/v1/crypto/dek-envelope").await;
+        assert_eq!(resp.status_code().as_u16(), 200);
+        let body: serde_json::Value = resp.json();
+        assert!(body["envelope"].is_null(), "fresh vault has no envelope");
+    }
+
+    /// POST stores the envelope verbatim; GET returns it back unchanged.
+    /// The engine treats it as opaque bytes (round-trip integrity only).
+    #[tokio::test]
+    async fn dek_envelope_set_then_get_roundtrip() {
+        let server = test_server();
+        let envelope = "{\"v\":2,\"alg\":\"AES-256-GCM\",\"kid\":\"vault\",\
+            \"wrapped_dek_b64\":\"QUJDREVGR0g=\",\"dek_nonce_b64\":\"AAAAAAAAAAAAAAAA\"}";
+        let set_resp = server
+            .post("/api/v1/crypto/dek-envelope")
+            .json(&serde_json::json!({ "envelope": envelope }))
+            .await;
+        assert_eq!(set_resp.status_code().as_u16(), 204);
+
+        let get_resp = server.get("/api/v1/crypto/dek-envelope").await;
+        assert_eq!(get_resp.status_code().as_u16(), 200);
+        let body: serde_json::Value = get_resp.json();
+        assert_eq!(
+            body["envelope"].as_str().expect("envelope is a string"),
+            envelope,
+            "envelope must round-trip verbatim"
+        );
+    }
+
+    /// POST rejects malformed envelopes with 400 (not 422 — the body shape
+    /// is fine, the envelope content is not).
+    #[tokio::test]
+    async fn dek_envelope_rejects_malformed() {
+        let server = test_server();
+        for (name, envelope) in [
+            ("non-json", "not-json{{{"),
+            ("non-object", "[1,2,3]"),
+            ("wrong-version", "{\"v\":1}"),
+            ("missing-v", "{\"wrapped_dek_b64\":\"AA==\",\"dek_nonce_b64\":\"AA==\"}"),
+            (
+                "empty-wrap-fields",
+                "{\"v\":2,\"wrapped_dek_b64\":\"\",\"dek_nonce_b64\":\"AAAAAAAAAAAAAAAA\"}",
+            ),
+        ] {
+            let resp = server
+                .post("/api/v1/crypto/dek-envelope")
+                .json(&serde_json::json!({ "envelope": envelope }))
+                .await;
+            assert_eq!(
+                resp.status_code().as_u16(),
+                400,
+                "dek-envelope must reject {name}"
+            );
+        }
     }
 }

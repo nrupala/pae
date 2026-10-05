@@ -34,6 +34,11 @@ const KDF_SALT_LEN: usize = 16;
 /// `meta` key under which the per-database KDF salt is persisted.
 const KDF_SALT_META_KEY: &str = "kdf_salt";
 
+/// `meta` key under which the v2 DEK envelope JSON is persisted. The
+/// value is opaque to the engine: the client's KEK-wrapped DEK
+/// (AES-256-GCM ciphertext), stored so clients can fetch it on unlock.
+const DEK_ENVELOPE_META_KEY: &str = "dek_envelope_v2";
+
 /// Errors that can occur in the storage layer.
 ///
 /// Mirrors the `thiserror`-based pattern used by `CryptoError`
@@ -385,6 +390,24 @@ impl Store {
             Self::meta_set(conn, KDF_SALT_META_KEY, &salt_b64)?;
             Ok(salt_b64)
         })
+    }
+
+    /// Read the stored v2 DEK envelope JSON. Returns `Ok(None)` when the
+    /// vault has no envelope yet (v1 vaults: records encrypted directly
+    /// with the KEK-derived key).
+    ///
+    /// The envelope is opaque ciphertext to the engine — the KEK-wrapped
+    /// DEK. The passphrase, the KEK, and the unwrapped DEK never touch the
+    /// server; this accessor just moves the client's bytes.
+    pub fn get_dek_envelope(&self) -> Result<Option<String>, StorageError> {
+        self.with_conn(|conn| Self::meta_get(conn, DEK_ENVELOPE_META_KEY))
+    }
+
+    /// Persist the v2 DEK envelope JSON verbatim (insert-or-replace).
+    /// Callers must pass the exact JSON the client produced; the engine
+    /// stores it opaquely and serves it back via `get_dek_envelope`.
+    pub fn set_dek_envelope(&self, envelope_json: &str) -> Result<(), StorageError> {
+        self.with_conn(|conn| Self::meta_set(conn, DEK_ENVELOPE_META_KEY, envelope_json))
     }
 
     // --- Accounts ---
@@ -914,8 +937,7 @@ mod tests {
     }
 
     #[test]
-    fn test_kdf_salt_stable_across_calls() {
-        let store = Store::open_in_memory().unwrap();
+    fn test_kdf_salt_stable_across_calls() {        let store = Store::open_in_memory().unwrap();
         let s1 = store.get_kdf_salt().unwrap();
         let s2 = store.get_kdf_salt().unwrap();
         assert_eq!(s1, s2, "KDF salt must be stable across calls");
@@ -934,5 +956,22 @@ mod tests {
         // Reopen the same file: the stored salt must come back unchanged.
         let s2 = Store::open(&path).unwrap().get_kdf_salt().unwrap();
         assert_eq!(s1, s2, "KDF salt must persist across restarts");
+    }
+
+    #[test]
+    fn test_dek_envelope_absent_then_roundtrip() {
+        let store = Store::open_in_memory().unwrap();
+        // Fresh vault: no envelope (v1).
+        assert_eq!(store.get_dek_envelope().unwrap(), None);
+
+        // Store verbatim; read back identical (engine is opaque here).
+        let env = "{\"v\":2,\"wrapped_dek_b64\":\"AA==\",\"dek_nonce_b64\":\"AA==\"}";
+        store.set_dek_envelope(env).unwrap();
+        assert_eq!(store.get_dek_envelope().unwrap().as_deref(), Some(env));
+
+        // Overwrite replaces.
+        let env2 = "{\"v\":2,\"wrapped_dek_b64\":\"AQ==\",\"dek_nonce_b64\":\"AQ==\"}";
+        store.set_dek_envelope(env2).unwrap();
+        assert_eq!(store.get_dek_envelope().unwrap().as_deref(), Some(env2));
     }
 }
