@@ -52,14 +52,14 @@ Error type for all cryptographic operations.
 |---------|-------------|
 | `InvalidBase64 { context }` | Input is not valid base64. `context` identifies which field. |
 | `InvalidKeyLength` | Decoded key is not 32 bytes. |
-| `InvalidSalt(String)` | Salt string is not valid base64 for Argon2. |
-| `DerivationFailed(String)` | Argon2 hashing failed. |
 | `EncryptionFailed(String)` | AES-GCM encryption failed. |
 | `DecryptionFailed` | AES-GCM decryption failed (wrong key or tampered data). |
 | `InvalidNonceLength(usize)` | Nonce is not 12 bytes. |
 | `InvalidUtf8` | Decrypted bytes are not valid UTF-8. |
-| `EmptyPassphrase` | Passphrase is empty string. |
-| `InvalidParams(String)` | Argon2 parameters are invalid. |
+
+> **Note (2026-10-05):** the passphrase-related variants (`InvalidSalt`,
+> `DerivationFailed`, `EmptyPassphrase`, `InvalidParams`) were removed with
+> the server-side derivation path. Key derivation is client-side only.
 
 ---
 

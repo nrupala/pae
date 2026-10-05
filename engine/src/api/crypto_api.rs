@@ -64,39 +64,29 @@ pub struct CryptoErrorResponse {
 }
 
 /// Map CryptoError to an HTTP status code.
-/// - Input validation errors (empty passphrase, bad base64, bad lengths) -> 400
+/// - Input validation errors (bad base64, bad lengths) -> 400
 /// - Processing failures (encryption/decryption failed) -> 422
-/// - Internal/unexpected errors -> 500
 fn crypto_error_to_status(err: &CryptoError) -> StatusCode {
     match err {
-        CryptoError::EmptyPassphrase
-        | CryptoError::InvalidBase64 { .. }
+        CryptoError::InvalidBase64 { .. }
         | CryptoError::InvalidKeyLength
-        | CryptoError::InvalidSalt(_)
         | CryptoError::InvalidNonceLength(_) => StatusCode::BAD_REQUEST,
 
         CryptoError::DecryptionFailed
         | CryptoError::EncryptionFailed(_)
-        | CryptoError::DerivationFailed(_)
         | CryptoError::InvalidUtf8 => StatusCode::UNPROCESSABLE_ENTITY,
-
-        CryptoError::InvalidParams(_) => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }
 
 /// Map a CryptoError to an error code string for the response body.
 fn crypto_error_code(err: &CryptoError) -> &'static str {
     match err {
-        CryptoError::EmptyPassphrase => "EMPTY_PASSPHRASE",
         CryptoError::InvalidBase64 { .. } => "INVALID_BASE64",
         CryptoError::InvalidKeyLength => "INVALID_KEY_LENGTH",
-        CryptoError::InvalidSalt(_) => "INVALID_SALT",
         CryptoError::InvalidNonceLength(_) => "INVALID_NONCE_LENGTH",
         CryptoError::DecryptionFailed => "DECRYPTION_FAILED",
         CryptoError::EncryptionFailed(_) => "ENCRYPTION_FAILED",
-        CryptoError::DerivationFailed(_) => "DERIVATION_FAILED",
         CryptoError::InvalidUtf8 => "INVALID_UTF8",
-        CryptoError::InvalidParams(_) => "INVALID_PARAMS",
     }
 }
 

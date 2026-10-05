@@ -15,12 +15,6 @@ pub enum CryptoError {
     #[error("Invalid key length: expected 32 bytes")]
     InvalidKeyLength,
 
-    #[error("Invalid salt: {0}")]
-    InvalidSalt(String),
-
-    #[error("Key derivation failed: {0}")]
-    DerivationFailed(String),
-
     #[error("Encryption failed: {0}")]
     EncryptionFailed(String),
 
@@ -32,12 +26,6 @@ pub enum CryptoError {
 
     #[error("Invalid UTF-8 in decrypted plaintext")]
     InvalidUtf8,
-
-    #[error("Empty passphrase is not allowed")]
-    EmptyPassphrase,
-
-    #[error("Invalid Argon2 parameters: {0}")]
-    InvalidParams(String),
 }
 
 // NOTE (2026-10-05, zero-knowledge fix): this module used to contain
@@ -47,9 +35,9 @@ pub enum CryptoError {
 // derivation now happens exclusively client-side
 // (ui/src/crypto/vault-client.ts) against the parameters served by
 // GET /api/v1/crypto/kdf-params. The server holds NO passphrase-
-// derivation code path. The `InvalidSalt` / `DerivationFailed` /
-// `EmptyPassphrase` / `InvalidParams` variants are kept because the
-// API error taxonomy still references them; no new code constructs them.
+// derivation code path, so the passphrase-related error variants
+// (InvalidSalt, DerivationFailed, EmptyPassphrase, InvalidParams)
+// were removed 2026-10-05 along with it.
 
 /// Encrypt plaintext with AES-256-GCM.
 ///
