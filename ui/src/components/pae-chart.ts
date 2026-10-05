@@ -1,15 +1,22 @@
 /**
- * PAE Chart Component.
- * Renders charts using HTML5 Canvas. Zero dependencies.
- * Supports: line, pie/donut.
+ * PAE Chart Component — SVG renderer, zero dependencies.
+ *
+ * Renders line, bar, pie/donut, area, and fan (percentile band) charts as
+ * inline SVG: crisp on retina, styleable via CSS, and serializable so
+ * rendered output can be captured for docs and the product site.
  *
  * @element pae-chart
- * @attr {string} type - Chart type: 'line' | 'bar' | 'pie'.
- * @attr {string} width - Canvas width in pixels (default: 400).
- * @attr {string} height - Canvas height in pixels (default: 300).
+ * @attr {string} type - 'line' | 'bar' | 'pie' | 'area' | 'fan'
+ * @attr {string} title - accessible chart title (rendered as <title>)
+ *
+ * Data is supplied via methods:
+ *   setSeries({labels, datasets, yLabel})   for line | bar | area
+ *   setPie(slices)                          for pie (donut)
+ *   setFan({labels, p5, p25, p50, p75, p95}) for fan
+ * getSVG() returns the current SVG markup string.
  */
 
-type ChartType = 'line' | 'bar' | 'pie';
+type ChartType = 'line' | 'bar' | 'pie' | 'area' | 'fan';
 
 interface ChartDataset {
   label: string;
@@ -20,6 +27,7 @@ interface ChartDataset {
 interface ChartData {
   labels: string[];
   datasets: ChartDataset[];
+  yLabel?: string;
 }
 
 interface PieSlice {
@@ -28,13 +36,46 @@ interface PieSlice {
   color: string;
 }
 
+interface FanData {
+  labels: string[];
+  p5: number[];
+  p25: number[];
+  p50: number[];
+  p75: number[];
+  p95: number[];
+  color: string;
+  yLabel?: string;
+}
+
+const PALETTE = [
+  '#38bdf8', '#a78bfa', '#f472b6', '#fbbf24', '#34d399',
+  '#fb7185', '#60a5fa', '#f97316', '#2dd4bf', '#e879f9',
+];
+
+function esc(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function fmtTick(v: number): string {
+  if (!Number.isFinite(v)) return '–';
+  const abs = Math.abs(v);
+  if (abs >= 1_000_000) return (v / 1_000_000).toFixed(1) + 'M';
+  if (abs >= 1_000) return (v / 1_000).toFixed(1) + 'K';
+  if (abs >= 100) return v.toFixed(0);
+  if (abs >= 1) return v.toFixed(1);
+  return v.toFixed(2);
+}
+
 class PaeChart extends HTMLElement {
   private shadow: ShadowRoot;
-  private canvas: HTMLCanvasElement | null = null;
-  private ctx: CanvasRenderingContext2D | null = null;
+  private svgMarkup: string = '';
 
   static get observedAttributes(): string[] {
-    return ['type', 'width', 'height'];
+    return ['type', 'title'];
   }
 
   constructor() {
@@ -50,157 +91,223 @@ class PaeChart extends HTMLElement {
     this.render();
   }
 
-  /**
-   * Parse a numeric attribute with a default fallback.
-   * Clamps to [minVal, maxVal] and rejects non-finite values.
-   */
-  private getNumericAttr(name: string, defaultVal: number, minVal: number, maxVal: number): number {
-    const raw = this.getAttribute(name);
-    if (raw === null) return defaultVal;
-    const parsed = parseInt(raw, 10);
-    if (!Number.isFinite(parsed)) return defaultVal;
-    return Math.max(minVal, Math.min(maxVal, parsed));
+  /** Current SVG markup (empty string until data is set). */
+  public getSVG(): string {
+    return this.svgMarkup;
+  }
+
+  private get type(): ChartType {
+    const t = this.getAttribute('type');
+    return t === 'bar' || t === 'pie' || t === 'area' || t === 'fan' ? t : 'line';
+  }
+
+  private get chartTitle(): string {
+    return this.getAttribute('title') || 'Chart';
   }
 
   private render(): void {
-    const width = this.getNumericAttr('width', 400, 50, 4000);
-    const height = this.getNumericAttr('height', 300, 50, 4000);
-
     this.shadow.innerHTML = `
       <style>
         :host { display: block; }
-        canvas {
-          width: 100%;
-          height: auto;
-          max-width: ${width}px;
-        }
+        .pae-chart-wrap { width: 100%; }
+        .pae-chart-wrap svg { width: 100%; height: auto; display: block; }
+        .pae-chart-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 8px;
+          font-size: 12px; color: var(--text-secondary, #94a3b8); }
+        .pae-chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+        .pae-chart-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
       </style>
-      <canvas width="${width}" height="${height}" role="img" aria-label="Chart"></canvas>
+      <div class="pae-chart-wrap" role="img" aria-label="${esc(this.chartTitle)}">
+        ${this.svgMarkup}
+        ${this.legendMarkup}
+      </div>
     `;
-
-    this.canvas = this.shadow.querySelector('canvas');
-    this.ctx = this.canvas?.getContext('2d') ?? null;
   }
 
-  /**
-   * Draw a line chart.
-   *
-   * @param data - Chart data with labels and datasets.
-   *   Each dataset.data array should be the same length as labels.
-   *   Non-finite values are skipped (gaps in the line).
-   */
-  public drawLine(data: ChartData): void {
-    if (!this.ctx || !this.canvas) return;
-    if (!data.datasets.length) return;
+  private legendMarkup: string = '';
 
-    const ctx = this.ctx;
-    const w = this.canvas.width;
-    const h = this.canvas.height;
-    const padding = { top: 20, right: 20, bottom: 40, left: 60 };
+  private finish(svg: string, legend: string): void {
+    this.svgMarkup = svg;
+    this.legendMarkup = legend;
+    this.render();
+  }
 
-    ctx.clearRect(0, 0, w, h);
+  private axesFrame(
+    w: number, h: number,
+    pad: { top: number; right: number; bottom: number; left: number },
+    minVal: number, maxVal: number,
+    yLabel?: string,
+  ): { inner: string; x: (i: number, n: number) => number; y: (v: number) => number } {
+    const range = maxVal - minVal || 1;
+    const y = (v: number) =>
+      pad.top + (h - pad.top - pad.bottom) * (1 - (v - minVal) / range);
+    const x = (i: number, n: number) =>
+      pad.left + (i / Math.max(n - 1, 1)) * (w - pad.left - pad.right);
 
-    const chartW = w - padding.left - padding.right;
-    const chartH = h - padding.top - padding.bottom;
-
-    // Collect all finite values for scale computation
-    const allValues = data.datasets
-      .flatMap(d => d.data)
-      .filter(v => Number.isFinite(v));
-
-    if (allValues.length === 0) return;
-
-    const minVal = Math.min(...allValues);
-    const maxVal = Math.max(...allValues);
-    const range = maxVal - minVal || 1; // avoid division by zero
-
-    // Draw grid lines
-    ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
-    ctx.lineWidth = 1;
+    let inner = '';
     for (let i = 0; i <= 4; i++) {
-      const y = padding.top + (chartH / 4) * i;
-      ctx.beginPath();
-      ctx.moveTo(padding.left, y);
-      ctx.lineTo(w - padding.right, y);
-      ctx.stroke();
+      const v = minVal + (range / 4) * i;
+      const yy = y(v);
+      inner += `<line x1="${pad.left}" y1="${yy.toFixed(1)}" x2="${w - pad.right}" y2="${yy.toFixed(1)}" stroke="rgba(148,163,184,0.25)" stroke-width="1"/>`;
+      inner += `<text x="${pad.left - 8}" y="${(yy + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="#94a3b8">${fmtTick(v)}</text>`;
     }
-
-    // Draw each dataset
-    for (const dataset of data.datasets) {
-      if (!dataset.data.length) continue;
-
-      ctx.strokeStyle = dataset.color;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-
-      const maxIdx = Math.max(dataset.data.length - 1, 1);
-      let pathStarted = false;
-
-      for (let i = 0; i < dataset.data.length; i++) {
-        const val = dataset.data[i];
-        if (!Number.isFinite(val)) continue; // skip NaN/Infinity gaps
-
-        const x = padding.left + (i / maxIdx) * chartW;
-        const y = padding.top + chartH - ((val - minVal) / range) * chartH;
-
-        if (!pathStarted) {
-          ctx.moveTo(x, y);
-          pathStarted = true;
-        } else {
-          ctx.lineTo(x, y);
-        }
-      }
-      ctx.stroke();
+    if (yLabel) {
+      inner += `<text x="12" y="${pad.top - 6}" font-size="10" fill="#94a3b8">${esc(yLabel)}</text>`;
     }
+    return { inner, x, y };
   }
 
-  /**
-   * Draw a donut/pie chart.
-   *
-   * @param data - Array of pie slices with label, value, and color.
-   *   Slices with non-positive or non-finite values are skipped.
-   *   If all slices are zero, nothing is drawn.
-   */
-  public drawPie(data: PieSlice[]): void {
-    if (!this.ctx || !this.canvas) return;
+  private legendFor(items: Array<{ label: string; color: string }>): string {
+    if (!items.length) return '';
+    return `<div class="pae-chart-legend">${items
+      .map(i => `<span><i style="background:${i.color}"></i>${esc(i.label)}</span>`)
+      .join('')}</div>`;
+  }
 
-    // Filter out invalid slices
-    const validSlices = data.filter(
-      d => Number.isFinite(d.value) && d.value > 0
-    );
-    if (validSlices.length === 0) return;
+  /** Line / bar / area chart from labelled datasets. */
+  public setSeries(data: ChartData): void {
+    const type = this.type === 'pie' || this.type === 'fan' ? 'line' : this.type;
+    const w = 640, h = 360;
+    const pad = { top: 28, right: 16, bottom: 44, left: 64 };
 
-    const ctx = this.ctx;
-    const w = this.canvas.width;
-    const h = this.canvas.height;
-    const cx = w / 2;
-    const cy = h / 2;
-    const radius = Math.min(w, h) / 2 - 20;
-    const innerRadius = radius * 0.6;
-
-    ctx.clearRect(0, 0, w, h);
-
-    const total = validSlices.reduce((sum, d) => sum + d.value, 0);
-    if (total === 0) return; // avoid division by zero
-
-    let startAngle = -Math.PI / 2;
-
-    for (const slice of validSlices) {
-      const sliceAngle = (slice.value / total) * Math.PI * 2;
-      const endAngle = startAngle + sliceAngle;
-
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, startAngle, endAngle);
-      ctx.arc(cx, cy, innerRadius, endAngle, startAngle, true);
-      ctx.closePath();
-      ctx.fillStyle = slice.color;
-      ctx.fill();
-
-      startAngle = endAngle;
+    const allValues = data.datasets.flatMap(d => d.data).filter(Number.isFinite);
+    if (!allValues.length || !data.datasets.length) {
+      this.finish(
+        `<svg viewBox="0 0 ${w} ${h}"><title>${esc(this.chartTitle)}</title>` +
+        `<text x="${w / 2}" y="${h / 2}" text-anchor="middle" font-size="13" fill="#94a3b8">No data</text></svg>`,
+        '',
+      );
+      return;
     }
+
+    let minVal = Math.min(...allValues);
+    let maxVal = Math.max(...allValues);
+    if (type === 'bar' && minVal > 0) minVal = 0;
+    if (type === 'area' && minVal > 0) minVal = 0;
+
+    const { inner, x, y } = this.axesFrame(w, h, pad, minVal, maxVal, data.yLabel);
+    let body = inner;
+    const n = data.labels.length;
+
+    // Zero line when the range straddles it
+    if (minVal < 0 && maxVal > 0) {
+      body += `<line x1="${pad.left}" y1="${y(0).toFixed(1)}" x2="${w - pad.right}" y2="${y(0).toFixed(1)}" stroke="#64748b" stroke-width="1" stroke-dasharray="4 3"/>`;
+    }
+
+    data.datasets.forEach((ds) => {
+      const pts = ds.data
+        .map((v, i) => ({ v, i }))
+        .filter(p => Number.isFinite(p.v));
+      if (!pts.length) return;
+
+      if (type === 'bar') {
+        const slotW = (w - pad.left - pad.right) / Math.max(n, 1);
+        const bw = Math.min(slotW * 0.6 / data.datasets.length, 40);
+        const di = data.datasets.indexOf(ds);
+        for (const p of pts) {
+          const cx = x(p.i, n) - (data.datasets.length * bw) / 2 + di * bw + bw / 2;
+          const y0 = y(Math.max(0, Math.min(p.v, maxVal)));
+          const y1 = y(Math.min(0, Math.max(p.v, minVal)));
+          const top = Math.min(y0, y1);
+          const bh = Math.max(Math.abs(y1 - y0), 1.5);
+          body += `<rect x="${(cx - bw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${ds.color}"><title>${esc(ds.label)}: ${fmtTick(p.v)}</title></rect>`;
+        }
+      } else {
+        const path = pts.map((p, k) => `${k === 0 ? 'M' : 'L'}${x(p.i, n).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
+        if (type === 'area') {
+          const base = y(0) > h - pad.bottom ? h - pad.bottom : y(Math.max(minVal, 0));
+          const areaPath = `${path} L${x(pts[pts.length - 1].i, n).toFixed(1)},${base.toFixed(1)} L${x(pts[0].i, n).toFixed(1)},${base.toFixed(1)} Z`;
+          body += `<path d="${areaPath}" fill="${ds.color}" opacity="0.25"/>`;
+        }
+        body += `<path d="${path}" fill="none" stroke="${ds.color}" stroke-width="2"><title>${esc(ds.label)}</title></path>`;
+      }
+    });
+
+    // X labels (sparse)
+    const step = Math.max(1, Math.ceil(n / 8));
+    for (let i = 0; i < n; i += step) {
+      body += `<text x="${x(i, n).toFixed(1)}" y="${h - 14}" text-anchor="middle" font-size="10" fill="#94a3b8">${esc(String(data.labels[i]))}</text>`;
+    }
+
+    this.finish(
+      `<svg viewBox="0 0 ${w} ${h}" role="img"><title>${esc(this.chartTitle)}</title>${body}</svg>`,
+      this.legendFor(data.datasets.map(d => ({ label: d.label, color: d.color }))),
+    );
+  }
+
+  /** Donut chart. */
+  public setPie(slices: PieSlice[]): void {
+    const w = 640, h = 360;
+    const valid = slices.filter(s => Number.isFinite(s.value) && s.value > 0);
+    if (!valid.length) {
+      this.finish(
+        `<svg viewBox="0 0 ${w} ${h}"><title>${esc(this.chartTitle)}</title>` +
+        `<text x="${w / 2}" y="${h / 2}" text-anchor="middle" font-size="13" fill="#94a3b8">No data</text></svg>`,
+        '',
+      );
+      return;
+    }
+    const cx = w / 2, cy = h / 2;
+    const radius = Math.min(w, h) / 2 - 30;
+    const innerR = radius * 0.58;
+    const total = valid.reduce((s, d) => s + d.value, 0);
+    let angle = -Math.PI / 2;
+    let body = '';
+    for (const s of valid) {
+      const a2 = angle + (s.value / total) * Math.PI * 2;
+      const large = a2 - angle > Math.PI ? 1 : 0;
+      const x1 = cx + radius * Math.cos(angle), y1 = cy + radius * Math.sin(angle);
+      const x2 = cx + radius * Math.cos(a2), y2 = cy + radius * Math.sin(a2);
+      const x3 = cx + innerR * Math.cos(a2), y3 = cy + innerR * Math.sin(a2);
+      const x4 = cx + innerR * Math.cos(angle), y4 = cy + innerR * Math.sin(angle);
+      body += `<path d="M${x1.toFixed(1)},${y1.toFixed(1)} A${radius},${radius} 0 ${large} 1 ${x2.toFixed(1)},${y2.toFixed(1)} L${x3.toFixed(1)},${y3.toFixed(1)} A${innerR},${innerR} 0 ${large} 0 ${x4.toFixed(1)},${y4.toFixed(1)} Z" fill="${s.color}"><title>${esc(s.label)}: ${(s.value / total * 100).toFixed(1)}%</title></path>`;
+      angle = a2;
+    }
+    this.finish(
+      `<svg viewBox="0 0 ${w} ${h}" role="img"><title>${esc(this.chartTitle)}</title>${body}</svg>`,
+      this.legendFor(valid.map(s => ({ label: `${s.label} (${(s.value / total * 100).toFixed(1)}%)`, color: s.color }))),
+    );
+  }
+
+  /** Monte Carlo percentile fan: shaded p5–p95 / p25–p75 bands + p50 line. */
+  public setFan(data: FanData): void {
+    const w = 640, h = 360;
+    const pad = { top: 28, right: 16, bottom: 44, left: 64 };
+    const all = [...data.p5, ...data.p25, ...data.p50, ...data.p75, ...data.p95].filter(Number.isFinite);
+    if (!all.length) {
+      this.finish(
+        `<svg viewBox="0 0 ${w} ${h}"><title>${esc(this.chartTitle)}</title>` +
+        `<text x="${w / 2}" y="${h / 2}" text-anchor="middle" font-size="13" fill="#94a3b8">No data</text></svg>`,
+        '',
+      );
+      return;
+    }
+    const minVal = Math.min(...all), maxVal = Math.max(...all);
+    const { inner, x, y } = this.axesFrame(w, h, pad, minVal, maxVal, data.yLabel);
+    const n = data.labels.length;
+    const band = (lo: number[], hi: number[]): string => {
+      const fwd = lo.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i, n).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+      const back = hi.map((_v, i) => `L${x(hi.length - 1 - i, n).toFixed(1)},${y(hi[hi.length - 1 - i]).toFixed(1)}`).join(' ');
+      return `${fwd} ${back} Z`;
+    };
+    let body = inner;
+    body += `<path d="${band(data.p5, data.p95)}" fill="${data.color}" opacity="0.18"/>`;
+    body += `<path d="${band(data.p25, data.p75)}" fill="${data.color}" opacity="0.28"/>`;
+    body += `<path d="${data.p50.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i, n).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${data.color}" stroke-width="2.5"/>`;
+    const step = Math.max(1, Math.ceil(n / 6));
+    for (let i = 0; i < n; i += step) {
+      body += `<text x="${x(i, n).toFixed(1)}" y="${h - 14}" text-anchor="middle" font-size="10" fill="#94a3b8">${esc(String(data.labels[i]))}</text>`;
+    }
+    this.finish(
+      `<svg viewBox="0 0 ${w} ${h}" role="img"><title>${esc(this.chartTitle)}</title>${body}</svg>`,
+      this.legendFor([
+        { label: 'Median (p50)', color: data.color },
+        { label: 'p25–p75', color: data.color },
+        { label: 'p5–p95', color: data.color },
+      ]),
+    );
   }
 }
 
 customElements.define('pae-chart', PaeChart);
 
-export { PaeChart, ChartData, ChartType, PieSlice, ChartDataset };
+export { PaeChart, ChartData, ChartDataset, ChartType, PieSlice, FanData, PALETTE };

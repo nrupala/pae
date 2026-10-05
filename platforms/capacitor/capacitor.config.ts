@@ -4,13 +4,14 @@ import type { CapacitorConfig } from '@capacitor/cli';
  * Capacitor configuration for PAE Android/iOS builds.
  * Wraps the vanilla TypeScript PWA in a native container.
  *
- * Build: npx cap sync android && cd android && ./gradlew assembleRelease
- * The web assets are copied from ui/src/ into the native project.
+ * Build: build the webapp first (see ui/README), then:
+ *   npx cap sync android && cd android && ./gradlew assembleRelease
+ * The web assets are copied from ui/dist/ (the compiled webapp output) into the native project.
  */
 const config: CapacitorConfig = {
   appId: 'com.nrupala.pae',
   appName: 'PAE',
-  webDir: '../../ui/src',
+  webDir: '../../ui/dist',
   server: {
     // In dev, proxy API calls to the Rust engine
     url: 'http://localhost:3000',

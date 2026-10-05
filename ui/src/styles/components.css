@@ -38,6 +38,7 @@
   background: var(--bg-card);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);
+  overflow-x: auto; /* tables scroll inside the card on narrow screens */
   padding: var(--space-4);
   box-shadow: var(--shadow-sm);
   transition: box-shadow var(--transition-fast);

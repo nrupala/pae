@@ -98,6 +98,22 @@ class PaeDashboard extends HTMLElement {
     }
 
     this.render();
+    this.drawAllocChart();
+  }
+
+  private drawAllocChart(): void {
+    if (!this.data) return;
+    const chart = this.shadow.querySelector('pae-chart#alloc-chart') as unknown as {
+      setPie(d: unknown): void;
+    } | null;
+    if (!chart) return;
+    const palette = ['#38bdf8', '#a78bfa', '#f472b6', '#fbbf24', '#34d399', '#fb7185', '#60a5fa', '#f97316'];
+    const entries = Object.entries(this.data.allocation).sort((a, b) => b[1] - a[1]);
+    chart.setPie(entries.map(([cls, pct], i) => ({
+      label: cls.replace('_', ' '),
+      value: pct,
+      color: palette[i % palette.length],
+    })));
   }
 
   private fmt(value: number, decimals: number = 2): string {
@@ -243,6 +259,7 @@ class PaeDashboard extends HTMLElement {
             <span class="pae-card-title">Asset Allocation</span>
             <span style="font-size:var(--font-size-xs);color:var(--text-tertiary)">${s.holding_count} positions</span>
           </div>
+          <pae-chart id="alloc-chart" type="pie" title="Asset allocation donut chart"></pae-chart>
           <table class="pae-table">
             <thead><tr><th>Class</th><th>Weight</th><th></th></tr></thead>
             <tbody>${allocRows || '<tr><td colspan="3" style="text-align:center;color:var(--text-tertiary)">No data</td></tr>'}</tbody>
