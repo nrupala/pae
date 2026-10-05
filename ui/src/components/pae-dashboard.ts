@@ -285,3 +285,5 @@ class PaeDashboard extends HTMLElement {
 }
 
 customElements.define('pae-dashboard', PaeDashboard);
+
+export {}; // make this a module so top-level names (API_BASE) don't collide across components

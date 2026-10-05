@@ -335,3 +335,5 @@ class PaeImport extends HTMLElement {
 }
 
 customElements.define('pae-import', PaeImport);
+
+export {}; // make this a module so top-level names (API_BASE) don't collide across components
