@@ -43,6 +43,10 @@ thiserror = "2"
 anyhow = "1"
 dotenvy = "0.15"
 
+[build-dependencies]
+# Compiles engine/c/*.c and links the system BLAS/LAPACK (see build.rs).
+cc = "1"
+
 [dev-dependencies]
 # axum-test 17.x is the axum 0.8 line (16.x targets axum 0.7 — mixing them
 # puts two axum versions in the graph and breaks IntoTransportLayer).
