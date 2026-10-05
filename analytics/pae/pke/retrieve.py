@@ -50,19 +50,26 @@ class RetrievalResult:
     relevance_score: float
 
 
-def _resolve_store(store: KnowledgeStore | None) -> tuple[KnowledgeStore, bool]:
-    """Return (store, owns_connection). Opens the default store if needed."""
+def _resolve_store(
+    store: KnowledgeStore | None, dek: bytes | None = None
+) -> tuple[KnowledgeStore, bool]:
+    """Return (store, owns_connection). Opens the default store if needed.
+
+    Args:
+        store: Caller-supplied store, or None to open the default.
+        dek: Optional 32-byte DEK, passed through to the default store so
+            encrypted knowledge bases can be read. Ignored when ``store``
+            is supplied (the store already carries its own DEK posture).
+    """
     if store is not None:
         return store, False
     path = default_store_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     logger.debug("PKE: using default knowledge store at %s", path)
-    return KnowledgeStore(path), True
+    return KnowledgeStore(path, dek=dek), True
 
 
-def _to_results(
-    store: KnowledgeStore, scored: list[tuple[str, float]]
-) -> list[RetrievalResult]:
+def _to_results(store: KnowledgeStore, scored: list[tuple[str, float]]) -> list[RetrievalResult]:
     """Hydrate (chunk_id, score) pairs into ordered RetrievalResults."""
     results: list[RetrievalResult] = []
     for chunk_id, score in scored:
@@ -105,6 +112,7 @@ def retrieve_by_theme(
     top_k: int = 5,
     store: KnowledgeStore | None = None,
     embed_fn: embeddings.EmbeddingFn | None = None,
+    dek: bytes | None = None,
 ) -> list[RetrievalResult]:
     """Retrieve top-k passages matching a theme.
 
@@ -122,6 +130,9 @@ def retrieve_by_theme(
         embed_fn: Optional injectable embedding function for the query
             (tests use a deterministic fake; must match the dimension
             used at index time).
+        dek: Optional 32-byte DEK for the default store (ignored when
+            ``store`` is supplied). Needed to read an encrypted knowledge
+            base; chunk texts are decrypted on hydration.
 
     Returns:
         List of RetrievalResult ordered by relevance_score descending.
@@ -129,6 +140,8 @@ def retrieve_by_theme(
 
     Raises:
         ValueError: If theme is empty, not a known theme, or top_k < 1.
+        PkeEncryptionError: If the default store is encrypted and the DEK
+            is missing or wrong.
     """
     if not theme or not theme.strip():
         raise ValueError("theme must not be empty")
@@ -137,13 +150,11 @@ def retrieve_by_theme(
     if top_k < 1:
         raise ValueError(f"top_k must be at least 1, got {top_k}")
 
-    resolved, owns = _resolve_store(store)
+    resolved, owns = _resolve_store(store, dek=dek)
     try:
         scored = _vector_search(resolved, theme, top_k, themes=[theme], embed_fn=embed_fn)
         if scored is None:
-            logger.info(
-                "PKE: vector search unavailable; keyword fallback for theme=%s", theme
-            )
+            logger.info("PKE: vector search unavailable; keyword fallback for theme=%s", theme)
             scored = resolved.keyword_search(theme, top_k=top_k, themes=[theme])
         return _to_results(resolved, scored)
     finally:
@@ -157,6 +168,7 @@ def retrieve_by_context(
     top_k: int = 5,
     store: KnowledgeStore | None = None,
     embed_fn: embeddings.EmbeddingFn | None = None,
+    dek: bytes | None = None,
 ) -> list[RetrievalResult]:
     """Retrieve passages relevant to a given analytical context.
 
@@ -180,6 +192,9 @@ def retrieve_by_context(
         embed_fn: Optional injectable embedding function for the query
             (tests use a deterministic fake; must match the dimension
             used at index time).
+        dek: Optional 32-byte DEK for the default store (ignored when
+            ``store`` is supplied). Needed to read an encrypted knowledge
+            base; chunk texts are decrypted on hydration.
 
     Returns:
         List of RetrievalResult ordered by relevance_score descending.
@@ -188,6 +203,8 @@ def retrieve_by_context(
     Raises:
         ValueError: If context_text is empty, a theme is unknown,
             or top_k is less than 1.
+        PkeEncryptionError: If the default store is encrypted and the DEK
+            is missing or wrong.
     """
     if not context_text or not context_text.strip():
         raise ValueError("context_text must not be empty")
@@ -198,16 +215,12 @@ def retrieve_by_context(
         if unknown:
             raise ValueError(f"unknown themes: {unknown} (see ingest.THEMES)")
 
-    resolved, owns = _resolve_store(store)
+    resolved, owns = _resolve_store(store, dek=dek)
     try:
-        scored = _vector_search(
-            resolved, context_text, top_k, themes=themes, embed_fn=embed_fn
-        )
+        scored = _vector_search(resolved, context_text, top_k, themes=themes, embed_fn=embed_fn)
         if scored is None:
             logger.info("PKE: vector search unavailable; keyword fallback in use")
-            scored = resolved.keyword_search(
-                context_text, top_k=top_k, themes=themes
-            )
+            scored = resolved.keyword_search(context_text, top_k=top_k, themes=themes)
         return _to_results(resolved, scored)
     finally:
         if owns:
