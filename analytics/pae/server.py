@@ -15,16 +15,20 @@ Usage:
 import json
 import logging
 import os
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from pae.auth import api_key_or_none
+from pae.mcp import TOOL_SPECS, get_tool_manifest, run_agent_tool
+from pae.mcp.tools import DISCLOSURE, PAETools
 from pae.models.carry import analyze_carry
 from pae.storage.csv_import import import_csv_string
 from pae.storage.db import (
@@ -526,41 +530,168 @@ async def get_dashboard(portfolio_id: str) -> dict[str, Any]:
 
     Single endpoint that the UI calls on load. Returns everything needed
     to populate the dashboard: summary, holdings, allocation breakdown.
+
+    Delegates to PAETools.dashboard_summary — the same implementation the
+    dashboard_summary agent tool uses (single source of truth).
     """
-    database = get_db()
-    summary = database.get_portfolio_summary(portfolio_id)
-    holdings = database.get_holdings(portfolio_id=portfolio_id)
+    tools = PAETools(get_db(), RUST_ENGINE_URL)
+    result = await tools.dashboard_summary(portfolio_id)
+    # REST shape keeps the historical envelope (no "ok" wrapper).
+    result.pop("ok", None)
+    return result
 
-    total_value = summary["total_market_value"]
 
-    # Allocation by asset class
-    allocation: dict[str, float] = {}
-    for h in holdings:
-        allocation[h.asset_class] = allocation.get(h.asset_class, 0.0) + h.market_value
+# --- Agent surfaces: A2A-compatible card + message endpoint ---
+# Assumption (stated in the PR body): standalone ACP (i-am-bee/acp) is
+# archived upstream ("ACP is now part of A2A under the Linux Foundation"),
+# so PAE exposes a minimal A2A-compatible surface instead of ACP.
 
-    allocation_pct = {
-        k: round(v / total_value * 100, 2) if total_value > 0 else 0.0
-        for k, v in allocation.items()
+A2A_MESSAGE_ENDPOINT = "/api/v1/a2a/message/send"
+
+AGENT_CARD: dict[str, Any] = {
+    "name": "PAE",
+    "description": (
+        "PAE (Personal Analytics Engine) — educational investment analytics "
+        "for individuals: risk metrics, factor exposure, Monte Carlo, "
+        "stress tests, decision journal. Minimal A2A-compatible agent "
+        "surface. " + DISCLOSURE
+    ),
+    "version": "0.1.0",
+    "protocol": "A2A",
+    "provider": {"organization": "AIMLDS", "url": "https://aimlds.org"},
+    "url": A2A_MESSAGE_ENDPOINT,
+    "message_endpoint": A2A_MESSAGE_ENDPOINT,
+    "skills": [
+        {
+            "id": tool_name,
+            "name": tool_name,
+            "description": description,
+            "tags": ["pae", "analytics", "education"],
+        }
+        for tool_name, description in TOOL_SPECS
+    ],
+}
+
+PAE_DISCOVERY: dict[str, Any] = {
+    "name": "PAE",
+    "description": (
+        "PAE (Personal Analytics Engine) — zero-knowledge, institutional-grade "
+        "investment analytics for individuals."
+    ),
+    "disclosure": DISCLOSURE,
+    "version": "0.1.0",
+    "surfaces": {
+        "rest": "/api/v1",
+        "mcp": "stdio via `python -m pae.mcp` (analytics/pae/mcp)",
+        "a2a": A2A_MESSAGE_ENDPOINT,
+    },
+    "links": {
+        "llms_txt": "/llms.txt",
+        "agent_card": "/.well-known/agent.json",
+        "tools_manifest": "/api/v1/tools",
+    },
+}
+
+
+@app.get("/.well-known/agent.json")
+async def agent_card(_: None = Depends(api_key_or_none)) -> dict[str, Any]:
+    """A2A Agent Card: identity, skills, and the message endpoint URL."""
+    return AGENT_CARD
+
+
+def _parse_a2a_tool_call(body: dict[str, Any]) -> tuple[str | None, dict[str, Any], str | None]:
+    """Extract (tool_name, params, error) from an A2A-shaped message.
+
+    Expected shape:
+        {"message": {"role": "user",
+                     "parts": [{"type": "data",
+                                "data": {"tool": "<tool_id>", "params": {...}}}]}}.
+    Returns (None, {}, error_message) when the shape is unusable.
+    """
+    message = body.get("message")
+    if not isinstance(message, dict):
+        return None, {}, "body.message must be an object"
+    parts = message.get("parts")
+    if not isinstance(parts, list) or not parts:
+        return None, {}, "body.message.parts must be a non-empty list"
+    for part in parts:
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") != "data":
+            continue
+        data = part.get("data")
+        if not isinstance(data, dict):
+            continue
+        tool_name = data.get("tool")
+        if not isinstance(tool_name, str) or not tool_name:
+            continue
+        params = data.get("params", {})
+        if not isinstance(params, dict):
+            return None, {}, "data.params must be an object"
+        return tool_name, params, None
+    return None, {}, "no data part with {tool, params} found in message.parts"
+
+
+def _a2a_task_response(
+    task_id: str, state: str, tool_name: str, outcome: dict[str, Any]
+) -> dict[str, Any]:
+    """Build the A2A task response envelope. Never carries a traceback."""
+    response: dict[str, Any] = {
+        "task": {
+            "id": task_id,
+            "status": {"state": state},
+            "artifacts": [
+                {
+                    "name": tool_name,
+                    "parts": [{"type": "data", "data": outcome}],
+                }
+            ],
+        }
     }
+    if state != "completed":
+        response["task"]["status"]["message"] = outcome.get("error", "failed")
+    return response
 
-    # Top holdings
-    top_holdings = sorted(holdings, key=lambda h: h.market_value, reverse=True)[:10]
 
-    return {
-        "summary": summary,
-        "allocation": allocation_pct,
-        "top_holdings": [
-            {
-                "symbol": h.symbol,
-                "name": h.name,
-                "market_value": round(h.market_value, 2),
-                "weight_pct": (
-                    round(h.market_value / total_value * 100, 2) if total_value > 0 else 0.0
-                ),
-                "yield_pct": h.yield_pct,
-                "unrealized_pnl": round(h.market_value - h.cost_basis, 2),
-            }
-            for h in top_holdings
-        ],
-        "holding_count": len(holdings),
-    }
+@app.post("/api/v1/a2a/message/send")
+async def a2a_message_send(
+    body: dict[str, Any], _: None = Depends(api_key_or_none)
+) -> dict[str, Any]:
+    """Minimal A2A-compatible message endpoint.
+
+    Accepts {"message": {"role": "user", "parts": [{"type": "data",
+    "data": {"tool": "<tool_id>", "params": {...}}}]}} and runs the named
+    tool through the SAME tool layer as the MCP server
+    (pae.mcp.run_agent_tool — shared implementation, not duplicated).
+
+    Unknown tools and malformed messages return a failed task with an
+    error artifact — never a traceback.
+    """
+    task_id = uuid.uuid4().hex
+    tool_name, params, parse_error = _parse_a2a_tool_call(body)
+    if parse_error is not None:
+        return _a2a_task_response(
+            task_id,
+            "failed",
+            tool_name or "unknown",
+            {"ok": False, "error": parse_error},
+        )
+    assert tool_name is not None  # narrowed by parse_error being None
+    outcome = await run_agent_tool(tool_name, params, get_db(), RUST_ENGINE_URL)
+    state = "completed" if outcome.get("ok") else "failed"
+    return _a2a_task_response(task_id, state, tool_name, outcome)
+
+
+# --- Discovery & tool manifest ---
+
+
+@app.get("/.well-known/pae.json")
+async def pae_discovery(_: None = Depends(api_key_or_none)) -> dict[str, Any]:
+    """PAE discovery document: surfaces, disclosure, and link relations."""
+    return PAE_DISCOVERY
+
+
+@app.get("/api/v1/tools")
+async def tools_manifest(_: None = Depends(api_key_or_none)) -> dict[str, Any]:
+    """Machine-readable tool manifest (single source of truth: MCP tools)."""
+    return {"tools": await get_tool_manifest(), "count": len(TOOL_SPECS)}

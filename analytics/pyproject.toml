@@ -22,6 +22,7 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "httpx>=0.28",
     "python-multipart>=0.0.18",
+    "mcp>=2.0",
 ]
 
 [project.optional-dependencies]
@@ -39,6 +40,7 @@ dev = [
 
 [project.scripts]
 pae-server = "pae.server:app"
+pae-mcp = "pae.mcp.__main__:main"
 
 [tool.ruff]
 line-length = 100

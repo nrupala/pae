@@ -1,0 +1,59 @@
+# PAE — Personal Analytics Engine (for AI agents)
+
+> PAE is an educational analytics tool, not a financial advisor. The tool
+> calculates; the user decides. No investment advice, no buy/sell outputs.
+
+PAE is a zero-knowledge, institutional-grade investment-analytics product for
+individuals. It X-rays what *you* own — risk, factor exposure, drawdown,
+scenarios — while your data never leaves your control.
+
+## Agent surfaces
+
+- **REST** (`/api/v1`): holdings/portfolios CRUD, CSV import, analytics proxy,
+  dashboard. Human UI and programmatic access.
+- **MCP** (Model Context Protocol): run `python -m pae.mcp` inside
+  `analytics/` for a stdio MCP server exposing every PAE tool. Built on
+  `mcp>=2.0` (`mcp.server.mcpserver.MCPServer`).
+- **A2A-compatible** (agent-to-agent): `GET /.well-known/agent.json` returns
+  the agent card (name, description, provider, skills, message endpoint);
+  `POST /api/v1/a2a/message/send` accepts
+  `{"message": {"role": "user", "parts": [{"type": "data", "data": {"tool": "<tool_id>", "params": {...}}}]}}`
+  and returns an A2A-shaped task with the tool result as a data artifact.
+  The A2A endpoint runs the *same* tool layer as the MCP server
+  (`pae.mcp.run_agent_tool`) — one implementation, two surfaces.
+
+## Discovery
+
+- `GET /.well-known/pae.json` — discovery document (surfaces + links).
+- `GET /.well-known/agent.json` — A2A agent card.
+- `GET /api/v1/tools` — machine-readable tool manifest (name, description,
+  JSON input schema per tool), sourced from the MCP tool definitions.
+
+## Tools
+
+| Tool | What it does |
+|---|---|
+| `compute_risk` | Risk metrics (VaR, CVaR, Sharpe, Sortino, drawdown, volatility) via the Rust engine |
+| `monte_carlo` | Monte Carlo simulation of portfolio value via the Rust engine |
+| `stress_test` | Stress-test scenarios via the Rust engine |
+| `factor_decompose` | Fama-French factor exposure decomposition (OLS, Python-native) |
+| `journal_log` | Log a decision-journal entry (rationale, confidence, pre-mortem) |
+| `holdings_create` | Add a holding to a portfolio |
+| `holdings_list` | List holdings, optionally filtered |
+| `holdings_update` | Update a holding's fields |
+| `holdings_delete` | Delete a holding |
+| `dashboard_summary` | Aggregate dashboard: summary, allocation, top holdings |
+
+Every tool description carries the standing disclosure: educational analytics
+only — PAE calculates, the user decides, no investment advice.
+
+## Notes for agents
+
+- Auth is a deferred seam (`analytics/pae/auth.py`): the `api_key_or_none`
+  dependency on agent routes is currently a no-op returning `None`. No
+  credentials are required today; the hook point exists for the paid phase.
+- Engine-backed tools (`compute_risk`, `monte_carlo`, `stress_test`) proxy
+  the Rust engine at `PAE_ENGINE_URL` (default `http://localhost:3001`).
+  All other tools are Python-native.
+- PAE is a separate product from Research Analyst; the two compose over
+  API/MCP only — no shared code, no shared database.
