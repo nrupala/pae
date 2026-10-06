@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Long-only portfolio optimization engine.
 
 Computes efficient-frontier analytics from expected returns and a

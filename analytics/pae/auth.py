@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Authentication seam for PAE's agent surfaces — DEFERRED, no-op today.
 
 Auth/identity for PAE (MCP, A2A, tool manifest, discovery endpoints) is

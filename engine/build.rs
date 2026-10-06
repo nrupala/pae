@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Build script: compile the C numerical core and link BLAS/LAPACK.
 //!
 //! `engine/c/pae_num.c` (+ `pae_bonds.c`) declare the BLAS/LAPACK Fortran

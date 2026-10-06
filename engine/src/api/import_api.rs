@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! CSV / broker-statement import endpoints.
 //!
 //! Two-step flow so the user can review before anything is persisted:

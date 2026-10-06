@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Generate pae_portfolio_analytics.xlsx from scratch.
 
 Idempotent: deletes the existing workbook (if any) and regenerates it.

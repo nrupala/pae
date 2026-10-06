@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """PAE MCP server entry point: ``python -m pae.mcp`` (stdio transport)."""
 
 from __future__ import annotations

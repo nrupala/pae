@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """PAE SQLite Database Layer.
 
 Persistent storage for holdings, portfolios, accounts, and decision journal.

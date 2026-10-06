@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Tests for PKE chunk-text encryption (pae.pke.store DEK support).
 
 Covers the "encrypted" half of the README's "private, encrypted,

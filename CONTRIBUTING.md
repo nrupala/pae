@@ -48,3 +48,19 @@ make build && make test
 ## License
 
 By contributing, you agree that your contributions will be licensed under AGPL-3.0.
+
+
+## Release & PR-flow discipline
+
+- **No direct pushes to `main`.** Every change ships as a pull request.
+- **Draft PR → tests green → owner merges.** CI must be green before merge
+  (Rust: `cargo build` + `cargo test`; Python: `pip install -e ".[dev]"` +
+  `pytest tests/ -v`; UI: `npx tsc` — see `.github/workflows/ci.yml`); the owner
+  performs the merge.
+- **CHANGELOG.md:** every PR adds its entry under `## [Unreleased]`.
+- **Semver:** bump patch for fixes, minor for features (`analytics/pyproject.toml`,
+  `engine/Cargo.toml`, `ui/package.json` — keep the three versions in sync).
+- **Merge commits reference PR numbers; releases are tagged `vX.Y.Z`.**
+- Branch protection with required status checks is not yet enabled (private repos
+  need GitHub Pro/Team for required checks); until then, green-merge is manual
+  discipline — say so plainly in review.

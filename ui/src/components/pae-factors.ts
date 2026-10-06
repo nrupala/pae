@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * PAE Factor View.
  * Fama-French 5-factor exposure bars + performance vs market-factor benchmark,

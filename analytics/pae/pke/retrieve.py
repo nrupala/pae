@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """PKE Contextual Retrieval.
 
 Retrieves relevant passages from the user's knowledge base

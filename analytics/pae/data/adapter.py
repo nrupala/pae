@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Unified data adapter for PAE.
 
 Provides a single interface across all data sources (Yahoo Finance,

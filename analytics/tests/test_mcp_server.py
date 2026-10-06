@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Tests for the PAE MCP server (analytics/pae/mcp).
 
 Uses a REAL MCP client session (in-memory ``mcp.Client`` against the

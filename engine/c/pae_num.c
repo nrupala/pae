@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /* pae_num.c - PAE C numerical core: BLAS/LAPACK-backed kernels.
  *
  * The BLAS/LAPACK Fortran symbols are declared manually below (standard

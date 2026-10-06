@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Fixed-income analytics endpoint.
 //!
 //! `POST /api/v1/analytics/bond` prices a bond from its cash-flow schedule

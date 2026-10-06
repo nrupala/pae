@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Margin carry analysis engine.
 
 Calculates income vs. margin cost for leveraged portfolios.

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Tests for PKE vector search (pae.pke.embeddings / store / retrieve).
 
 Unit tests use a deterministic fake embedding function (384-dim hashed

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /* pae_bonds.h - PAE C numerical core: fixed-income analytics.
  *
  * Honest alternative to the originally planned "QuantLib via FFI" linkage

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * PAE Root Application Component.
  * Vanilla Web Component - no framework, no dependencies.

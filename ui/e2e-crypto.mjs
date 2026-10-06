@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (C) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * PAE crypto end-to-end check (MANUAL — not wired into CI).
  *

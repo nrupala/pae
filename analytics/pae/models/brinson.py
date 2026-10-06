@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Brinson-Hood-Beebower performance attribution engine.
 
 Classic arithmetic attribution of a portfolio's ACTIVE return (portfolio

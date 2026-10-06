@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pae-analytics"
-version = "0.1.0"
+version = "0.1.1"
 description = "PAE Analytics Engine - Factor models, optimization, decision intelligence"
 authors = [{ name = "Nrupal Akolkar", email = "nrupalakolkar@gmail.com" }]
 license = { text = "AGPL-3.0" }

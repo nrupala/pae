@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // PAE shamir.ts test suite — runs against the tsc-compiled output.
 //   tsc ... --outDir out ui/src/crypto/shamir.ts && node --test shamir.test.mjs
 import { describe, it } from 'node:test';

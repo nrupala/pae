@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """MCP server for PAE.
 
 Builds an ``mcp.server.mcpserver.MCPServer`` (the ``mcp>=2.0`` successor of
