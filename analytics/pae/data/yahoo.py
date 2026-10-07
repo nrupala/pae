@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Yahoo Finance data adapter.
 
 Fetches price data, dividends, and returns for stocks, ETFs, commodities,

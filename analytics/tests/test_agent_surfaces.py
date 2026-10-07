@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Tests for PAE's agent-facing REST surfaces.
 
 - GET /.well-known/agent.json (A2A agent card)

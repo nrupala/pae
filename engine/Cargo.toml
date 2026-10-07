@@ -1,6 +1,6 @@
 [package]
 name = "pae-engine"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Nrupal Akolkar <nrupalakolkar@gmail.com>"]
 description = "PAE Risk Engine - High-performance portfolio analytics"

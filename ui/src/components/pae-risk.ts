@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * PAE Risk View.
  * Risk metric cards (VaR/CVaR, Sharpe, Sortino, volatility, max drawdown, beta)

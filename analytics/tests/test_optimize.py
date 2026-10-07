@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Tests for pae.models.optimize (long-only portfolio optimization).
 
 - Two-asset analytical cross-checks: hand-computed max-Sharpe and

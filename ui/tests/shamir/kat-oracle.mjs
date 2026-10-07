@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Independent KAT oracle for PAE shamir.ts.
 // Uses a COMPLETELY different code path from the implementation under test:
 //   - GF(256) multiply: Russian-peasant shift/XOR (no log/exp tables)

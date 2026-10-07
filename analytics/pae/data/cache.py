@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Local SQLite cache for market data with TTL and integrity checks.
 
 All data is cached locally. No cache state ever leaves the user's machine.

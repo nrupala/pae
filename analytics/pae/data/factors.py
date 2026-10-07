@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Fama-French factor data and FRED macro indicators.
 
 Downloads factor returns (MKT-RF, SMB, HML, RMW, CMA) from Kenneth French's

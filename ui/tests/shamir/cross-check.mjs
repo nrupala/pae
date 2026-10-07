@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Cross-implementation check: PAE shamir.ts vs the independently-audited
 // privy-io `shamir-secret-sharing` 0.0.4 (Cure53 + Zellic audits).
 // Both use GF(2^8) / x^8+x^4+x^3+x+1, so shares are interchangeable at the

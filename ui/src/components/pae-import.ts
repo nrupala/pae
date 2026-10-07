@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * PAE CSV Import Component.
  * Drag-and-drop file upload with preview-then-confirm flow.

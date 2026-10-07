@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /* pae_num.h - PAE C numerical core: BLAS/LAPACK-backed kernels.
  *
  * Part of the PAE risk engine. These kernels implement the matrix

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Commodity and forex price feeds.
 
 Provides standardized access to commodity futures (oil, gold, natural gas),

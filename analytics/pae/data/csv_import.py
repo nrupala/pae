@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Broker statement import: CSV / OFX / QFX parsing for PAE.
 
 Parses holdings exports from common brokers (Interactive Brokers,

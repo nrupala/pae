@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """PAE agent tool layer (MCP + A2A).
 
 Single implementation of every PAE agent tool. The MCP server

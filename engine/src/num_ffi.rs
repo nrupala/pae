@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Safe Rust wrappers over the C numerical core (`engine/c/`).
 //!
 //! The C core implements BLAS/LAPACK-backed kernels -- covariance via

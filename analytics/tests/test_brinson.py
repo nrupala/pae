@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nrupal Akolkar
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Tests for Brinson-Hood-Beebower performance attribution.
 
 The core case is a fully HAND-COMPUTED 3-segment example. Hand work

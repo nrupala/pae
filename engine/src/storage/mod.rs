@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Data persistence layer for PAE.
 //!
 //! Holdings, portfolios, and accounts are persisted to an encrypted local
