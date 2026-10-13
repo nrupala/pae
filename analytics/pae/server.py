@@ -29,7 +29,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from pae.auth import api_key_or_none
+from pae.auth import api_key_or_none, require_api_key
 from pae.mcp import TOOL_SPECS, get_tool_manifest, run_agent_tool
 from pae.mcp.tools import DISCLOSURE, PAETools
 from pae.models.brinson import attribute as brinson_attribute
@@ -85,12 +85,25 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# CORS: localhost + configured origins only. Never "*" with credentials:
+# this API serves the user's portfolio/holdings data, and a wildcard would
+# let any website read it from the user's browser. Widen via the
+# PAE_CORS_ORIGINS env var (comma-separated) when a real front-end origin
+# needs access.
+_cors_origins = [
+    o.strip()
+    for o in os.environ.get(
+        "PAE_CORS_ORIGINS",
+        "http://localhost:8000,http://127.0.0.1:8000,http://localhost,http://127.0.0.1",
+    ).split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
 
 
@@ -217,7 +230,7 @@ async def health() -> dict[str, Any]:
 # --- Portfolio Endpoints ---
 
 
-@app.get("/api/v1/portfolios")
+@app.get("/api/v1/portfolios", dependencies=[Depends(require_api_key)])
 async def list_portfolios() -> dict[str, Any]:
     """List all portfolios with summary stats."""
     database = get_db()
@@ -229,7 +242,7 @@ async def list_portfolios() -> dict[str, Any]:
     return {"portfolios": result}
 
 
-@app.post("/api/v1/portfolios", status_code=201)
+@app.post("/api/v1/portfolios", status_code=201, dependencies=[Depends(require_api_key)])
 async def create_portfolio(req: PortfolioCreate) -> dict[str, Any]:
     """Create a new portfolio."""
     database = get_db()
@@ -237,7 +250,7 @@ async def create_portfolio(req: PortfolioCreate) -> dict[str, Any]:
     return {"portfolio": {"id": portfolio.id, "name": portfolio.name}}
 
 
-@app.delete("/api/v1/portfolios/{portfolio_id}")
+@app.delete("/api/v1/portfolios/{portfolio_id}", dependencies=[Depends(require_api_key)])
 async def delete_portfolio(portfolio_id: str) -> dict[str, Any]:
     """Delete a portfolio and all its holdings."""
     database = get_db()
@@ -248,7 +261,7 @@ async def delete_portfolio(portfolio_id: str) -> dict[str, Any]:
 # --- Account Endpoints ---
 
 
-@app.get("/api/v1/accounts")
+@app.get("/api/v1/accounts", dependencies=[Depends(require_api_key)])
 async def list_accounts() -> dict[str, Any]:
     """List all accounts."""
     database = get_db()
@@ -257,7 +270,7 @@ async def list_accounts() -> dict[str, Any]:
                           "broker": a.broker, "currency": a.currency} for a in accounts]}
 
 
-@app.post("/api/v1/accounts", status_code=201)
+@app.post("/api/v1/accounts", status_code=201, dependencies=[Depends(require_api_key)])
 async def create_account(req: AccountCreate) -> dict[str, Any]:
     """Create a new brokerage/investment account."""
     database = get_db()
@@ -271,7 +284,7 @@ async def create_account(req: AccountCreate) -> dict[str, Any]:
 # --- Holdings Endpoints ---
 
 
-@app.get("/api/v1/holdings")
+@app.get("/api/v1/holdings", dependencies=[Depends(require_api_key)])
 async def list_holdings(
     portfolio_id: str | None = Query(None),
     account_id: str | None = Query(None),
@@ -310,7 +323,7 @@ async def list_holdings(
     }
 
 
-@app.post("/api/v1/holdings", status_code=201)
+@app.post("/api/v1/holdings", status_code=201, dependencies=[Depends(require_api_key)])
 async def create_holding(req: HoldingCreate) -> dict[str, Any]:
     """Add a new holding to a portfolio."""
     database = get_db()
@@ -330,7 +343,7 @@ async def create_holding(req: HoldingCreate) -> dict[str, Any]:
     return {"holding": {"id": holding.id, "symbol": holding.symbol}}
 
 
-@app.put("/api/v1/holdings/{holding_id}")
+@app.put("/api/v1/holdings/{holding_id}", dependencies=[Depends(require_api_key)])
 async def update_holding(holding_id: str, req: HoldingUpdate) -> dict[str, Any]:
     """Update an existing holding."""
     database = get_db()
@@ -359,7 +372,7 @@ async def update_holding(holding_id: str, req: HoldingUpdate) -> dict[str, Any]:
     return {"updated": holding_id}
 
 
-@app.delete("/api/v1/holdings/{holding_id}")
+@app.delete("/api/v1/holdings/{holding_id}", dependencies=[Depends(require_api_key)])
 async def delete_holding(holding_id: str) -> dict[str, Any]:
     """Delete a holding."""
     database = get_db()
@@ -370,7 +383,7 @@ async def delete_holding(holding_id: str) -> dict[str, Any]:
 # --- CSV Import ---
 
 
-@app.post("/api/v1/import/csv")
+@app.post("/api/v1/import/csv", dependencies=[Depends(require_api_key)])
 async def import_csv(
     file: UploadFile = File(...),
     portfolio_id: str = Query(...),
@@ -425,7 +438,7 @@ async def import_csv(
     }
 
 
-@app.post("/api/v1/import/confirm")
+@app.post("/api/v1/import/confirm", dependencies=[Depends(require_api_key)])
 async def confirm_import(
     file: UploadFile = File(...),
     portfolio_id: str = Query(...),
@@ -465,7 +478,7 @@ async def confirm_import(
 # --- Analytics Proxy (Rust Engine) ---
 
 
-@app.post("/api/v1/analytics/risk")
+@app.post("/api/v1/analytics/risk", dependencies=[Depends(require_api_key)])
 async def compute_risk(portfolio_id: str = Query(...)) -> Any:
     """Compute risk metrics by sending holdings to the Rust engine."""
     database = get_db()
@@ -488,7 +501,7 @@ async def compute_risk(portfolio_id: str = Query(...)) -> Any:
             raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
 
 
-@app.post("/api/v1/analytics/metrics")
+@app.post("/api/v1/analytics/metrics", dependencies=[Depends(require_api_key)])
 async def compute_metrics(portfolio_id: str = Query(...)) -> Any:
     """Compute performance metrics via the Rust engine."""
     database = get_db()
@@ -514,7 +527,7 @@ async def compute_metrics(portfolio_id: str = Query(...)) -> Any:
 # --- Python-Native Analytics ---
 
 
-@app.post("/api/v1/analytics/carry")
+@app.post("/api/v1/analytics/carry", dependencies=[Depends(require_api_key)])
 async def compute_carry(req: CarryRequest) -> dict[str, Any]:
     """Compute margin carry analysis (Python-native, no Rust engine needed)."""
     database = get_db()
@@ -554,7 +567,7 @@ async def compute_carry(req: CarryRequest) -> dict[str, Any]:
     }
 
 
-@app.post("/api/v1/analytics/optimize")
+@app.post("/api/v1/analytics/optimize", dependencies=[Depends(require_api_key)])
 async def optimize_portfolio_endpoint(req: OptimizeRequest) -> dict[str, Any]:
     """Long-only portfolio optimization (Python-native, no Rust engine needed).
 
@@ -612,7 +625,7 @@ async def optimize_portfolio_endpoint(req: OptimizeRequest) -> dict[str, Any]:
     return body
 
 
-@app.post("/api/v1/analytics/attribution")
+@app.post("/api/v1/analytics/attribution", dependencies=[Depends(require_api_key)])
 async def compute_attribution(req: AttributionRequest) -> dict[str, Any]:
     """Brinson-Hood-Beebower attribution of portfolio vs. benchmark.
 
@@ -734,7 +747,7 @@ def _drawdown_series(cumulative: list[float]) -> list[float]:
     return out
 
 
-@app.get("/api/v1/analytics/series")
+@app.get("/api/v1/analytics/series", dependencies=[Depends(require_api_key)])
 async def portfolio_series(portfolio_id: str = Query(...)) -> dict[str, Any]:
     """Per-period portfolio returns plus cumulative growth and drawdown series.
 
@@ -755,7 +768,7 @@ async def portfolio_series(portfolio_id: str = Query(...)) -> dict[str, Any]:
     }
 
 
-@app.post("/api/v1/analytics/factor")
+@app.post("/api/v1/analytics/factor", dependencies=[Depends(require_api_key)])
 async def factor_decomposition(portfolio_id: str = Query(...)) -> dict[str, Any]:
     """Fama-French 5-factor OLS decomposition of the portfolio return series.
 
@@ -847,7 +860,7 @@ async def _proxy_engine_post(path: str, payload: dict[str, Any]) -> Any:
             ) from exc
 
 
-@app.post("/api/v1/analytics/montecarlo")
+@app.post("/api/v1/analytics/montecarlo", dependencies=[Depends(require_api_key)])
 async def run_montecarlo(
     portfolio_id: str = Query(...),
     num_simulations: int = Query(default=1000, ge=100, le=100000),
@@ -870,7 +883,7 @@ async def run_montecarlo(
     )
 
 
-@app.post("/api/v1/analytics/stress")
+@app.post("/api/v1/analytics/stress", dependencies=[Depends(require_api_key)])
 async def run_stress(
     portfolio_id: str = Query(...),
     scenario: str = Query(default="2008"),
@@ -889,7 +902,7 @@ async def run_stress(
 # --- Portfolio Dashboard (Aggregated) ---
 
 
-@app.get("/api/v1/dashboard/{portfolio_id}")
+@app.get("/api/v1/dashboard/{portfolio_id}", dependencies=[Depends(require_api_key)])
 async def get_dashboard(portfolio_id: str) -> dict[str, Any]:
     """Get complete dashboard data for a portfolio.
 
