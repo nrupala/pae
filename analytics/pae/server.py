@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field
 
 from pae.auth import api_key_or_none, require_api_key
 from pae.mcp import TOOL_SPECS, get_tool_manifest, run_agent_tool
+from pae.pke.store import KnowledgeStore, PkeEncryptionError, default_store_path
 from pae.mcp.tools import DISCLOSURE, PAETools
 from pae.models.brinson import attribute as brinson_attribute
 from pae.models.carry import analyze_carry
@@ -52,6 +53,8 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = os.environ.get("PAE_DB_PATH", "data/pae.db")
 RUST_ENGINE_URL = os.environ.get("PAE_ENGINE_URL", "http://localhost:3001")
+# PKE knowledge base location (pae.pke.store.default_store_path() shape).
+PKE_PATH = os.environ.get("PAE_PKE_PATH", str(default_store_path()))
 
 # --- App Lifecycle ---
 
@@ -917,6 +920,82 @@ async def get_dashboard(portfolio_id: str) -> dict[str, Any]:
     # REST shape keeps the historical envelope (no "ok" wrapper).
     result.pop("ok", None)
     return result
+
+
+# --- Knowledge Base (PKE, read-only) ---
+#
+# Phase 3B: the PKE store (pae/pke) shipped as a library with no HTTP
+# surface, so the dashboard's Knowledge view had nothing real to call.
+# These two endpoints are the thin read layer over that store: list and
+# keyword-search. There is deliberately no write endpoint here — ingest
+# (with its embedding pipeline) stays a library/CLI operation.
+#
+# The store is opened per request: KnowledgeStore holds a sqlite3
+# connection with default thread affinity, and FastAPI serves sync
+# endpoints from a threadpool. A fresh open per call is cheap and
+# always sees the latest ingested chunks.
+#
+# Encryption posture is inherited from the store: the analytics process
+# never holds the user's DEK, so for an encrypted knowledge base the
+# chunk text comes back as null with "encrypted": true — metadata
+# (source, themes, date) is never encrypted and stays listable.
+
+
+def _open_knowledge_store() -> KnowledgeStore:
+    return KnowledgeStore(PKE_PATH)
+
+
+@app.get("/api/v1/knowledge/chunks", dependencies=[Depends(require_api_key)])
+async def list_knowledge_chunks(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> dict[str, Any]:
+    """List knowledge-base chunks, newest first (metadata + text)."""
+    store = _open_knowledge_store()
+    try:
+        return {"total": store.count_chunks(), "chunks": store.list_chunks(limit, offset)}
+    finally:
+        store.close()
+
+
+@app.get("/api/v1/knowledge/search", dependencies=[Depends(require_api_key)])
+async def search_knowledge(
+    q: str = Query(..., min_length=1, max_length=500),
+    limit: int = Query(10, ge=1, le=50),
+) -> dict[str, Any]:
+    """Keyword-search the knowledge base (the store's deterministic
+    token-overlap ranking — the same fallback retrieval uses when no
+    embedding index is available)."""
+    store = _open_knowledge_store()
+    try:
+        try:
+            scored = store.keyword_search(q, top_k=limit)
+        except PkeEncryptionError:
+            # Encrypted base and this process holds no DEK: keyword
+            # search must read chunk text to rank it, so there is no
+            # honest partial result — say so instead of erroring.
+            return {"query": q, "results": [], "locked": True}
+        results: list[dict[str, Any]] = []
+        for chunk_id, score in scored:
+            try:
+                chunk = store.get_chunk(chunk_id)
+            except PkeEncryptionError:
+                chunk = None
+            if chunk is None:
+                # Encrypted chunk this process cannot read (no DEK):
+                # surface it as a locked hit, never as an error.
+                results.append({
+                    "chunk_id": chunk_id, "score": round(score, 4),
+                    "source": "", "author": "", "date": "", "themes": [],
+                    "text": None, "encrypted": True,
+                })
+                continue
+            chunk["score"] = round(score, 4)
+            chunk["encrypted"] = False
+            results.append(chunk)
+        return {"query": q, "results": results}
+    finally:
+        store.close()
 
 
 # --- Agent surfaces: A2A-compatible card + message endpoint ---
