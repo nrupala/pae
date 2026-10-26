@@ -14,7 +14,10 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import logging
+import os
+import urllib.parse
 import zipfile
 from dataclasses import dataclass, field
 from typing import Any
@@ -33,18 +36,61 @@ FRENCH_FF5_FILE = "F-F_Research_Data_5_Factors_2x3_CSV.zip"
 # FRED API (no key required for basic series via CSV download)
 FRED_BASE_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv"
 
-# Common FRED series
+# Common FRED series -- ALLOWLISTED under Decision 6 (2026-10-26).
+#
+# FRED's own Terms of Use state that series owned by third parties carry
+# their owners' copyright restrictions, and that non-personal use of such
+# a series requires the OWNER's permission, which FRED cannot grant.
+# PAE therefore serves only series owned by the Federal Reserve itself.
+# Ownership below names the publishing Federal Reserve source (the
+# statistical release the series belongs to).
+FRED_SERIES_OWNERS: dict[str, str] = {
+    "DGS3MO": "Board of Governors, H.15",
+    "DGS2": "Board of Governors, H.15",
+    "DGS10": "Board of Governors, H.15",
+    "DGS30": "Board of Governors, H.15",
+    "FEDFUNDS": "Board of Governors, H.15",
+    "DFEDTARU": "Board of Governors (FOMC target range)",
+    "DFEDTARL": "Board of Governors (FOMC target range)",
+    "T10YIE": "Federal Reserve Bank of St. Louis (calculated)",
+    "DTWEXBGS": "Board of Governors, H.10",
+    "DEXUSAL": "Board of Governors, H.10",
+    "DEXCAUS": "Board of Governors, H.10",
+    "DEXUSEU": "Board of Governors, H.10",
+    "DEXJPUS": "Board of Governors, H.10",
+    "DEXUSUK": "Board of Governors, H.10",
+    "WALCL": "Board of Governors, H.4.1",
+}
+
+# Series PAE previously listed that are EXCLUDED by the same rule, with
+# their owners, so a refusal is explained rather than silent. Extending
+# coverage to any of these requires the owner's permission or its own
+# terms verification, recorded in the data-source register.
+FRED_EXCLUDED_SERIES: dict[str, str] = {
+    "CPIAUCSL": "U.S. Bureau of Labor Statistics",
+    "UNRATE": "U.S. Bureau of Labor Statistics",
+    "A191RL1Q225SBEA": "U.S. Bureau of Economic Analysis",
+    "SP500": "S&P Dow Jones Indices",
+    "VIXCLS": "Cboe",
+    "BAAFFM": "ICE / BofA index data",
+}
+
+# Notice carried wherever FRED-sourced values surface (FRED Terms of Use
+# requirement for API applications; PAE carries it for CSV access too).
+FRED_ATTRIBUTION = (
+    "This product uses FRED data from the Federal Reserve Bank of "
+    "St. Louis but is not endorsed or certified by the Federal Reserve "
+    "Bank of St. Louis."
+)
+
+# Named shortcuts to allowlisted series only.
 FRED_SERIES: dict[str, str] = {
     "risk_free_rate": "DGS3MO",       # 3-Month Treasury
     "fed_funds_rate": "FEDFUNDS",      # Federal Funds Rate
-    "inflation_cpi": "CPIAUCSL",       # CPI All Urban Consumers
-    "unemployment": "UNRATE",          # Unemployment Rate
-    "gdp_growth": "A191RL1Q225SBEA",   # Real GDP Growth Rate
-    "sp500": "SP500",                  # S&P 500 Index
-    "vix": "VIXCLS",                   # CBOE VIX
     "yield_10y": "DGS10",             # 10-Year Treasury
     "yield_2y": "DGS2",               # 2-Year Treasury
-    "baa_spread": "BAAFFM",           # BAA Corporate Bond Spread
+    "breakeven_inflation_10y": "T10YIE",  # 10Y breakeven inflation
+    "usd_index": "DTWEXBGS",          # Broad trade-weighted USD
 }
 
 # Request timeout (seconds)
@@ -121,6 +167,45 @@ def _safe_download(url: str, description: str) -> bytes:
     except OSError as e:
         msg = f"Network error downloading {description}: {e}"
         raise FactorDataError(msg) from e
+
+
+FRED_API_BASE = "https://api.stlouisfed.org/fred/series/observations"
+
+
+def _fetch_fred_api(
+    series_id: str, start_date: str, api_key: str
+) -> tuple[list[str], list[float]]:
+    """Fetch observations from the keyed FRED API.
+
+    The key is placed only in the request URL; error messages name the
+    series, never the URL, so the key cannot leak into logs or reports.
+    """
+    query = urllib.parse.urlencode(
+        {
+            "series_id": series_id,
+            "api_key": api_key,
+            "file_type": "json",
+            "observation_start": start_date,
+        }
+    )
+    raw = _safe_download(f"{FRED_API_BASE}?{query}", f"FRED API series {series_id}")
+    try:
+        payload = json.loads(raw.decode("utf-8", errors="replace"))
+    except json.JSONDecodeError as e:
+        msg = f"Unparseable response from the FRED API for series {series_id}"
+        raise FactorDataError(msg) from e
+    dates: list[str] = []
+    values: list[float] = []
+    for obs in payload.get("observations", []):
+        val_str = str(obs.get("value", "")).strip()
+        if val_str in ("", "."):
+            continue
+        try:
+            values.append(float(val_str))
+            dates.append(str(obs.get("date", "")))
+        except ValueError:
+            continue
+    return dates, values
 
 
 class FactorAdapter:
@@ -328,7 +413,7 @@ class FactorAdapter:
         """Fetch a FRED economic time series.
 
         Args:
-            series_id: FRED series ID (e.g. 'DGS3MO', 'CPIAUCSL').
+            series_id: FRED series ID (e.g. 'DGS3MO', 'DGS10').
                 See FRED_SERIES dict for common series.
             start_date: Start date in YYYY-MM-DD format.
 
@@ -344,43 +429,71 @@ class FactorAdapter:
             raise ValueError(msg)
 
         series_id = series_id.strip().upper()
+
+        # Decision 6 allowlist: only Federal-Reserve-owned series are
+        # served. FRED's terms put third-party-owned series under their
+        # owners' restrictions; FRED cannot grant that permission.
+        if series_id not in FRED_SERIES_OWNERS:
+            owner = FRED_EXCLUDED_SERIES.get(series_id)
+            if owner is not None:
+                msg = (
+                    f"FRED series {series_id} is owned by {owner}, not the "
+                    "Federal Reserve. Under Decision 6 (first source, free "
+                    "use verified) PAE does not serve third-party-owned "
+                    "FRED series; the owner's own terms must be verified "
+                    "and recorded before this series can be enabled."
+                )
+            else:
+                msg = (
+                    f"FRED series {series_id} is not on PAE's Decision 6 "
+                    "allowlist (Federal-Reserve-owned series only). Verify "
+                    "the series' owner against FRED's series notes and "
+                    "record it in FRED_SERIES_OWNERS before enabling."
+                )
+            raise FactorDataError(msg)
         cache_key = f"fred:{series_id}:{start_date}"
 
         cached = self._cache.get(cache_key)
         if cached is not None:
             return MacroSeries(**cached.value)
 
-        url = (
-            f"{FRED_BASE_URL}?id={series_id}"
-            f"&cosd={start_date}&coed=9999-12-31"
-            f"&fq=Daily&fam=avg&vintage_date=&nd=&revision_date="
-        )
-
-        raw = _safe_download(url, f"FRED series {series_id}")
-        text = raw.decode("utf-8", errors="replace")
-
         dates: list[str] = []
         values: list[float] = []
 
-        reader = csv.reader(io.StringIO(text))
-        header = next(reader, None)
-        if header is None:
-            msg = f"Empty response from FRED for series {series_id}"
-            raise FactorDataError(msg)
-
-        for row in reader:
-            if len(row) < 2:
-                continue
-            date = row[0].strip()
-            val_str = row[1].strip()
-            if val_str == "." or not val_str:
-                continue
-            try:
-                val = float(val_str)
-                dates.append(date)
-                values.append(val)
-            except ValueError:
-                continue
+        # Preferred path: the keyed FRED API, when the deployment
+        # supplies a key in PAE_FRED_API_KEY (the fleet already holds a
+        # FRED key for its other products; the same key arms PAE). The
+        # key travels only in the request -- never in logs, errors, or
+        # the cache. Without a key, the keyless CSV endpoint serves.
+        api_key = os.environ.get("PAE_FRED_API_KEY", "").strip()
+        if api_key:
+            dates, values = _fetch_fred_api(series_id, start_date, api_key)
+        else:
+            url = (
+                f"{FRED_BASE_URL}?id={series_id}"
+                f"&cosd={start_date}&coed=9999-12-31"
+                f"&fq=Daily&fam=avg&vintage_date=&nd=&revision_date="
+            )
+            raw = _safe_download(url, f"FRED series {series_id}")
+            text = raw.decode("utf-8", errors="replace")
+            reader = csv.reader(io.StringIO(text))
+            header = next(reader, None)
+            if header is None:
+                msg = f"Empty response from FRED for series {series_id}"
+                raise FactorDataError(msg)
+            for row in reader:
+                if len(row) < 2:
+                    continue
+                date = row[0].strip()
+                val_str = row[1].strip()
+                if val_str == "." or not val_str:
+                    continue
+                try:
+                    val = float(val_str)
+                    dates.append(date)
+                    values.append(val)
+                except ValueError:
+                    continue
 
         if not values:
             msg = f"No valid data for FRED series {series_id}"
@@ -388,14 +501,15 @@ class FactorAdapter:
 
         name_map: dict[str, str] = {
             "DGS3MO": "3-Month Treasury Rate",
-            "FEDFUNDS": "Federal Funds Rate",
-            "CPIAUCSL": "CPI All Urban Consumers",
-            "UNRATE": "Unemployment Rate",
-            "SP500": "S&P 500 Index",
-            "VIXCLS": "CBOE VIX",
-            "DGS10": "10-Year Treasury Rate",
             "DGS2": "2-Year Treasury Rate",
-            "BAAFFM": "BAA Corporate Bond Spread",
+            "DGS10": "10-Year Treasury Rate",
+            "DGS30": "30-Year Treasury Rate",
+            "FEDFUNDS": "Federal Funds Rate",
+            "DFEDTARU": "Fed Funds Target Range (upper)",
+            "DFEDTARL": "Fed Funds Target Range (lower)",
+            "T10YIE": "10-Year Breakeven Inflation Rate",
+            "DTWEXBGS": "Broad Trade-Weighted USD Index",
+            "WALCL": "Federal Reserve Total Assets",
         }
 
         result = MacroSeries(
@@ -403,7 +517,13 @@ class FactorAdapter:
             name=name_map.get(series_id, series_id),
             dates=dates,
             values=values,
-            units="Percent" if series_id != "SP500" else "Index",
+            units=(
+                "Index"
+                if series_id.startswith(("DTWEX", "DEX"))
+                else "Millions of dollars"
+                if series_id == "WALCL"
+                else "Percent"
+            ),
         )
 
         self._cache.put(

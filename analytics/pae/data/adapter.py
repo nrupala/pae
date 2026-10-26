@@ -3,9 +3,17 @@
 
 """Unified data adapter for PAE.
 
-Provides a single interface across all data sources (Yahoo Finance,
-Fama-French, FRED, commodities, forex). Implements source priority,
-health checks, and graceful fallback.
+Provides a single interface across PAE's data sources, governed by the
+Decision 6 first-source registry (pae.data.registry): every class is
+served by its first source where free use is verified -- Fama-French
+factors, FRED (Federal-Reserve-owned series only), SEC EDGAR
+fundamentals, Bank of Canada rates/FX. Classes with no compliant source
+(prices, quotes, commodities) surface a DataProviderGapError rather than
+falling back silently.
+
+Yahoo access survives ONLY as a development convenience behind the
+PAE_DEV_DATA=1 environment flag, labelled non-primary wherever it
+surfaces; it is never the product's source of record.
 
 This is the entry point for all data access in PAE. Individual adapters
 should not be called directly by the engine or UI.
@@ -18,18 +26,22 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from pae.data.boc import BocAdapter, BocError, BocSeries
 from pae.data.cache import DataCache
 from pae.data.commodities import (
     CommodityAdapter,
     CommodityError,
     CommodityQuote,
 )
+from pae.data.edgar import CompanyFacts, EdgarAdapter, EdgarError
+from pae.data.eia import EiaAdapter, EiaError, EiaSeries
 from pae.data.factors import (
     FactorAdapter,
     FactorData,
     FactorDataError,
     MacroSeries,
 )
+from pae.data.registry import DataProviderGapError, require_available
 from pae.data.yahoo import (
     PriceHistory,
     QuoteData,
@@ -120,6 +132,7 @@ class DataAdapter:
     """
 
     def __init__(self, cache_dir: Any = None) -> None:
+        import os
         from pathlib import Path
 
         cd = Path(cache_dir) if cache_dir else None
@@ -129,13 +142,39 @@ class DataAdapter:
         self._commodities = CommodityAdapter(
             cache=self._cache, yahoo=self._yahoo
         )
+        self._edgar = EdgarAdapter(cache=self._cache)
+        self._boc = BocAdapter(cache=self._cache)
+        self._eia = EiaAdapter(cache=self._cache)
+
+        # Decision 6: Yahoo-class data is development-only. Product code
+        # paths that would serve prices/quotes raise DataProviderGapError
+        # unless PAE_DEV_DATA=1 marks this process as development.
+        self._dev_data = os.environ.get("PAE_DEV_DATA") == "1"
 
         # Source health tracking
         self._health: dict[str, SourceHealth] = {
             "yahoo": SourceHealth(source="yahoo"),
             "french": SourceHealth(source="french"),
             "fred": SourceHealth(source="fred"),
+            "sec-edgar": SourceHealth(source="sec-edgar"),
+            "bank-of-canada": SourceHealth(source="bank-of-canada"),
+            "eia": SourceHealth(source="eia"),
         }
+
+    def _require_prices_class(self, data_class: str) -> None:
+        """Gate price/quote classes behind the Decision 6 registry.
+
+        Raises:
+            DataAdapterError: Always, in product mode -- the class is a
+                ruled gap. In development mode (PAE_DEV_DATA=1) the call
+                proceeds against Yahoo, labelled non-primary.
+        """
+        if self._dev_data:
+            return
+        try:
+            require_available(data_class)
+        except DataProviderGapError as gap:
+            raise DataAdapterError(str(gap)) from gap
 
     def _track_request(
         self, source: str, success: bool, error: str = "", latency_ms: float = 0.0
@@ -171,8 +210,10 @@ class DataAdapter:
 
         Raises:
             ValueError: If symbol is empty.
-            DataAdapterError: If the fetch fails.
+            DataAdapterError: If the fetch fails, or the quotes class is
+                in its Decision 6 gap (product mode).
         """
+        self._require_prices_class("quotes_metadata")
         start = time.time()
         try:
             result = self._yahoo.get_quote(symbol)
@@ -225,8 +266,10 @@ class DataAdapter:
 
         Raises:
             ValueError: If inputs are invalid.
-            DataAdapterError: If the fetch fails.
+            DataAdapterError: If the fetch fails, or the prices class is
+                in its Decision 6 gap (product mode).
         """
+        self._require_prices_class("prices")
         start = time.time()
         try:
             result = self._yahoo.get_price_history(symbol, period, interval)
@@ -302,7 +345,8 @@ class DataAdapter:
         """Fetch a FRED macroeconomic time series.
 
         Args:
-            series_id: FRED series ID (e.g. 'CPIAUCSL', 'UNRATE', 'VIXCLS').
+            series_id: FRED series ID (allowlisted, Federal-Reserve-owned
+                series only -- e.g. 'DGS10', 'FEDFUNDS', 'T10YIE').
             start_date: Start date (YYYY-MM-DD).
 
         Returns:
@@ -324,6 +368,84 @@ class DataAdapter:
             msg = f"Failed to fetch FRED series '{series_id}': {e}"
             raise DataAdapterError(msg) from e
 
+    # --- Fundamentals (SEC EDGAR, first source) ---
+
+    def get_company_facts(self, ticker: str) -> CompanyFacts:
+        """Fetch XBRL company facts for a US-listed issuer from EDGAR.
+
+        Resolves the ticker through EDGAR's own company mapping, then
+        returns the issuer's filed facts with provenance 'sec-edgar'.
+
+        Raises:
+            DataAdapterError: If the ticker is unknown or the fetch fails.
+        """
+        start = time.time()
+        try:
+            cik = self._edgar.resolve_cik(ticker)
+            result = self._edgar.get_company_facts(cik)
+            self._track_request(
+                "sec-edgar", True, latency_ms=(time.time() - start) * 1000
+            )
+            return result
+        except EdgarError as e:
+            self._track_request("sec-edgar", False, str(e))
+            msg = f"Failed to fetch EDGAR facts for '{ticker}': {e}"
+            raise DataAdapterError(msg) from e
+
+    # --- Canadian rates & FX (Bank of Canada, first source) ---
+
+    def get_cad_series(
+        self, series_name: str, recent: int | None = None
+    ) -> BocSeries:
+        """Fetch a Bank of Canada series (policy rate, yields, FX).
+
+        Provenance 'bank-of-canada'; Bank attribution travels on the
+        returned object, with the Terms s.1.3 free-availability notice
+        available as pae.data.boc.FREE_AVAILABILITY_NOTICE for paid
+        surfaces.
+
+        Raises:
+            DataAdapterError: If the fetch fails.
+        """
+        start = time.time()
+        try:
+            result = self._boc.get_series(series_name, recent=recent)
+            self._track_request(
+                "bank-of-canada", True, latency_ms=(time.time() - start) * 1000
+            )
+            return result
+        except BocError as e:
+            self._track_request("bank-of-canada", False, str(e))
+            msg = f"Failed to fetch Bank of Canada series '{series_name}': {e}"
+            raise DataAdapterError(msg) from e
+
+    def get_fx_rate_cad(self, pair: str = "USDCAD") -> BocSeries:
+        """Fetch a CAD FX reference rate series from the Bank of Canada."""
+        return self.get_cad_series(f"FX{pair.strip().upper()}")
+
+    def get_energy_price(self, key: str, length: int = 90) -> EiaSeries:
+        """Fetch an energy spot price series from EIA (Decision 6).
+
+        Keys: 'wti_crude', 'brent_crude', 'henry_hub_gas'. First-source
+        federal statistics via the fleet's EIA key (PAE_EIA_API_KEY);
+        provenance 'eia'. Non-energy commodities remain a ruled gap
+        (see get_commodity).
+
+        Raises:
+            DataAdapterError: If EIA is unarmed or the fetch fails.
+        """
+        start = time.time()
+        try:
+            result = self._eia.get_energy_price(key, length=length)
+            self._track_request(
+                "eia", True, latency_ms=(time.time() - start) * 1000
+            )
+            return result
+        except EiaError as e:
+            self._track_request("eia", False, str(e))
+            msg = f"Failed to fetch EIA energy series '{key}': {e}"
+            raise DataAdapterError(msg) from e
+
     # --- Commodities & Forex ---
 
     def get_commodity(self, key: str) -> CommodityQuote:
@@ -337,8 +459,22 @@ class DataAdapter:
 
         Raises:
             ValueError: If key is unknown.
-            DataAdapterError: If the fetch fails.
+            DataAdapterError: If the fetch fails, or the commodities
+                class is in its Decision 6 gap (product mode).
         """
+        if not self._dev_data:
+            # The legacy commodity provider is Yahoo-class and stays
+            # gated wholesale. The commodities class's one adoption --
+            # EIA energy spot prices -- serves through the explicit
+            # get_energy_price path, never through this provider.
+            msg = (
+                "Commodity quotes are not served in product mode: "
+                "Decision 6 leaves non-energy commodities a ruled gap "
+                "(licensed benchmarks, no free first source). Energy "
+                "spot prices are the exception -- they serve from EIA "
+                "via get_energy_price."
+            )
+            raise DataAdapterError(msg)
         try:
             return self._commodities.get_commodity_quote(key)
         except (CommodityError, ValueError) as e:
@@ -356,8 +492,11 @@ class DataAdapter:
 
         Raises:
             ValueError: If key is unknown.
-            DataAdapterError: If the fetch fails.
+            DataAdapterError: If the fetch fails, or the prices class is
+                in its Decision 6 gap (product mode). CAD pairs are
+                served in product mode by get_fx_rate_cad (Bank of Canada).
         """
+        self._require_prices_class("prices")
         try:
             return self._commodities.get_forex_quote(key)
         except (CommodityError, ValueError) as e:
@@ -377,6 +516,7 @@ class DataAdapter:
             ValueError: If key is unknown.
             DataAdapterError: If the fetch fails.
         """
+        self._require_prices_class("quotes_metadata")
         try:
             return self._commodities.get_index_quote(key)
         except (CommodityError, ValueError) as e:
@@ -399,6 +539,12 @@ class DataAdapter:
             List of dicts with symbol, name, type, exchange.
         """
         if not query or not query.strip():
+            return []
+
+        # Decision 6: instrument search is Yahoo-sourced; in product
+        # mode the quotes/metadata class is a ruled gap, so search
+        # returns no results rather than aggregator data.
+        if not self._dev_data:
             return []
 
         results: list[dict[str, Any]] = []
@@ -481,27 +627,48 @@ class DataAdapter:
 
         # Commodities
         if include_commodities:
-            try:
-                snapshot.commodities = self._commodities.get_all_commodity_quotes()
-            except Exception as e:
-                snapshot.errors.append(f"Commodities: {e}")
+            if not self._dev_data:
+                snapshot.errors.append(
+                    "Commodities: no first-source free provider under "
+                    "Decision 6 (class waits)"
+                )
+            else:
+                try:
+                    snapshot.commodities = (
+                        self._commodities.get_all_commodity_quotes()
+                    )
+                except Exception as e:
+                    snapshot.errors.append(f"Commodities: {e}")
 
         # Forex
         if include_forex:
-            try:
-                snapshot.forex = self._commodities.get_all_forex_quotes()
-            except Exception as e:
-                snapshot.errors.append(f"Forex: {e}")
+            if not self._dev_data:
+                snapshot.errors.append(
+                    "Forex: served per-pair from first sources in product "
+                    "mode (Bank of Canada for CAD pairs); bulk Yahoo forex "
+                    "is development-only"
+                )
+            else:
+                try:
+                    snapshot.forex = self._commodities.get_all_forex_quotes()
+                except Exception as e:
+                    snapshot.errors.append(f"Forex: {e}")
 
         # Indices
         if include_indices:
-            for key in ("sp500", "tsx", "vix", "nasdaq"):
-                try:
-                    snapshot.indices.append(
-                        self._commodities.get_index_quote(key)
-                    )
-                except (CommodityError, ValueError) as e:
-                    snapshot.errors.append(f"Index {key}: {e}")
+            if not self._dev_data:
+                snapshot.errors.append(
+                    "Indices: no first-source free provider under "
+                    "Decision 6 (class waits)"
+                )
+            else:
+                for key in ("sp500", "tsx", "vix", "nasdaq"):
+                    try:
+                        snapshot.indices.append(
+                            self._commodities.get_index_quote(key)
+                        )
+                    except (CommodityError, ValueError) as e:
+                        snapshot.errors.append(f"Index {key}: {e}")
 
         # Risk-free rate
         try:
