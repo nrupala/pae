@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **Fleet keys adopted (owner direction, 2026-10-26)**: PAE uses the API keys the fleet already holds. FRED serves through the keyed API when `PAE_FRED_API_KEY` is set (the fleet's existing FRED key arms PAE unchanged; keyless CSV remains the no-key path; the key never appears in logs, errors, or results). New EIA adapter (`pae.data.eia`) serves energy spot prices (WTI, Brent, Henry Hub) with the fleet's EIA key (`PAE_EIA_API_KEY`, Secure Vault custom.eia) -- commodities moves GAP -> CONDITIONAL (energy adopted; licensed benchmarks still wait). EDGAR needs and has no key (keyless by design). Gap exception renamed `DataProviderGapError`.
+
+### Added — Decision 6 data provider (first source, free use verified)
+- `pae/data/registry.py`: the ruled source registry per data class.
+- SEC EDGAR adapter (`fundamentals_us`, adopted): submissions/XBRL company facts, fair-access paced, provenance `sec-edgar`.
+- Bank of Canada Valet adapter (`rates_fx_cad`, adopted): rates/FX with Bank attribution and the Terms s.1.3 free-availability notice constant.
+- FRED allowlist: only Federal-Reserve-owned series are served; third-party-owned series (BLS CPI/unemployment, BEA GDP, S&P 500, Cboe VIX, ICE/BofA) are refused with the owner named.
+- Yahoo-class data (prices, quotes, commodities, search) is development-only behind `PAE_DEV_DATA=1`; product mode raises the Decision 6 gap. User-supplied series via import remain the product path for prices.
+- `docs/DATA_SOURCES.md`: the terms-evidence register behind these rulings.
+
 ## [0.2.0] - 2026-10-26
 
 Phase 2 — "make it true": the Phase 1 audit's findings closed at code level.

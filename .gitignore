@@ -51,3 +51,7 @@ data/
 
 # Knowledge base (user content, never committed)
 knowledge/content/
+
+# The bare data/ pattern above must not swallow the analytics data package
+!analytics/pae/data/
+!analytics/pae/data/*.py
