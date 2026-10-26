@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Nrupal Akolkar
+// Copyright (C) 2026 2351485 ALBERTA INC.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 /**
@@ -332,7 +332,7 @@ class PaeChart extends HTMLElement {
   /** Scatter plot with an (x, y) polyline plus labelled markers.
 
   Used for the efficient frontier: x = volatility, y = expected return,
-  markers = the optimal mixes. */
+  markers = the highlighted allocation mixes. */
   public setScatter(data: ScatterData): void {
     const w = 640, h = 360;
     const pad = { top: 28, right: 16, bottom: 44, left: 64 };

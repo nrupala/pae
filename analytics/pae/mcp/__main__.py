@@ -1,5 +1,5 @@
-# Copyright (C) 2026 Nrupal Akolkar
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 2351485 ALBERTA INC.
+# SPDX-License-Identifier: Apache-2.0
 
 """PAE MCP server entry point: ``python -m pae.mcp`` (stdio transport)."""
 

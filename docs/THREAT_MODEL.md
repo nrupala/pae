@@ -36,11 +36,14 @@
   session layer; keys are passed per request. Do not claim session-scoped
   key hygiene.
 
-### Plaid/Broker Token Theft
-- **Threat**: Attacker obtains stored Plaid or brokerage API tokens.
-- **Mitigation**: Tokens are encrypted with the user's key before storage;
-  the storage path accepts only pre-encrypted blobs. Attacker needs both
-  the ciphertext AND the user's passphrase-derived key.
+### Broker Credential Theft — NOT APPLICABLE (no broker connections)
+- PAE has **no live brokerage integrations** (no Plaid, no broker APIs, no
+  stored broker credentials). Holdings enter only as files the user
+  provides (CSV, including IBKR Flex export files) or manual entry, so
+  there are no third-party tokens to steal. If a live integration is ever
+  added, this section must be rewritten before it ships: credentials would
+  be encrypted with the user's key before storage, and the storage path
+  accepts only pre-encrypted blobs.
 
 ### Man-in-the-Middle
 - **Threat**: Attacker intercepts communication between client and server.

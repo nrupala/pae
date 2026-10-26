@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Nrupal Akolkar
+// Copyright (C) 2026 2351485 ALBERTA INC.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use chrono::Utc;
@@ -121,6 +121,36 @@ impl VersionStore {
             results.truncate(limit);
         }
         Ok(results)
+    }
+
+    /// Point-in-time read across all entities: for each entity, the latest
+    /// version whose `created_at` is at or before `as_of`. Empty filter
+    /// slices mean "no filter". Results are sorted by entity_id so callers
+    /// (snapshots, diffs) get a deterministic order.
+    pub fn snapshot_records(
+        &self,
+        as_of: chrono::DateTime<chrono::Utc>,
+        entity_types: &[EntityType],
+        entity_ids: &[String],
+    ) -> Result<Vec<VersionedRecord>, VersionStoreError> {
+        let records = self.records.read()
+            .map_err(|_| VersionStoreError::LockFailed)?;
+
+        let mut out: Vec<VersionedRecord> = Vec::new();
+        for (entity_id, versions) in records.iter() {
+            if !entity_ids.is_empty() && !entity_ids.contains(entity_id) {
+                continue;
+            }
+            let latest_at = versions.iter().rev().find(|r| {
+                r.created_at <= as_of
+                    && (entity_types.is_empty() || entity_types.contains(&r.entity_type))
+            });
+            if let Some(record) = latest_at {
+                out.push(record.clone());
+            }
+        }
+        out.sort_by(|a, b| a.entity_id.cmp(&b.entity_id));
+        Ok(out)
     }
 
     /// Count total versions across all entities.

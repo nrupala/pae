@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Nrupal Akolkar
+// Copyright (C) 2026 2351485 ALBERTA INC.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::Result;
@@ -47,6 +47,8 @@ fn create_app(store: Arc<storage::Store>) -> Router {
         .route("/api/v1/version", post(api::versioning_api::append_version))
         .route("/api/v1/version/history", post(api::versioning_api::get_history))
         .route("/api/v1/version/integrity/{entity_id}", get(api::versioning_api::verify_integrity))
+        .route("/api/v1/version/snapshot", post(api::versioning_api::get_snapshot))
+        .route("/api/v1/version/diff", post(api::versioning_api::get_diff))
         .with_state(version_store);
 
     // Routes backed by the SQLite persistence store (holdings, portfolios, import)
@@ -85,8 +87,7 @@ fn create_app(store: Arc<storage::Store>) -> Router {
         .route("/api/v1/portfolio/stress", post(api::portfolio::stress_test))
         .route("/api/v1/portfolio/correlation", post(api::portfolio::correlation_matrix))
         .route("/api/v1/portfolio/montecarlo", post(api::portfolio::monte_carlo))
-        .route("/api/v1/analytics/bond", post(api::bonds::bond_analytics))
-        .route("/api/v1/version/snapshot", post(api::versioning_api::get_snapshot));
+        .route("/api/v1/analytics/bond", post(api::bonds::bond_analytics));
 
     Router::new()
         .merge(versioned_routes)

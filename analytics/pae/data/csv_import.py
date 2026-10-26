@@ -1,7 +1,11 @@
-# Copyright (C) 2026 Nrupal Akolkar
+# Copyright (C) 2026 2351485 ALBERTA INC.
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Broker statement import: CSV / OFX / QFX parsing for PAE.
+"""LEGACY duplicate importer — canonical parser is
+analytics/pae/storage/csv_import.py (docs/ARCHITECTURE.md,
+"System of Record"). Do not add features.
+
+Broker statement import: CSV / OFX / QFX parsing for PAE.
 
 Parses holdings exports from common brokers (Interactive Brokers,
 Questrade, Wealthsimple) plus a generic fallback format, and basic
