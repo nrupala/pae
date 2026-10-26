@@ -107,7 +107,7 @@ Everything persistent is under **PAE_HOME**
 
 | Path | Contents |
 |------|----------|
-| `data/engine/pae.db`    | Engine SQLite store: portfolios, holdings, import staging |
+| `data/engine/pae.db`    | Engine SQLite store: portfolios, holdings, import staging, and the append-only version store (decision journal and other versioned records) |
 | `data/analytics/pae.db` | Analytics SQLite store: portfolios, holdings, journal |
 | `run/`                  | PID files for the two processes |
 | `logs/`                 | `engine.log`, `analytics.log` |
@@ -116,20 +116,20 @@ The installed bundle in the prefix contains no data — replacing it
 never touches PAE_HOME. Back up by copying the `data/` directory
 while PAE is stopped (`pae stop`).
 
-One current limitation, stated plainly: the engine's append-only
-**version store is in-memory** in this build. Versioned records (the
-kind the demo seed appends) live for the life of the engine process
-and are gone after `pae restart` or a reboot; the SQLite stores above
-persist. Re-run `pae seed` after an engine restart to restore the
-demo records.
+Versioned records persist: the engine's append-only version store
+(the kind the demo seed appends, and the decision journal) writes
+every record into `data/engine/pae.db` and reloads the full history
+on startup, so entries survive `pae restart` and reboots. (Builds
+before Phase 3B kept the version store in memory only; records from
+those builds were lost on restart and cannot be recovered.)
 
 ## Upgrade
 
 Unpack the new bundle anywhere and re-run its installer. It replaces
 the files in the prefix; PAE_HOME (your data) is untouched, so both
 SQLite stores carry over. The analytics store applies its own
-migrations at startup. If you run the demo seed, re-run `pae seed`
-after upgrading (see the in-memory note above).
+migrations at startup. The version store's table is created
+automatically the first time the new engine opens the database.
 
 ## Configuration that matters
 
@@ -145,6 +145,7 @@ unit / plist / task you registered).
 | `PAE_CORS_ORIGIN` (engine) | Single origin allowed to call the engine directly from a browser (default `http://localhost:3000`). The bundled dashboard is served by the engine itself, so most installs never touch this. |
 | `PAE_ENGINE_HOST` (engine) | Bind address (default `127.0.0.1`). Set to `0.0.0.0` only deliberately — see the security note below. |
 | `PAE_FRED_API_KEY`, `PAE_EIA_API_KEY` (analytics) | Data-source keys for the macro/energy series (see `docs/DATA_SOURCES.md`). Optional; the product runs without them. |
+| `PAE_PKE_PATH` (analytics) | Location of the knowledge-base (PKE) database the dashboard's Knowledge view reads. Default `~/.local/share/pae/pke.db`. |
 
 Security posture for anything beyond your own machine: both processes
 bind loopback by default, and that is the supported posture. The
@@ -163,5 +164,7 @@ put it behind your own authenticated reverse proxy, set
 - **Dashboard loads but shows no data:** confirm analytics is healthy
   (`curl http://localhost:3002/health`) and that the demo seed ran
   (`pae seed`).
-- **Engine snapshot is empty after a restart:** expected in this
-  build — see the in-memory note under "Where your data lives".
+- **Engine snapshot is empty after a restart:** check that the
+  engine is opening the same `PAE_DB_PATH` as before (see "Where your
+  data lives") — version history lives in that file, and a different
+  path means a different, empty database.
