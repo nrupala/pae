@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Nrupal Akolkar
+// Copyright (C) 2026 2351485 ALBERTA INC.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use chrono::{DateTime, Utc};
@@ -33,7 +33,7 @@ pub struct VersionedRecord {
     pub parent_hash: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EntityType {
     Holdings,
     Position,

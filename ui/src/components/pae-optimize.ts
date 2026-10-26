@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Nrupal Akolkar
+// Copyright (C) 2026 2351485 ALBERTA INC.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 /**
@@ -139,7 +139,7 @@ class PaeOptimize extends HTMLElement {
   private render(): void {
     let content: string;
     if (this.loading) {
-      content = `<div style="text-align:center;padding:var(--space-16);color:var(--text-tertiary)">Computing optimal mixes…</div>`;
+      content = `<div style="text-align:center;padding:var(--space-16);color:var(--text-tertiary)">Computing allocation mixes…</div>`;
     } else if (this.error) {
       content = `<div style="text-align:center;padding:var(--space-16);color:var(--color-negative)">Failed: ${this.error}</div>`;
     } else if (!this.result) {
@@ -202,7 +202,7 @@ class PaeOptimize extends HTMLElement {
       <div class="pae-grid pae-grid-3" style="margin-bottom:var(--space-6)">${cards}</div>
       <div class="pae-card" style="margin-bottom:var(--space-6)">
         <div class="pae-card-header"><span class="pae-card-title">Efficient frontier — expected return vs volatility</span></div>
-        <pae-chart id="frontier-chart" title="Efficient frontier with optimal mix markers"></pae-chart>
+        <pae-chart id="frontier-chart" title="Efficient frontier with allocation mix markers"></pae-chart>
         ${regularized}
       </div>
       <div class="pae-card" style="margin-bottom:var(--space-6)">

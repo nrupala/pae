@@ -100,6 +100,9 @@ jobs:
         working-directory: ui
         run: npx tsc --noEmit
 
+      - name: Non-advisory guardrail (no 'optimal'/'recommended' labels)
+        run: bash scripts/check-guardrail.sh
+
       # NOTE: ui/e2e-crypto.mjs is intentionally NOT a CI step. It derives
       # at production Argon2id params (600K iterations, 64 MiB), which takes
       # minutes single-threaded in WASM — too slow/flaky for per-run CI.

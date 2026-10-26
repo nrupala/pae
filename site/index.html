@@ -94,12 +94,12 @@
           <li><strong>Key derivation happens in your browser.</strong> Your passphrase is stretched with Argon2id — client-side, in the dashboard app. The passphrase never leaves your device.</li>
           <li><strong>Encryption is AES-256-GCM.</strong> Holdings are encrypted with a 256-bit key derived from your passphrase before anything is transmitted.</li>
           <li><strong>The server stores ciphertext only.</strong> The engine keeps encrypted blobs; it holds no passphrase, no derived key, and no decryption path.</li>
-          <li><strong>No recovery service exists.</strong> Because nobody holds your key, nobody — including us — can recover your data. Lose the passphrase and the data is unrecoverable. That is the price of real zero-knowledge, stated up front.</li>
+          <li><strong>Recovery is yours to set up — Shamir 3-of-5.</strong> PAE includes Shamir secret sharing: split your recovery key into 5 shares, any 3 reconstruct it. Nobody — including us — holds your key or your shares, and there is no recovery service. If you lose your passphrase <em>and</em> fewer than 3 shares survive, the data is unrecoverable. That is the price of real zero-knowledge, stated up front.</li>
         </ol>
       </div>
 
       <div class="zk-boundary" role="note" aria-label="What we do not claim">
-        <strong>What we do not claim.</strong> There is no Shamir secret-sharing recovery, no DEK/KEK key hierarchy, and no separate cryptographic core — those do not exist in this build, and we will not claim them. The privacy guarantee is exactly the four points above.
+        <strong>What we do not claim.</strong> No live brokerage connections (imports are files you provide), no FX conversion engine (holdings are tracked per currency), and no investment advice — PAE computes and explains; it never recommends. The privacy guarantee is exactly the four points above.
       </div>
     </div>
   </section>
@@ -276,7 +276,7 @@
       <p class="footer-note">Docs: <a href="https://github.com/nrupala/pae/tree/main/docs">github.com/nrupala/pae/tree/main/docs</a></p>
     </div>
     <div>
-      <p class="footer-note">Owned by <a href="https://nrupalakolkar.com">Nrupal Akolkar</a> · Built with <a href="https://muse.ai/join">Muse by Meta</a> — join Muse, then redeem code <strong>101EEK</strong> in Settings within 48 hours of joining and we both earn tokens.<br>Educational analytics tool, not a financial advisor.</p>
+      <p class="footer-note">© 2026 2351485 ALBERTA INC. All rights reserved. · Built and operated with Muse<br>Educational analytics tool, not a financial advisor. · <a href="privacy.html">Privacy</a></p>
     </div>
   </div>
 </footer>

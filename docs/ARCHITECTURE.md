@@ -10,7 +10,7 @@ PAE uses a three-language stratified architecture where each language handles wh
 |  Vanilla TS      |     |   Axum API        |     |  Factor Models   |
 |  Web Components  |     |   Risk Calcs      |     |  Optimization    |
 |  Canvas/SVG      |     |   Crypto Vault    |     |  PKE / Decision  |
-|  < 200KB         |     |   < 1ms latency   |     |  < 1s latency    |
+|  < 200KB         |     |  (see BENCHMARKS)  |     |  (see BENCHMARKS)  |
 +------------------+     +-------------------+     +------------------+
                                   |
                           +-------+-------+
@@ -20,6 +20,21 @@ PAE uses a three-language stratified architecture where each language handles wh
                           | QuantLib (FFI)|
                           +-------+-------+
 ```
+
+## System of Record (declared 2026-10-26, Phase 2)
+
+The **Rust engine is the system of record** for holdings, portfolios and
+imports: its SQLite store is the canonical state, and its REST/MCP/agent
+surfaces are the canonical interfaces. The Python analytics layer reads
+holdings through the engine (the MCP layer already composes this way) and
+owns what it is best at — factor models, optimization, decision journal,
+PKE — not a second copy of the holdings state.
+
+The Python modules `analytics/pae/storage/` and the duplicate CSV importer
+at `analytics/pae/data/csv_import.py` are **legacy**: they predate the
+declaration, are kept only until their remaining callers move to the
+engine, and must not gain new features. The canonical file-import parser
+is `analytics/pae/storage/csv_import.py`, feeding the engine.
 
 ## Layer Responsibilities
 

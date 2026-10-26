@@ -1,5 +1,5 @@
-# Copyright (C) 2026 Nrupal Akolkar
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 2351485 ALBERTA INC.
+# SPDX-License-Identifier: Apache-2.0
 
 """PAE agent tool implementations.
 
@@ -199,7 +199,7 @@ class PAETools:
         risk_free_rate: float = 0.0,
         frontier_points: int = 25,
     ) -> dict[str, Any]:
-        """Compute long-only optimal mixes and the efficient frontier.
+        """Compute long-only allocation mixes and the efficient frontier.
 
         Either pass ``portfolio_id`` (expected returns and covariance are
         derived from the holdings' stored return series) or pass
@@ -528,7 +528,7 @@ TOOL_SPECS: list[tuple[str, str]] = [
     ),
     (
         "optimize_portfolio",
-        "Compute long-only optimal portfolio mixes -- maximum-Sharpe, "
+        "Compute long-only portfolio allocation mixes -- maximum-Sharpe, "
         "minimum-variance, and risk-parity -- plus the efficient frontier, "
         "from expected returns and a covariance matrix (or derive them "
         "from a portfolio's stored holding returns). " + DISCLOSURE,

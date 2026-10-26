@@ -9,8 +9,8 @@ PAE is an open-source tool that aggregates portfolio data, runs risk analytics, 
 
 ## What PAE Does
 
-- **Portfolio Aggregation**: Import holdings from CSV, brokerage APIs (IBKR Flex Query, Plaid), or manual entry. Multi-currency (CAD/USD/INR).
-- **Risk Engine**: VaR, CVaR, Sharpe, Sortino, volatility, drawdown, beta -- calculated in Rust for sub-millisecond latency.
+- **Portfolio Aggregation**: Import holdings from CSV files (including IBKR Flex export files) or manual entry. PAE has no live brokerage connections — imports are files you provide. Holdings can be recorded in multiple currencies (CAD/USD/INR); values are tracked per currency (no FX conversion engine yet).
+- **Risk Engine**: VaR, CVaR, Sharpe, Sortino, volatility, drawdown, beta -- calculated in Rust (see docs/BENCHMARKS.md for measured timings).
 - **Factor Decomposition**: Fama-French 5-Factor model via OLS. See exactly what drives your returns.
 - **Monte Carlo Simulation**: 1K-100K path simulation with geometric Brownian motion. Stress test allocations.
 - **Correlation Analysis**: Rolling correlation matrices across holdings. Spot hidden concentration risk.
@@ -122,14 +122,14 @@ PAE operates within educational/analytical safe harbor:
 - No default parameters that imply advice
 - No output labeled "optimal" or "recommended"
 - All inputs start blank or neutral
-- Compliant with FINRA 2214, CSA guidance, and SEC no-action letter precedents for analytical tools
+- Designed with reference to FINRA 2214, CSA guidance, and SEC no-action letter precedents for analytical tools (design reference, not a compliance certification)
 
 ## License
 
-[AGPL-3.0](LICENSE)
+Layered, per [LICENSING.md](LICENSING.md): the engine, analytics core and dashboard are [AGPL-3.0-or-later](LICENSES/AGPL-3.0.txt); the common/MCP-exposed surface is [Apache-2.0](LICENSES/Apache-2.0.txt); commercial licensing is available on both tracks.
 
 ## Author
 
-Nrupal Akolkar ([nrupalakolkar@gmail.com](mailto:nrupalakolkar@gmail.com))
+PAE is a product of 2351485 ALBERTA INC. Created by Nrupal Akolkar.
 
 Architecture and initial scaffolding by Milo (Town AI Assistant).

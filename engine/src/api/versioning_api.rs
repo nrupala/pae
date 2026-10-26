@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Nrupal Akolkar
+// Copyright (C) 2026 2351485 ALBERTA INC.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use axum::http::StatusCode;
@@ -58,16 +58,42 @@ pub struct GetHistoryResponse {
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub struct SnapshotRequest {
-    pub as_of: String,
+    /// RFC 3339 timestamp. Empty or omitted means "now".
+    pub as_of: Option<String>,
     pub entity_types: Vec<String>,
+    pub entity_ids: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
 pub struct SnapshotResponse {
     pub as_of: String,
     pub entities: Vec<VersionRecord>,
+}
+
+#[derive(Deserialize)]
+pub struct DiffRequest {
+    pub from: String,
+    pub to: String,
+    pub entity_types: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct ModifiedEntityView {
+    pub entity_id: String,
+    pub from_version: u64,
+    pub to_version: u64,
+    pub from_hash: String,
+    pub to_hash: String,
+}
+
+#[derive(Serialize)]
+pub struct DiffResponse {
+    pub from: String,
+    pub to: String,
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+    pub modified: Vec<ModifiedEntityView>,
 }
 
 #[derive(Serialize)]
@@ -221,13 +247,86 @@ pub async fn get_history(
     }))
 }
 
+fn parse_timestamp(
+    s: &str,
+    field: &str,
+) -> Result<chrono::DateTime<chrono::Utc>, (StatusCode, Json<ApiError>)> {
+    chrono::DateTime::parse_from_rfc3339(s)
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .map_err(|e| {
+            bad_request(
+                format!("Invalid {field} timestamp (RFC 3339 expected): {e}"),
+                "INVALID_TIMESTAMP",
+            )
+        })
+}
+
 pub async fn get_snapshot(
-    Json(_input): Json<SnapshotRequest>,
+    State(store): State<Arc<VersionStore>>,
+    Json(input): Json<SnapshotRequest>,
 ) -> ApiResult<SnapshotResponse> {
-    // TODO: Wire to SnapshotEngine once production SQLite backend is ready
+    use crate::versioning::snapshot::SnapshotEngine;
+    use crate::versioning::types::SnapshotQuery;
+
+    let as_of = match input.as_of.as_deref() {
+        Some(s) if !s.is_empty() => parse_timestamp(s, "as_of")?,
+        _ => chrono::Utc::now(),
+    };
+
+    let mut entity_types = Vec::new();
+    for t in &input.entity_types {
+        entity_types.push(parse_entity_type(t)?);
+    }
+
+    let query = SnapshotQuery {
+        as_of,
+        entity_types,
+        entity_ids: input.entity_ids.unwrap_or_default(),
+    };
+
+    let engine = SnapshotEngine::new(&store);
+    let records = engine.snapshot_at(&query).map_err(internal_error)?;
+    let entities: Vec<VersionRecord> = records.iter().map(to_api_record).collect();
+
     Ok(Json(SnapshotResponse {
-        as_of: _input.as_of,
-        entities: vec![],
+        as_of: as_of.to_rfc3339(),
+        entities,
+    }))
+}
+
+pub async fn get_diff(
+    State(store): State<Arc<VersionStore>>,
+    Json(input): Json<DiffRequest>,
+) -> ApiResult<DiffResponse> {
+    use crate::versioning::snapshot::SnapshotEngine;
+
+    let from = parse_timestamp(&input.from, "from")?;
+    let to = parse_timestamp(&input.to, "to")?;
+
+    let mut entity_types = Vec::new();
+    for t in &input.entity_types {
+        entity_types.push(parse_entity_type(t)?);
+    }
+
+    let engine = SnapshotEngine::new(&store);
+    let diff = engine.diff(from, to, &entity_types).map_err(internal_error)?;
+
+    Ok(Json(DiffResponse {
+        from: from.to_rfc3339(),
+        to: to.to_rfc3339(),
+        added: diff.added,
+        removed: diff.removed,
+        modified: diff
+            .modified
+            .into_iter()
+            .map(|m| ModifiedEntityView {
+                entity_id: m.entity_id,
+                from_version: m.from_version,
+                to_version: m.to_version,
+                from_hash: m.from_hash,
+                to_hash: m.to_hash,
+            })
+            .collect(),
     }))
 }
 
