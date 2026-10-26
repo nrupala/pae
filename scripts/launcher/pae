@@ -1,0 +1,254 @@
+#!/bin/sh
+# Copyright (C) 2026 2351485 ALBERTA INC.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# PAE launcher — runs the native bundle (no containers, no runtimes
+# to install: the engine is a native binary and the analytics service
+# is a self-contained frozen executable).
+#
+#   pae start     start engine + analytics in the background
+#   pae stop      stop both
+#   pae restart   stop, then start
+#   pae status    process + health status, prints the dashboard URL
+#   pae seed      load the fictional demo data into a running stack
+#   pae logs      tail the logs ([engine|analytics] [lines])
+#   pae serve     run both in the foreground (for systemd / launchd)
+#   pae version   print the bundle version
+#
+# Data lives in PAE_HOME (default ~/.local/share/pae):
+#   data/   the two SQLite stores
+#   run/    PID files
+#   logs/   engine.log, analytics.log
+#
+# Ports: engine 3001, analytics 3002, both loopback. Override with
+# PAE_ENGINE_PORT / PAE_ANALYTICS_PORT.
+
+set -eu
+
+# Resolve the bundle root, following a symlink (install.sh links
+# `pae` into a bin directory).
+SELF=$0
+while [ -L "$SELF" ]; do
+    LINK=$(readlink "$SELF")
+    case $LINK in
+        /*) SELF=$LINK ;;
+        *) SELF=$(dirname "$SELF")/$LINK ;;
+    esac
+done
+ROOT=$(CDPATH= cd -- "$(dirname -- "$SELF")" && pwd)
+
+
+PAE_HOME=${PAE_HOME:-"$HOME/.local/share/pae"}
+DATA_DIR="$PAE_HOME/data"
+RUN_DIR="$PAE_HOME/run"
+LOG_DIR="$PAE_HOME/logs"
+ENGINE_PORT=${PAE_ENGINE_PORT:-3001}
+ANALYTICS_PORT=${PAE_ANALYTICS_PORT:-3002}
+ENGINE_URL="http://127.0.0.1:$ENGINE_PORT"
+ANALYTICS_URL="http://127.0.0.1:$ANALYTICS_PORT"
+
+ENGINE_BIN="$ROOT/bin/pae-engine"
+ANALYTICS_BIN="$ROOT/analytics/pae-analytics"
+SEED_BIN="$ROOT/bin/pae-seed"
+
+mkdir -p "$DATA_DIR/engine" "$DATA_DIR/analytics" "$RUN_DIR" "$LOG_DIR"
+
+engine_pid()    { cat "$RUN_DIR/engine.pid" 2>/dev/null || true; }
+analytics_pid() { cat "$RUN_DIR/analytics.pid" 2>/dev/null || true; }
+
+pid_alive() {
+    [ -n "$1" ] && kill -0 "$1" 2>/dev/null
+}
+
+have_curl() { command -v curl >/dev/null 2>&1; }
+
+http_ok() {
+    # $1 = url
+    if have_curl; then
+        curl -sf -m 3 -o /dev/null "$1" 2>/dev/null
+    else
+        return 1
+    fi
+}
+
+wait_healthy() {
+    # $1 = name, $2 = health url, $3 = timeout seconds
+    _name=$1 _url=$2 _timeout=$3 _i=0
+    while [ "$_i" -lt "$_timeout" ]; do
+        if http_ok "$_url"; then
+            echo "$_name healthy at $_url"
+            return 0
+        fi
+        sleep 1
+        _i=$((_i + 1))
+    done
+    echo "WARNING: $_name did not answer $_url within ${_timeout}s." >&2
+    echo "  See logs: pae logs" >&2
+    return 1
+}
+
+# Environment shared by both services. PAE_DB_PATH is the same
+# variable name in both codebases, so it is set per-process below.
+common_env() {
+    PAE_CORS_ORIGINS="http://localhost:$ENGINE_PORT,http://127.0.0.1:$ENGINE_PORT,http://localhost:$ANALYTICS_PORT,http://127.0.0.1:$ANALYTICS_PORT${PAE_CORS_ORIGINS:+,$PAE_CORS_ORIGINS}"
+    export PAE_CORS_ORIGINS
+}
+
+start_engine() {
+    if pid_alive "$(engine_pid)"; then
+        echo "engine already running (pid $(engine_pid))"
+        return 0
+    fi
+    echo "starting engine on 127.0.0.1:$ENGINE_PORT ..."
+    PAE_DB_PATH="$DATA_DIR/engine/pae.db" \
+    PAE_UI_DIR="$ROOT/ui" \
+    PAE_ENGINE_PORT="$ENGINE_PORT" \
+    PAE_ANALYTICS_URL="$ANALYTICS_URL" \
+        nohup "$ENGINE_BIN" >>"$LOG_DIR/engine.log" 2>&1 &
+    echo $! > "$RUN_DIR/engine.pid"
+}
+
+start_analytics() {
+    if pid_alive "$(analytics_pid)"; then
+        echo "analytics already running (pid $(analytics_pid))"
+        return 0
+    fi
+    echo "starting analytics on 127.0.0.1:$ANALYTICS_PORT ..."
+    PAE_DB_PATH="$DATA_DIR/analytics/pae.db" \
+    PAE_ENGINE_URL="$ENGINE_URL" \
+    PAE_ANALYTICS_PORT="$ANALYTICS_PORT" \
+        nohup "$ANALYTICS_BIN" >>"$LOG_DIR/analytics.log" 2>&1 &
+    echo $! > "$RUN_DIR/analytics.pid"
+}
+
+cmd_start() {
+    common_env
+    start_engine
+    start_analytics
+    _failed=0
+    wait_healthy "engine" "$ENGINE_URL/health" 60 || _failed=1
+    wait_healthy "analytics" "$ANALYTICS_URL/health" 60 || _failed=1
+    if [ "$_failed" -eq 0 ]; then
+        echo ""
+        echo "PAE is running. Dashboard: http://localhost:$ENGINE_PORT"
+        echo "First run? Load the fictional demo data with: pae seed"
+    fi
+}
+
+stop_one() {
+    # $1 = name, $2 = pid
+    _name=$1 _pid=$2
+    if ! pid_alive "$_pid"; then
+        echo "$_name not running"
+        return 0
+    fi
+    echo "stopping $_name (pid $_pid) ..."
+    kill "$_pid" 2>/dev/null || true
+    _i=0
+    while pid_alive "$_pid" && [ "$_i" -lt 15 ]; do
+        sleep 1
+        _i=$((_i + 1))
+    done
+    if pid_alive "$_pid"; then
+        echo "$_name did not stop in 15s; forcing"
+        kill -9 "$_pid" 2>/dev/null || true
+    fi
+}
+
+cmd_stop() {
+    stop_one "analytics" "$(analytics_pid)"
+    stop_one "engine" "$(engine_pid)"
+    rm -f "$RUN_DIR/engine.pid" "$RUN_DIR/analytics.pid"
+    echo "PAE stopped. Your data is untouched in $DATA_DIR"
+}
+
+cmd_status() {
+    _ep=$(engine_pid) _ap=$(analytics_pid)
+    if pid_alive "$_ep"; then
+        echo "engine:    running (pid $_ep, $ENGINE_URL)"
+    else
+        echo "engine:    not running"
+    fi
+    if pid_alive "$_ap"; then
+        echo "analytics: running (pid $_ap, $ANALYTICS_URL)"
+    else
+        echo "analytics: not running"
+    fi
+    if pid_alive "$_ep"; then
+        if http_ok "$ENGINE_URL/health"; then
+            echo "dashboard: http://localhost:$ENGINE_PORT (healthy)"
+        else
+            echo "dashboard: http://localhost:$ENGINE_PORT (not answering yet)"
+        fi
+    fi
+    echo "data dir:  $PAE_HOME"
+}
+
+cmd_seed() {
+    if ! pid_alive "$(engine_pid)"; then
+        echo "PAE is not running. Start it first: pae start" >&2
+        exit 1
+    fi
+    echo "seeding fictional demo data ..."
+    PAE_ENGINE_URL="$ENGINE_URL" PAE_ANALYTICS_URL="$ANALYTICS_URL" \
+        "$SEED_BIN"
+}
+
+cmd_logs() {
+    _which=${1:-all} _lines=${2:-100}
+    case $_which in
+        engine)    tail -n "$_lines" "$LOG_DIR/engine.log" ;;
+        analytics) tail -n "$_lines" "$LOG_DIR/analytics.log" ;;
+        all)
+            echo "=== engine (last $_lines) ==="
+            tail -n "$_lines" "$LOG_DIR/engine.log" 2>/dev/null || true
+            echo "=== analytics (last $_lines) ==="
+            tail -n "$_lines" "$LOG_DIR/analytics.log" 2>/dev/null || true
+            ;;
+        *) echo "usage: pae logs [engine|analytics] [lines]" >&2; exit 2 ;;
+    esac
+}
+
+cmd_serve() {
+    # Foreground mode for service managers (systemd / launchd): start
+    # both processes as children of this script and forward signals.
+    common_env
+    echo "pae serve: engine :$ENGINE_PORT, analytics :$ANALYTICS_PORT (Ctrl-C to stop)"
+    PAE_DB_PATH="$DATA_DIR/engine/pae.db" \
+    PAE_UI_DIR="$ROOT/ui" \
+    PAE_ENGINE_PORT="$ENGINE_PORT" \
+    PAE_ANALYTICS_URL="$ANALYTICS_URL" \
+        "$ENGINE_BIN" >>"$LOG_DIR/engine.log" 2>&1 &
+    _ep=$!
+    echo "$_ep" > "$RUN_DIR/engine.pid"
+    PAE_DB_PATH="$DATA_DIR/analytics/pae.db" \
+    PAE_ENGINE_URL="$ENGINE_URL" \
+    PAE_ANALYTICS_PORT="$ANALYTICS_PORT" \
+        "$ANALYTICS_BIN" >>"$LOG_DIR/analytics.log" 2>&1 &
+    _ap=$!
+    echo "$_ap" > "$RUN_DIR/analytics.pid"
+    trap 'kill "$_ep" "$_ap" 2>/dev/null || true' INT TERM
+    # Exit when either child exits so the supervisor can restart us.
+    wait -n "$_ep" "$_ap" 2>/dev/null || wait "$_ep" "$_ap"
+    kill "$_ep" "$_ap" 2>/dev/null || true
+    rm -f "$RUN_DIR/engine.pid" "$RUN_DIR/analytics.pid"
+}
+
+cmd_version() {
+    if [ -f "$ROOT/VERSION" ]; then cat "$ROOT/VERSION"; else echo "unknown"; fi
+}
+
+case ${1:-} in
+    start)   cmd_start ;;
+    stop)    cmd_stop ;;
+    restart) cmd_stop; cmd_start ;;
+    status)  cmd_status ;;
+    seed)    cmd_seed ;;
+    logs)    shift; cmd_logs "$@" ;;
+    serve)   cmd_serve ;;
+    version) cmd_version ;;
+    *)
+        echo "usage: pae {start|stop|restart|status|seed|logs|serve|version}" >&2
+        exit 2
+        ;;
+esac

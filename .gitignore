@@ -35,8 +35,8 @@ ui/.cache/
 .DS_Store
 Thumbs.db
 
-# Docker
-docker-compose.override.yml
+# Release bundles (build output of scripts/build-bundle.sh)
+dist-bundle/
 
 # Data (user-generated, never committed)
 data/

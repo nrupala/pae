@@ -12,7 +12,7 @@ PAE is OS-agnostic. One codebase, every platform.
 | **Windows** | Tauri | .exe / .msi (NSIS) | Config ready |
 | **macOS** | Tauri | .app / .dmg | Config ready |
 | **Linux** | Tauri | .deb / .AppImage | Config ready |
-| **Docker** | Multi-stage Dockerfile | Container image | Ready |
+| **Self-host bundle** | Rust binary + PyInstaller + static UI | Directory + tar.gz per OS/arch | Ready |
 
 ## Architecture
 
@@ -28,7 +28,7 @@ ui/src/                    <-- Single source of truth
   |
   +-- Tauri                <-- Wraps ui/src/ in native desktop container (Rust backend)
   |
-  +-- Docker               <-- Serves ui/src/ via nginx
+  +-- Self-host bundle     <-- Engine binary serves ui/ itself (see docs/SELF_HOST.md)
 ```
 
 ## Build Commands
@@ -67,12 +67,13 @@ cargo tauri build --target x86_64-apple-darwin        # cross-compile macOS
 cargo tauri build --target x86_64-unknown-linux-gnu   # cross-compile Linux
 ```
 
-### Docker
+### Self-host bundle (native, no containers)
 ```bash
-cd infra/docker
-docker compose build
-docker compose up
+scripts/build-bundle.sh          # one bundle per OS/arch
+./dist-bundle/pae-*/install.sh   # install.ps1 on Windows
+pae start                        # engine serves the dashboard itself
 ```
+See `docs/SELF_HOST.md` (user guide) and `docs/PACKAGING.md` (build).
 
 ## Why This Architecture
 
@@ -110,8 +111,3 @@ docker compose up
 - macOS: .app bundle with DMG, notarization required for distribution
 - Linux: .deb package + AppImage for universal Linux support
 - Tauri bundles a minimal WebView (WRY) -- not a full Chromium like Electron
-
-### Docker
-- Multi-stage build: Rust compile + Python install + static UI
-- ARM-compatible for OCI free tier deployment
-- APP_ROOT env variable for Docker-to-VM portability

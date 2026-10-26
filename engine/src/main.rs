@@ -3,12 +3,19 @@
 
 use anyhow::Result;
 use axum::{
-    http::{header, HeaderValue, Method},
-    routing::{delete, get, post, put},
+    body::Body,
+    extract::{Request, State},
+    http::{header, HeaderValue, Method, StatusCode, Uri},
+    response::{IntoResponse, Response},
+    routing::{any, delete, get, post, put},
     Router,
 };
 use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::net::TcpStream;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -38,9 +45,43 @@ fn cors_layer() -> CorsLayer {
         .allow_headers([header::CONTENT_TYPE])
 }
 
+/// Runtime wiring that `main` takes from the environment and the
+/// HTTP-layer integration tests set directly.
+struct AppConfig {
+    /// Directory of built dashboard files served at `/` (`PAE_UI_DIR`).
+    /// The native bundle sets this so the engine serves the dashboard
+    /// itself — the product is a single origin, no separate web server.
+    /// None = API only (development, tests).
+    ui_dir: Option<PathBuf>,
+    /// Base URL of the analytics service (`PAE_ANALYTICS_URL`), target
+    /// of the /api/v1/analytics and /api/v1/dashboard proxy routes.
+    analytics_base: String,
+}
+
+impl AppConfig {
+    fn from_env() -> Self {
+        Self {
+            ui_dir: std::env::var("PAE_UI_DIR")
+                .ok()
+                .filter(|s| !s.is_empty())
+                .map(PathBuf::from),
+            analytics_base: std::env::var("PAE_ANALYTICS_URL")
+                .unwrap_or_else(|_| "http://127.0.0.1:3002".to_string()),
+        }
+    }
+}
+
+/// Build the Axum router from the process environment.
+/// Used by the HTTP-layer integration tests; `main` builds via
+/// [`build_app`] so it can log the resolved configuration first.
+#[allow(dead_code)]
+fn create_app(store: Arc<storage::Store>) -> Router {
+    build_app(store, &AppConfig::from_env())
+}
+
 /// Build the Axum router. Factored out of `main` so the HTTP-layer
 /// integration tests below can construct the app without binding a socket.
-fn create_app(store: Arc<storage::Store>) -> Router {
+fn build_app(store: Arc<storage::Store>, cfg: &AppConfig) -> Router {
     // Routes backed by the versioning store
     let version_store = Arc::new(versioning::store::VersionStore::new());
     let versioned_routes = Router::new()
@@ -89,13 +130,364 @@ fn create_app(store: Arc<storage::Store>) -> Router {
         .route("/api/v1/portfolio/montecarlo", post(api::portfolio::monte_carlo))
         .route("/api/v1/analytics/bond", post(api::bonds::bond_analytics));
 
-    Router::new()
+    let app = Router::new()
         .merge(versioned_routes)
         .merge(storage_routes)
         .merge(crypto_routes)
         .merge(stateless_routes)
-        .layer(cors_layer())
-        .layer(TraceLayer::new_for_http())
+        .merge(analytics_proxy_routes(cfg.analytics_base.clone()));
+
+    // When a UI directory is configured, the engine serves the
+    // dashboard itself as the fallback for unmatched paths — the
+    // product is a single origin, no separate web server. API paths
+    // never fall through to the UI (see serve_ui), so unknown API
+    // routes keep returning 404.
+    let app = match &cfg.ui_dir {
+        Some(dir) => app.fallback_service(ui_service(dir.clone())),
+        None => app,
+    };
+
+    app.layer(cors_layer()).layer(TraceLayer::new_for_http())
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard static files (PAE_UI_DIR)
+// ---------------------------------------------------------------------------
+
+/// Fallback service that serves the built dashboard from `dir`.
+fn ui_service(dir: PathBuf) -> axum::routing::MethodRouter {
+    any(serve_ui).with_state(Arc::new(dir))
+}
+
+/// Serve one dashboard file, or `index.html` for client-side routes.
+///
+/// Rules: GET/HEAD only; `/api/` and `/health` never resolve to UI
+/// files; any `..` path segment is rejected; an existing file is
+/// served as-is; an extensionless path that is not a file is treated
+/// as a client-side route and gets `index.html` (SPA fallback); a
+/// missing path *with* an extension is a real 404.
+async fn serve_ui(State(root): State<Arc<PathBuf>>, method: Method, uri: Uri) -> Response {
+    if method != Method::GET && method != Method::HEAD {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let raw_path = uri.path();
+    if raw_path.starts_with("/api/") || raw_path == "/health" {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let rel = raw_path.trim_start_matches('/');
+    if rel.split('/').any(|seg| seg == "..") {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let root = root.as_path();
+    let head_only = method == Method::HEAD;
+    if rel.is_empty() {
+        return serve_file(&root.join("index.html"), head_only).await;
+    }
+    let target = root.join(rel);
+    if target.is_file() {
+        return serve_file(&target, head_only).await;
+    }
+    let last_segment = rel.rsplit('/').next().unwrap_or("");
+    if !last_segment.contains('.') {
+        let index = root.join("index.html");
+        if index.is_file() {
+            return serve_file(&index, head_only).await;
+        }
+    }
+    StatusCode::NOT_FOUND.into_response()
+}
+
+async fn serve_file(path: &Path, head_only: bool) -> Response {
+    match tokio::fs::read(path).await {
+        Ok(bytes) => {
+            let len = bytes.len();
+            let body = if head_only {
+                Body::empty()
+            } else {
+                Body::from(bytes)
+            };
+            Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, content_type_for(path))
+                .header(header::CONTENT_LENGTH, len)
+                .body(body)
+                .expect("static response is well-formed")
+        }
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+fn content_type_for(path: &Path) -> &'static str {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("html") => "text/html; charset=utf-8",
+        Some("js") | Some("mjs") => "text/javascript; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("json") | Some("map") => "application/json",
+        Some("webmanifest") => "application/manifest+json",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("ico") => "image/x-icon",
+        Some("woff") => "font/woff",
+        Some("woff2") => "font/woff2",
+        Some("ttf") => "font/ttf",
+        Some("wasm") => "application/wasm",
+        Some("txt") => "text/plain; charset=utf-8",
+        _ => "application/octet-stream",
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Analytics reverse proxy (/api/v1/analytics/*, /api/v1/dashboard/*)
+// ---------------------------------------------------------------------------
+
+#[derive(Clone)]
+struct AnalyticsProxy {
+    /// e.g. "http://127.0.0.1:3002" — plain HTTP; the analytics
+    /// service is a loopback companion process, never a remote host.
+    base: String,
+}
+
+/// Routes the dashboard needs from the analytics service, proxied
+/// through the engine origin so the product is same-origin. The
+/// engine's own `/api/v1/analytics/bond` route is an exact match and
+/// takes precedence over the wildcard below.
+fn analytics_proxy_routes(base: String) -> Router {
+    Router::new()
+        .route("/api/v1/analytics/{*rest}", any(proxy_to_analytics))
+        .route("/api/v1/dashboard/{*rest}", any(proxy_to_analytics))
+        .with_state(AnalyticsProxy { base })
+}
+
+async fn proxy_to_analytics(State(proxy): State<AnalyticsProxy>, req: Request) -> Response {
+    let (parts, body) = req.into_parts();
+    let body_bytes = match axum::body::to_bytes(body, 64 * 1024 * 1024).await {
+        Ok(b) => b,
+        Err(_) => {
+            return (StatusCode::PAYLOAD_TOO_LARGE, "request body too large").into_response();
+        }
+    };
+    let path_and_query = parts
+        .uri
+        .path_and_query()
+        .map(|pq| pq.as_str().to_string())
+        .unwrap_or_else(|| parts.uri.path().to_string());
+    match forward_http(
+        &proxy.base,
+        &parts.method,
+        &path_and_query,
+        &parts.headers,
+        &body_bytes,
+    )
+    .await
+    {
+        Ok(resp) => resp,
+        Err(e) => Response::builder()
+            .status(StatusCode::BAD_GATEWAY)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                serde_json::json!({"error": format!("analytics service unavailable: {e}")})
+                    .to_string(),
+            ))
+            .expect("gateway response is well-formed"),
+    }
+}
+
+/// Hop-by-hop headers are never forwarded in either direction.
+fn is_hop_by_hop(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "host"
+            | "connection"
+            | "content-length"
+            | "transfer-encoding"
+            | "keep-alive"
+            | "proxy-authorization"
+            | "proxy-connection"
+            | "te"
+            | "trailer"
+            | "upgrade"
+    )
+}
+
+fn parse_http_authority(base: &str) -> Option<(String, String, u16)> {
+    let rest = base.strip_prefix("http://")?;
+    let authority = rest.split('/').next()?;
+    let (host, port) = match authority.split_once(':') {
+        Some((h, p)) => (h.to_string(), p.parse().ok()?),
+        None => (authority.to_string(), 80),
+    };
+    Some((authority.to_string(), host, port))
+}
+
+/// Minimal HTTP/1.1 forward over a raw TCP stream. The upstream is
+/// the loopback analytics service, so a full HTTP client crate would
+/// be dead weight; this handles Content-Length and chunked responses
+/// and nothing else.
+async fn forward_http(
+    base: &str,
+    method: &Method,
+    path_and_query: &str,
+    headers: &header::HeaderMap,
+    body: &[u8],
+) -> Result<Response, String> {
+    let (authority, host, port) = parse_http_authority(base)
+        .ok_or_else(|| format!("unsupported analytics base URL '{base}' (http:// only)"))?;
+
+    let stream = tokio::time::timeout(
+        Duration::from_secs(5),
+        TcpStream::connect((host.as_str(), port)),
+    )
+    .await
+    .map_err(|_| format!("connect to analytics at {authority} timed out"))?
+    .map_err(|e| format!("connect to analytics at {authority}: {e}"))?;
+    let (read_half, mut write_half) = stream.into_split();
+
+    let mut raw = Vec::with_capacity(body.len() + 512);
+    raw.extend_from_slice(format!("{method} {path_and_query} HTTP/1.1\r\n").as_bytes());
+    raw.extend_from_slice(format!("Host: {authority}\r\n").as_bytes());
+    for (name, value) in headers.iter() {
+        if is_hop_by_hop(name.as_str()) {
+            continue;
+        }
+        if let Ok(v) = value.to_str() {
+            raw.extend_from_slice(format!("{name}: {v}\r\n").as_bytes());
+        }
+    }
+    raw.extend_from_slice(format!("Content-Length: {}\r\n", body.len()).as_bytes());
+    raw.extend_from_slice(b"Connection: close\r\n\r\n");
+    raw.extend_from_slice(body);
+    write_half
+        .write_all(&raw)
+        .await
+        .map_err(|e| format!("write to analytics: {e}"))?;
+    write_half
+        .flush()
+        .await
+        .map_err(|e| format!("flush to analytics: {e}"))?;
+
+    tokio::time::timeout(
+        Duration::from_secs(60),
+        read_upstream_response(read_half),
+    )
+    .await
+    .map_err(|_| "analytics response timed out".to_string())?
+}
+
+async fn read_upstream_response(
+    read_half: tokio::net::tcp::OwnedReadHalf,
+) -> Result<Response, String> {
+    let mut reader = BufReader::new(read_half);
+
+    let mut status_line = String::new();
+    reader
+        .read_line(&mut status_line)
+        .await
+        .map_err(|e| format!("read analytics status: {e}"))?;
+    let status_code: u16 = status_line
+        .split_whitespace()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .ok_or_else(|| format!("malformed analytics status line: {status_line:?}"))?;
+
+    let mut resp_headers: Vec<(String, String)> = Vec::new();
+    loop {
+        let mut line = String::new();
+        let n = reader
+            .read_line(&mut line)
+            .await
+            .map_err(|e| format!("read analytics headers: {e}"))?;
+        if n == 0 || line == "\r\n" || line == "\n" {
+            break;
+        }
+        if let Some((name, value)) = line.trim_end().split_once(':') {
+            resp_headers.push((name.trim().to_string(), value.trim().to_string()));
+        }
+    }
+
+    let header_get = |want: &str| -> Option<String> {
+        resp_headers
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(want))
+            .map(|(_, v)| v.clone())
+    };
+
+    let body: Vec<u8> = if header_get("transfer-encoding")
+        .map(|v| v.to_ascii_lowercase().contains("chunked"))
+        .unwrap_or(false)
+    {
+        read_chunked_body(&mut reader).await?
+    } else if let Some(len) = header_get("content-length").and_then(|v| v.parse::<usize>().ok()) {
+        let mut buf = vec![0u8; len];
+        reader
+            .read_exact(&mut buf)
+            .await
+            .map_err(|e| format!("read analytics body: {e}"))?;
+        buf
+    } else {
+        let mut buf = Vec::new();
+        reader
+            .read_to_end(&mut buf)
+            .await
+            .map_err(|e| format!("read analytics body: {e}"))?;
+        buf
+    };
+
+    let mut builder = Response::builder().status(
+        StatusCode::from_u16(status_code).unwrap_or(StatusCode::BAD_GATEWAY),
+    );
+    for (name, value) in &resp_headers {
+        if is_hop_by_hop(name) {
+            continue;
+        }
+        builder = builder.header(name.as_str(), value.as_str());
+    }
+    builder
+        .body(Body::from(body))
+        .map_err(|e| format!("build proxied response: {e}"))
+}
+
+async fn read_chunked_body(
+    reader: &mut BufReader<tokio::net::tcp::OwnedReadHalf>,
+) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    loop {
+        let mut size_line = String::new();
+        reader
+            .read_line(&mut size_line)
+            .await
+            .map_err(|e| format!("read chunk size: {e}"))?;
+        let size_str = size_line.trim().split(';').next().unwrap_or("0");
+        let size = usize::from_str_radix(size_str, 16)
+            .map_err(|_| format!("malformed chunk size: {size_line:?}"))?;
+        if size == 0 {
+            // Trailers (if any) end at the first empty line.
+            loop {
+                let mut trailer = String::new();
+                let n = reader
+                    .read_line(&mut trailer)
+                    .await
+                    .map_err(|e| format!("read chunk trailers: {e}"))?;
+                if n == 0 || trailer == "\r\n" || trailer == "\n" {
+                    break;
+                }
+            }
+            break;
+        }
+        let start = out.len();
+        out.resize(start + size, 0);
+        reader
+            .read_exact(&mut out[start..])
+            .await
+            .map_err(|e| format!("read chunk data: {e}"))?;
+        let mut crlf = [0u8; 2];
+        reader
+            .read_exact(&mut crlf)
+            .await
+            .map_err(|e| format!("read chunk terminator: {e}"))?;
+    }
+    Ok(out)
 }
 
 #[tokio::main]
@@ -126,14 +518,28 @@ async fn main() -> Result<()> {
     );
     tracing::info!("PAE storage initialized at {}", db_path);
 
-    let app = create_app(store);
+    let cfg = AppConfig::from_env();
+    if let Some(dir) = &cfg.ui_dir {
+        tracing::info!("Serving dashboard from {}", dir.display());
+    }
+    tracing::info!(
+        "Analytics proxy target: {} (override with PAE_ANALYTICS_URL)",
+        cfg.analytics_base
+    );
+    let app = build_app(store, &cfg);
 
+    // Bind loopback by default: the engine is a local-first companion
+    // process. Set PAE_ENGINE_HOST=0.0.0.0 to expose it deliberately.
+    let host: std::net::IpAddr = std::env::var("PAE_ENGINE_HOST")
+        .unwrap_or_else(|_| "127.0.0.1".to_string())
+        .parse()
+        .map_err(|e| anyhow::anyhow!("Invalid PAE_ENGINE_HOST: {e}"))?;
     let port: u16 = std::env::var("PAE_ENGINE_PORT")
         .unwrap_or_else(|_| "3001".to_string())
         .parse()
         .map_err(|e| anyhow::anyhow!("Invalid PAE_ENGINE_PORT: {e}"))?;
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let addr = SocketAddr::from((host, port));
     tracing::info!("PAE Engine listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -396,5 +802,166 @@ mod tests {
             let resp = server.post("/api/v1/analytics/bond").json(&payload).await;
             assert_eq!(resp.status_code().as_u16(), 400);
         }
+    }
+
+    fn configured_server(cfg: &AppConfig) -> TestServer {
+        let store = Arc::new(
+            storage::Store::open_in_memory().expect("in-memory store for tests"),
+        );
+        TestServer::new(build_app(store, cfg)).expect("test server")
+    }
+
+    fn test_ui_dir() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("temp ui dir");
+        std::fs::write(dir.path().join("index.html"), "<h1>PAE dashboard</h1>")
+            .expect("write index");
+        std::fs::write(dir.path().join("app.js"), "console.log('pae');").expect("write js");
+        std::fs::create_dir_all(dir.path().join("styles")).expect("styles dir");
+        std::fs::write(dir.path().join("styles/app.css"), "body{}").expect("write css");
+        dir
+    }
+
+    /// With PAE_UI_DIR set, the engine serves the dashboard itself:
+    /// real files as-is, extensionless routes fall back to index.html
+    /// (SPA), missing files with extensions 404, and API 404s are
+    /// never swallowed by the UI fallback.
+    #[tokio::test]
+    async fn ui_static_serving_and_spa_fallback() {
+        let dir = test_ui_dir();
+        let cfg = AppConfig {
+            ui_dir: Some(dir.path().to_path_buf()),
+            analytics_base: "http://127.0.0.1:3002".to_string(),
+        };
+        let server = configured_server(&cfg);
+
+        let index = server.get("/").await;
+        assert_eq!(index.status_code().as_u16(), 200);
+        assert!(index.text().contains("PAE dashboard"));
+
+        let js = server.get("/app.js").await;
+        assert_eq!(js.status_code().as_u16(), 200);
+        assert!(js
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("javascript"));
+
+        let css = server.get("/styles/app.css").await;
+        assert_eq!(css.status_code().as_u16(), 200);
+
+        // Client-side route: no such file, no extension -> index.html.
+        let spa = server.get("/portfolio/demo").await;
+        assert_eq!(spa.status_code().as_u16(), 200);
+        assert!(spa.text().contains("PAE dashboard"));
+
+        // Missing asset *with* an extension is a real 404.
+        let missing = server.get("/nope.js").await;
+        assert_eq!(missing.status_code().as_u16(), 404);
+
+        // The UI fallback must not resurrect removed API endpoints.
+        let api = server
+            .post("/api/v1/crypto/derive-key")
+            .json(&serde_json::json!({ "passphrase": "hunter2" }))
+            .await;
+        assert_eq!(api.status_code().as_u16(), 404);
+    }
+
+    /// Without a UI directory the app stays API-only (404 at `/`).
+    #[tokio::test]
+    async fn ui_absent_by_default() {
+        let cfg = AppConfig {
+            ui_dir: None,
+            analytics_base: "http://127.0.0.1:3002".to_string(),
+        };
+        let server = configured_server(&cfg);
+        let resp = server.get("/").await;
+        assert_eq!(resp.status_code().as_u16(), 404);
+    }
+
+    /// The analytics proxy forwards method, path+query and body, and
+    /// relays the upstream status and body verbatim.
+    #[tokio::test]
+    async fn analytics_proxy_forwards_and_relays() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind stub analytics");
+        let addr = listener.local_addr().unwrap();
+        let stub = tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.expect("accept");
+            let mut buf = Vec::new();
+            let mut chunk = [0u8; 1024];
+            // Read headers, then the Content-Length body.
+            let body_len = loop {
+                let n = sock.read(&mut chunk).await.expect("read request");
+                assert!(n > 0, "stub got EOF before full request");
+                buf.extend_from_slice(&chunk[..n]);
+                if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                    let head = String::from_utf8_lossy(&buf[..pos]).to_string();
+                    let len: usize = head
+                        .lines()
+                        .find_map(|l| {
+                            l.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .map(|v| v.trim().to_string())
+                        })
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(0);
+                    if buf.len() >= pos + 4 + len {
+                        break len;
+                    }
+                }
+            };
+            let text = String::from_utf8_lossy(&buf).to_string();
+            assert!(
+                text.starts_with("POST /api/v1/analytics/risk?portfolio_id=demo HTTP/1.1"),
+                "stub saw request line: {}",
+                text.lines().next().unwrap_or("")
+            );
+            assert!(text.contains("\"x\":1"), "stub saw JSON body: {text}");
+            let _ = body_len;
+            let payload = "{\"var_95\":0.5}";
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                payload.len(),
+                payload
+            );
+            sock.write_all(resp.as_bytes()).await.expect("write stub response");
+            text
+        });
+
+        let cfg = AppConfig {
+            ui_dir: None,
+            analytics_base: format!("http://{addr}"),
+        };
+        let server = configured_server(&cfg);
+        let resp = server
+            .post("/api/v1/analytics/risk?portfolio_id=demo")
+            .json(&serde_json::json!({ "x": 1 }))
+            .await;
+        assert_eq!(resp.status_code().as_u16(), 200);
+        let body: serde_json::Value = resp.json();
+        assert_eq!(body["var_95"], 0.5);
+        stub.await.expect("stub task");
+    }
+
+    /// With analytics down, proxied routes answer an honest 502
+    /// instead of hanging or fabricating a response.
+    #[tokio::test]
+    async fn analytics_proxy_502_when_analytics_down() {
+        let cfg = AppConfig {
+            ui_dir: None,
+            // Port 1 is closed on loopback by definition.
+            analytics_base: "http://127.0.0.1:1".to_string(),
+        };
+        let server = configured_server(&cfg);
+        let resp = server
+            .post("/api/v1/analytics/risk?portfolio_id=demo")
+            .json(&serde_json::json!({}))
+            .await;
+        assert_eq!(resp.status_code().as_u16(), 502);
     }
 }
