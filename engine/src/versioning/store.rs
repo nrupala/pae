@@ -8,21 +8,63 @@ use std::sync::{Arc, RwLock};
 use super::types::{
     EntityType, VersionAuthor, VersionMetadata, VersionQuery, VersionedRecord,
 };
+use crate::storage::Store;
 
 /// Append-only version store.
 /// Every mutation creates a new version. Old versions are never deleted.
 ///
-/// Current: in-memory with RwLock.
-/// Production: SQLite with WAL mode for crash recovery.
+/// Two modes, same API and semantics:
+/// - [`VersionStore::new`] — in-memory only (tests, ephemeral tools).
+/// - [`VersionStore::open_persistent`] — backed by the engine's SQLite
+///   database (WAL mode, see `storage::Store`): every append is written
+///   to the `version_records` table before it lands in the in-memory
+///   index, and the full history is reloaded on open, so version
+///   chains survive engine restarts.
 pub struct VersionStore {
     records: Arc<RwLock<HashMap<String, Vec<VersionedRecord>>>>,
+    backend: Option<Arc<Store>>,
 }
 
 impl VersionStore {
     pub fn new() -> Self {
         Self {
             records: Arc::new(RwLock::new(HashMap::new())),
+            backend: None,
         }
+    }
+
+    /// Open a store backed by the engine's SQLite database.
+    ///
+    /// Loads every persisted record into the in-memory index, grouped
+    /// by entity and ordered by version, restoring history, version
+    /// numbering, and the parent-hash chain exactly as the previous
+    /// process left them.
+    ///
+    /// # Errors
+    /// Returns [`VersionStoreError::Persistence`] if the persisted
+    /// history cannot be read back.
+    pub fn open_persistent(backend: Arc<Store>) -> Result<Self, VersionStoreError> {
+        let persisted = backend
+            .load_version_records()
+            .map_err(|e| VersionStoreError::Persistence(e.to_string()))?;
+
+        let mut records: HashMap<String, Vec<VersionedRecord>> = HashMap::new();
+        for record in persisted {
+            records
+                .entry(record.entity_id.clone())
+                .or_default()
+                .push(record);
+        }
+        // The load query already orders by (entity_id, version); sort
+        // defensively so chain order never depends on the backend.
+        for versions in records.values_mut() {
+            versions.sort_by_key(|r| r.version);
+        }
+
+        Ok(Self {
+            records: Arc::new(RwLock::new(records)),
+            backend: Some(backend),
+        })
     }
 
     /// Append a new version. Returns the version hash.
@@ -64,6 +106,14 @@ impl VersionStore {
             },
             parent_hash,
         };
+
+        // Persist before indexing: a failed write must not create a
+        // version that exists only in this process's memory.
+        if let Some(backend) = &self.backend {
+            backend
+                .insert_version_record(&record)
+                .map_err(|e| VersionStoreError::Persistence(e.to_string()))?;
+        }
 
         entity_versions.push(record);
         Ok(version_hash)
@@ -195,6 +245,8 @@ pub enum VersionStoreError {
     NotFound(String),
     #[error("Integrity check failed for entity: {0}")]
     IntegrityFailed(String),
+    #[error("Failed to persist version record: {0}")]
+    Persistence(String),
 }
 
 #[cfg(test)]
@@ -249,5 +301,89 @@ mod tests {
 
         let record = store.get_latest("config-001").unwrap().unwrap();
         assert!(record.verify_integrity());
+    }
+
+    /// Regression test for the pre-3B defect: versioned records lived
+    /// only in memory and vanished on engine restart. Append under one
+    /// store instance, drop it, reopen over the same database file,
+    /// and require the full history — numbering, metadata, and the
+    /// parent-hash chain — to be intact.
+    #[test]
+    fn test_persistence_across_reopen() {
+        use crate::storage::Store;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("pae-versions-test.db");
+
+        let (hash1, hash2) = {
+            let backend = Arc::new(Store::open(&path).unwrap());
+            let store = VersionStore::open_persistent(backend).unwrap();
+            let h1 = store.append(
+                "journal-001", EntityType::DecisionEntry,
+                b"entry-v1".to_vec(), b"nonce-v1-12b!".to_vec(),
+                VersionAuthor::User, Some("Initial entry".to_string()),
+                vec!["quarterly-review".to_string()],
+            ).unwrap();
+            let h2 = store.append(
+                "journal-001", EntityType::DecisionEntry,
+                b"entry-v2-updated".to_vec(), b"nonce-v2-12b!".to_vec(),
+                VersionAuthor::User, Some("Added 30-day outcome".to_string()), vec![],
+            ).unwrap();
+            assert_eq!(store.total_versions().unwrap(), 2);
+            (h1, h2)
+        };
+
+        // Reopen over the same file, as a restarted engine would.
+        let backend = Arc::new(Store::open(&path).unwrap());
+        let store = VersionStore::open_persistent(backend).unwrap();
+
+        assert_eq!(store.total_versions().unwrap(), 2);
+        let history = store.query(&VersionQuery {
+            entity_id: "journal-001".to_string(),
+            entity_type: None,
+            since: None,
+            until: None,
+            limit: None,
+            latest_only: false,
+        }).unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].version_hash, hash1);
+        assert_eq!(history[0].content_encrypted, b"entry-v1".to_vec());
+        assert_eq!(history[0].metadata.tags, vec!["quarterly-review".to_string()]);
+
+        let latest = store.get_latest("journal-001").unwrap().unwrap();
+        assert_eq!(latest.version, 2);
+        assert_eq!(latest.version_hash, hash2);
+        assert_eq!(latest.parent_hash.as_deref(), Some(hash1.as_str()));
+        assert_eq!(
+            latest.metadata.change_summary.as_deref(),
+            Some("Added 30-day outcome"),
+        );
+        assert!(store.verify_chain("journal-001").unwrap());
+
+        // Version numbering continues where the previous process stopped.
+        store.append(
+            "journal-001", EntityType::DecisionEntry,
+            b"entry-v3".to_vec(), b"nonce-v3-12b!".to_vec(),
+            VersionAuthor::User, None, vec![],
+        ).unwrap();
+        assert_eq!(store.get_latest("journal-001").unwrap().unwrap().version, 3);
+        assert!(store.verify_chain("journal-001").unwrap());
+
+        // Snapshots (the point-in-time read path) see reloaded history.
+        let snap = store.snapshot_records(
+            Utc::now(), &[EntityType::DecisionEntry], &[],
+        ).unwrap();
+        assert_eq!(snap.len(), 1);
+        assert_eq!(snap[0].version, 3);
+    }
+
+    /// The in-memory constructor stays ephemeral: nothing is written
+    /// anywhere and a fresh store starts empty.
+    #[test]
+    fn test_in_memory_store_starts_empty() {
+        let store = VersionStore::new();
+        assert_eq!(store.total_versions().unwrap(), 0);
+        assert!(store.get_latest("anything").unwrap().is_none());
     }
 }
