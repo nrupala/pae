@@ -92,6 +92,12 @@ wait_healthy() {
 common_env() {
     PAE_CORS_ORIGINS="http://localhost:$ENGINE_PORT,http://127.0.0.1:$ENGINE_PORT,http://localhost:$ANALYTICS_PORT,http://127.0.0.1:$ANALYTICS_PORT${PAE_CORS_ORIGINS:+,$PAE_CORS_ORIGINS}"
     export PAE_CORS_ORIGINS
+    # One per-install agent token for both processes (Phase 3C): the
+    # engine gates its crypto oracle endpoints with it and analytics
+    # gates the A2A/agent surfaces. Whichever starts first creates
+    # the file (0600); the user reads it here to authorize an agent.
+    PAE_AGENT_TOKEN_PATH="$DATA_DIR/agent-token"
+    export PAE_AGENT_TOKEN_PATH
 }
 
 start_engine() {

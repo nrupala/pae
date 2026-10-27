@@ -158,6 +158,8 @@ pub async fn kdf_params(
 /// POST /api/v1/crypto/encrypt
 ///
 /// Encrypts plaintext with AES-256-GCM using a caller-supplied key.
+/// Requires the per-install agent token (`Authorization: Bearer`,
+/// enforced by middleware in main.rs — Phase 3C): 401 without it.
 /// Returns 400 if key_b64 is not valid base64 or wrong length, or if the
 /// request body contains unknown fields (e.g. "passphrase").
 /// Returns 422 if encryption fails.
@@ -175,6 +177,8 @@ pub async fn encrypt(
 /// POST /api/v1/crypto/decrypt
 ///
 /// Decrypts ciphertext with AES-256-GCM using a caller-supplied key.
+/// Requires the per-install agent token (`Authorization: Bearer`,
+/// enforced by middleware in main.rs — Phase 3C): 401 without it.
 /// Returns 400 if any base64 field is invalid or nonce is wrong length,
 /// or if the request body contains unknown fields (e.g. "passphrase").
 /// Returns 422 if decryption fails (wrong key, tampered data).

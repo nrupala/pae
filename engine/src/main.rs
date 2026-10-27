@@ -34,6 +34,9 @@ mod versioning;
 ///
 /// Replaces the old `CorsLayer::permissive()`, which left the key+data
 /// oracle endpoints (/encrypt, /decrypt) reachable from any origin.
+/// Those endpoints additionally require the per-install agent token
+/// (Phase 3C), so `Authorization` is an allowed header for the
+/// configured origin's credentialed calls.
 fn cors_layer() -> CorsLayer {
     let origin: HeaderValue = std::env::var("PAE_CORS_ORIGIN")
         .unwrap_or_else(|_| "http://localhost:3000".to_string())
@@ -42,7 +45,152 @@ fn cors_layer() -> CorsLayer {
     CorsLayer::new()
         .allow_origin(origin)
         .allow_methods([Method::GET, Method::POST])
-        .allow_headers([header::CONTENT_TYPE])
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+}
+
+// ---------------------------------------------------------------------------
+// Per-install agent token (Phase 3C)
+//
+// One token per PAE install guards the credentialed surfaces in BOTH
+// processes: analytics requires it on the A2A/agent routes and the
+// engine requires it on the crypto oracle endpoints
+// (/api/v1/crypto/encrypt and /decrypt — the vault client's
+// caller-supplied-key helpers). Resolution mirrors
+// analytics/pae/auth.py exactly:
+//   1. PAE_AGENT_TOKEN env (explicit token value), else
+//   2. a token file: PAE_AGENT_TOKEN_PATH, else
+//      $PAE_HOME/data/agent-token, else ~/.pae/agent-token.
+// The file is created with owner-only permissions (0600) by whichever
+// process starts first; creation is race-safe (create-new, loser
+// re-reads). The engine resolves WITHOUT generating in
+// AppConfig::from_env (so tests and read-only contexts never create
+// files); `main` generates on real startup.
+// ---------------------------------------------------------------------------
+
+fn agent_token_path() -> PathBuf {
+    if let Ok(p) = std::env::var("PAE_AGENT_TOKEN_PATH") {
+        if !p.trim().is_empty() {
+            return PathBuf::from(p);
+        }
+    }
+    if let Ok(h) = std::env::var("PAE_HOME") {
+        if !h.trim().is_empty() {
+            return PathBuf::from(h).join("data").join("agent-token");
+        }
+    }
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(home).join(".pae").join("agent-token")
+}
+
+fn read_agent_token_file() -> Option<String> {
+    let text = std::fs::read_to_string(agent_token_path()).ok()?;
+    let token = text.trim().to_string();
+    if token.is_empty() {
+        None
+    } else {
+        Some(token)
+    }
+}
+
+/// Resolve the agent token, generating and persisting it if needed.
+/// Called by `main` on startup (analytics does the same in its
+/// lifespan); the two processes converge on one file.
+fn get_or_create_agent_token() -> String {
+    if let Ok(t) = std::env::var("PAE_AGENT_TOKEN") {
+        if !t.trim().is_empty() {
+            return t.trim().to_string();
+        }
+    }
+    if let Some(t) = read_agent_token_file() {
+        return t;
+    }
+    use base64::Engine as _;
+    use rand::RngCore as _;
+    let mut raw = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut raw);
+    let token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw);
+
+    let path = agent_token_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        opts.mode(0o600);
+    }
+    match opts.open(&path) {
+        Ok(mut f) => {
+            use std::io::Write as _;
+            if f.write_all(format!("{token}\n").as_bytes()).is_ok() {
+                return token;
+            }
+        }
+        Err(_) => {
+            // Lost a creation race (or the file appeared meanwhile):
+            // the winner's token is the install's token.
+            if let Some(t) = read_agent_token_file() {
+                return t;
+            }
+        }
+    }
+    // Last resort (e.g. read-only home): an ephemeral token keeps the
+    // surfaces fail-closed rather than open; it changes per restart
+    // and the startup log says the file could not be written.
+    tracing::error!(
+        "could not persist agent token to {}; using an ephemeral token for this run",
+        path.display()
+    );
+    token
+}
+
+/// Constant-time string equality for token comparison.
+fn ct_eq(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for i in 0..a.len() {
+        diff |= a[i] ^ b[i];
+    }
+    diff == 0
+}
+
+/// Middleware: require `Authorization: Bearer <agent token>`.
+///
+/// Fail-closed: when no token is configured (None — possible only in
+/// tests / embedded use, since `main` always resolves one), every
+/// request is rejected.
+async fn require_agent_token(
+    State(expected): State<Arc<Option<String>>>,
+    req: Request,
+    next: axum::middleware::Next,
+) -> Response {
+    let provided = req
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|v| v.trim().to_string());
+    let ok = match (&*expected, &provided) {
+        (Some(expected), Some(provided)) => ct_eq(provided, expected),
+        _ => false,
+    };
+    if ok {
+        next.run(req).await
+    } else {
+        (
+            StatusCode::UNAUTHORIZED,
+            axum::Json(serde_json::json!({
+                "error": "A valid agent token is required (Authorization: Bearer <token>).",
+                "code": "AGENT_TOKEN_REQUIRED",
+            })),
+        )
+            .into_response()
+    }
 }
 
 /// Runtime wiring that `main` takes from the environment and the
@@ -56,6 +204,11 @@ struct AppConfig {
     /// Base URL of the analytics service (`PAE_ANALYTICS_URL`), target
     /// of the /api/v1/analytics and /api/v1/dashboard proxy routes.
     analytics_base: String,
+    /// Per-install agent token required on the crypto oracle
+    /// endpoints (Phase 3C). Resolved from the environment / token
+    /// file WITHOUT generating: `main` generates on startup; tests
+    /// set it explicitly. None = fail closed.
+    agent_token: Option<String>,
 }
 
 impl AppConfig {
@@ -67,6 +220,11 @@ impl AppConfig {
                 .map(PathBuf::from),
             analytics_base: std::env::var("PAE_ANALYTICS_URL")
                 .unwrap_or_else(|_| "http://127.0.0.1:3002".to_string()),
+            agent_token: std::env::var("PAE_AGENT_TOKEN")
+                .ok()
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty())
+                .or_else(read_agent_token_file),
         }
     }
 }
@@ -123,16 +281,27 @@ fn build_app(store: Arc<storage::Store>, cfg: &AppConfig) -> Router {
     // passphrase server-side, inverting the threat model. Key derivation
     // now happens exclusively client-side (ui/src/crypto/vault-client.ts)
     // against the parameters served by GET /api/v1/crypto/kdf-params.
-    // /encrypt and /decrypt remain key+data oracles BY DESIGN for
-    // local-first deployment (caller supplies key+data); see
-    // docs/THREAT_MODEL.md for the hosted-deployment caveat.
-    let crypto_routes = Router::new()
-        .route("/api/v1/crypto/kdf-params", get(api::crypto_api::kdf_params))
+    // /encrypt and /decrypt are caller-supplied-key helpers whose only
+    // in-product caller is that same vault client; since Phase 3C they
+    // additionally require the per-install agent token (below), so a
+    // stray local process — or a web page reaching loopback — can no
+    // longer use the engine as an unauthenticated key+data oracle.
+    // kdf-params and dek-envelope stay open: both serve only public
+    // parameters / opaque client ciphertext, and the browser vault
+    // flow depends on them before any credential exists.
+    let oracle_routes = Router::new()
         .route("/api/v1/crypto/encrypt", post(api::crypto_api::encrypt))
         .route("/api/v1/crypto/decrypt", post(api::crypto_api::decrypt))
+        .layer(axum::middleware::from_fn_with_state(
+            Arc::new(cfg.agent_token.clone()),
+            require_agent_token,
+        ));
+    let crypto_routes = Router::new()
+        .route("/api/v1/crypto/kdf-params", get(api::crypto_api::kdf_params))
         .route("/api/v1/crypto/dek-envelope", get(api::crypto_api::get_dek_envelope))
         .route("/api/v1/crypto/dek-envelope", post(api::crypto_api::set_dek_envelope))
-        .with_state(store);
+        .with_state(store)
+        .merge(oracle_routes);
 
     // Routes without shared state (stateless compute)
     let stateless_routes = Router::new()
@@ -532,7 +701,18 @@ async fn main() -> Result<()> {
     );
     tracing::info!("PAE storage initialized at {}", db_path);
 
-    let cfg = AppConfig::from_env();
+    let mut cfg = AppConfig::from_env();
+    // Agent token: resolve (creating the token file on first start)
+    // before the app is built, so the gated surfaces are never open.
+    // The token VALUE is never logged — only where it lives.
+    if cfg.agent_token.is_none() {
+        cfg.agent_token = Some(get_or_create_agent_token());
+    }
+    if std::env::var("PAE_AGENT_TOKEN").map(|t| !t.trim().is_empty()).unwrap_or(false) {
+        tracing::info!("Agent token: provided via PAE_AGENT_TOKEN");
+    } else {
+        tracing::info!("Agent token file: {}", agent_token_path().display());
+    }
     if let Some(dir) = &cfg.ui_dir {
         tracing::info!("Serving dashboard from {}", dir.display());
     }
@@ -592,11 +772,18 @@ mod tests {
     use super::*;
     use axum_test::TestServer;
 
+    const TEST_AGENT_TOKEN: &str = "test-agent-token";
+
     fn test_server() -> TestServer {
-        let store = Arc::new(
-            storage::Store::open_in_memory().expect("in-memory store for tests"),
-        );
-        TestServer::new(create_app(store)).expect("test server")
+        configured_server(&AppConfig {
+            ui_dir: None,
+            analytics_base: "http://127.0.0.1:3002".to_string(),
+            agent_token: Some(TEST_AGENT_TOKEN.to_string()),
+        })
+    }
+
+    fn bearer() -> String {
+        format!("Bearer {TEST_AGENT_TOKEN}")
     }
 
     /// The passphrase-bearing derive-key endpoint must be gone entirely.
@@ -626,7 +813,11 @@ mod tests {
         for field in ["passphrase", "kek", "dek", "unwrapped_dek"] {
             let mut body = base.clone();
             body[field] = serde_json::json!("must-not-be-accepted");
-            let resp = server.post("/api/v1/crypto/encrypt").json(&body).await;
+            let resp = server
+                .post("/api/v1/crypto/encrypt")
+                .add_header("authorization", bearer())
+                .json(&body)
+                .await;
             assert_eq!(
                 resp.status_code().as_u16(),
                 422,
@@ -647,7 +838,11 @@ mod tests {
         for field in ["passphrase", "kek", "dek", "unwrapped_dek"] {
             let mut body = base.clone();
             body[field] = serde_json::json!("must-not-be-accepted");
-            let resp = server.post("/api/v1/crypto/decrypt").json(&body).await;
+            let resp = server
+                .post("/api/v1/crypto/decrypt")
+                .add_header("authorization", bearer())
+                .json(&body)
+                .await;
             assert_eq!(
                 resp.status_code().as_u16(),
                 422,
@@ -677,12 +872,14 @@ mod tests {
         }
     }
 
-    /// The oracle endpoints still work for well-formed bodies.
+    /// The oracle endpoints still work for well-formed bodies —
+    /// with the agent token (Phase 3C).
     #[tokio::test]
     async fn encrypt_accepts_valid_body() {
         let server = test_server();
         let resp = server
             .post("/api/v1/crypto/encrypt")
+            .add_header("authorization", bearer())
             .json(&serde_json::json!({
                 "plaintext": "hello",
                 "key_b64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
@@ -692,6 +889,73 @@ mod tests {
         let body: serde_json::Value = resp.json();
         assert!(body.get("ciphertext_b64").is_some());
         assert!(body.get("nonce_b64").is_some());
+    }
+
+    /// Phase 3C: /encrypt and /decrypt reject requests without the
+    /// agent token and with a wrong token; the right token round-trips.
+    #[tokio::test]
+    async fn oracle_endpoints_require_agent_token() {
+        let server = test_server();
+        let enc_body = serde_json::json!({
+            "plaintext": "hello",
+            "key_b64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        });
+
+        let no_token = server.post("/api/v1/crypto/encrypt").json(&enc_body).await;
+        assert_eq!(no_token.status_code().as_u16(), 401);
+
+        let wrong = server
+            .post("/api/v1/crypto/encrypt")
+            .add_header("authorization", "Bearer not-the-token")
+            .json(&enc_body)
+            .await;
+        assert_eq!(wrong.status_code().as_u16(), 401);
+
+        let enc = server
+            .post("/api/v1/crypto/encrypt")
+            .add_header("authorization", bearer())
+            .json(&enc_body)
+            .await;
+        assert_eq!(enc.status_code().as_u16(), 200);
+        let enc_json: serde_json::Value = enc.json();
+
+        let dec_body = serde_json::json!({
+            "ciphertext_b64": enc_json["ciphertext_b64"],
+            "nonce_b64": enc_json["nonce_b64"],
+            "key_b64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        });
+        let dec_no_token = server.post("/api/v1/crypto/decrypt").json(&dec_body).await;
+        assert_eq!(dec_no_token.status_code().as_u16(), 401);
+
+        let dec = server
+            .post("/api/v1/crypto/decrypt")
+            .add_header("authorization", bearer())
+            .json(&dec_body)
+            .await;
+        assert_eq!(dec.status_code().as_u16(), 200);
+        let dec_json: serde_json::Value = dec.json();
+        assert_eq!(dec_json["plaintext"], "hello");
+    }
+
+    /// Phase 3C: with no token configured the oracle endpoints fail
+    /// closed — a Bearer header alone never opens them.
+    #[tokio::test]
+    async fn oracle_endpoints_fail_closed_without_configured_token() {
+        let cfg = AppConfig {
+            ui_dir: None,
+            analytics_base: "http://127.0.0.1:3002".to_string(),
+            agent_token: None,
+        };
+        let server = configured_server(&cfg);
+        let resp = server
+            .post("/api/v1/crypto/encrypt")
+            .add_header("authorization", "Bearer anything")
+            .json(&serde_json::json!({
+                "plaintext": "hello",
+                "key_b64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            }))
+            .await;
+        assert_eq!(resp.status_code().as_u16(), 401);
     }
 
     /// kdf-params serves the production spec and a stable per-database salt.
@@ -845,6 +1109,7 @@ mod tests {
         let cfg = AppConfig {
             ui_dir: Some(dir.path().to_path_buf()),
             analytics_base: "http://127.0.0.1:3002".to_string(),
+            agent_token: None,
         };
         let server = configured_server(&cfg);
 
@@ -888,6 +1153,7 @@ mod tests {
         let cfg = AppConfig {
             ui_dir: None,
             analytics_base: "http://127.0.0.1:3002".to_string(),
+            agent_token: None,
         };
         let server = configured_server(&cfg);
         let resp = server.get("/").await;
@@ -950,6 +1216,7 @@ mod tests {
         let cfg = AppConfig {
             ui_dir: None,
             analytics_base: format!("http://{addr}"),
+            agent_token: None,
         };
         let server = configured_server(&cfg);
         let resp = server
@@ -970,6 +1237,7 @@ mod tests {
             ui_dir: None,
             // Port 1 is closed on loopback by definition.
             analytics_base: "http://127.0.0.1:1".to_string(),
+            agent_token: None,
         };
         let server = configured_server(&cfg);
         let resp = server
