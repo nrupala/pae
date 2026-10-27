@@ -399,28 +399,48 @@ def _risk_parity_weights(
     cov: NDArray[np.float64],
     max_iter: int = 5000,
     tol: float = 1e-12,
-) -> NDArray[np.float64]:
+) -> tuple[NDArray[np.float64], bool]:
     """Risk-parity weights via cyclical coordinate descent (Spinu).
 
     Iterates ``w_i <- portfolio_vol / (n * (Sigma w)_i)`` with
     renormalization until risk contributions equalize. Each asset ends
     with (approximately) 1/n of total portfolio risk.
+
+    Returns (weights, converged). The simultaneous update can fail to
+    converge: when a near-zero-variance asset (e.g. cash) has negative
+    cross-covariance with the others, a marginal risk contribution
+    goes non-positive, the clamped update explodes, and the iterates
+    oscillate between corners without ever meeting ``tol``. Before
+    Phase 3D the loop simply returned whichever corner it stopped on
+    — a silent 100%-in-one-asset "risk parity". Now non-convergence
+    falls back to inverse-volatility weights (the exact risk-parity
+    solution for a diagonal covariance, the standard approximation
+    otherwise) and the caller reports the substitution in the notes.
     """
     n = cov.shape[0]
     w = np.full(n, 1.0 / n)
+    converged = False
     for _ in range(max_iter):
         var = float(w @ cov @ w)
         if var <= 0:
-            break  # degenerate covariance; keep equal weights
+            converged = True  # degenerate covariance; equal weights stand
+            break
         vol = math.sqrt(var)
         mrc = cov @ w  # marginal risk contributions (unscaled)
         w_new = (vol / n) / np.maximum(mrc, 1e-16)
         w_new = w_new / float(np.sum(w_new))
         if float(np.max(np.abs(w_new - w))) < tol:
             w = w_new
+            converged = True
             break
         w = w_new
-    return _clean_weights(w)
+    if not converged:
+        variances = np.diag(cov)
+        scale = float(np.max(variances)) if n else 0.0
+        floor = 1e-12 * scale if scale > 0 else 1e-300
+        inv_vol = 1.0 / np.sqrt(np.maximum(variances, floor))
+        w = inv_vol / float(np.sum(inv_vol))
+    return _clean_weights(w), converged
 
 
 # --- Efficient frontier ---
@@ -619,7 +639,13 @@ def optimize(
         )
 
     # --- Risk parity ---
-    w_rp = _risk_parity_weights(cov_reg)
+    w_rp, rp_converged = _risk_parity_weights(cov_reg)
+    if not rp_converged:
+        notes.append(
+            "Risk-parity iteration did not converge for this covariance; "
+            "inverse-volatility weights (the diagonal risk-parity "
+            "approximation) are reported instead."
+        )
 
     def make_mix(label: str, w: NDArray[np.float64], method: str) -> PortfolioMix:
         r, v, s = _stats(w, mu, cov_reg, risk_free_rate, zero_vol=degenerate)
@@ -647,7 +673,13 @@ def optimize(
         risk_free_rate=risk_free_rate,
         max_sharpe=make_mix("Maximum Sharpe", w_sharpe, sharpe_method),
         min_variance=make_mix("Minimum variance", w_minvar, minvar_method),
-        risk_parity=make_mix("Risk parity", w_rp, "cyclical coordinate descent"),
+        risk_parity=make_mix(
+            "Risk parity",
+            w_rp,
+            "cyclical coordinate descent"
+            if rp_converged
+            else "inverse-volatility fallback",
+        ),
         frontier=frontier,
         covariance_regularized=regularized,
         regularization_amount=reg_amount,

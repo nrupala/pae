@@ -421,3 +421,25 @@ def test_mcp_optimize_portfolio_bad_params() -> None:
     outcome = asyncio.run(run())
     assert outcome["ok"] is False
     assert "Traceback" not in str(outcome)
+
+
+def test_risk_parity_nonconvergence_falls_back_with_note() -> None:
+    """A near-zero-variance asset with negative cross-covariance makes
+    the simultaneous risk-parity update oscillate (Phase 3D: it
+    silently returned a 100%-in-one-asset corner on the demo data).
+    The result must be the labelled inverse-volatility fallback:
+    every weight positive, weights sum to 1, and a note says what
+    happened."""
+    mu = [0.0015, 0.0075, 0.0028]
+    cov = [
+        [3.0e-7, -2.0e-5, 0.0],
+        [-2.0e-5, 1.6e-3, 0.0],
+        [0.0, 0.0, 1.0e-4],
+    ]
+    result = optimize(["CASH", "EQ", "BD"], mu, cov)
+    w = result.risk_parity.weights
+    assert all(x > 0.0 for x in w), f"corner weights are not risk parity: {w}"
+    assert sum(w) == pytest.approx(1.0)
+    # Inverse-volatility ordering: lowest variance carries most weight.
+    assert w[0] > w[2] > w[1]
+    assert any("did not converge" in note for note in result.notes)
