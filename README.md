@@ -71,10 +71,16 @@ See [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for the full threat model.
 git clone https://github.com/nrupala/pae.git
 cd pae
 
-# Native self-host bundle — no Docker, no runtimes to install
-# (see docs/SELF_HOST.md for the user guide, docs/PACKAGING.md
-# for how the bundle is built):
-scripts/build-bundle.sh
+# Native self-host bundle — no Docker. The bundle itself needs no
+# runtimes, but BUILDING it freezes the analytics service with
+# PyInstaller, which needs a Python environment holding the locked
+# dependencies (see docs/PACKAGING.md for the full build setup;
+# docs/SELF_HOST.md is the user guide):
+python3.12 -m venv venv
+venv/bin/pip install -r analytics/requirements-lock.txt
+venv/bin/pip install -e analytics
+venv/bin/pip install pyinstaller   # build-time only
+PAE_BUILD_PYTHON=$PWD/venv/bin/python scripts/build-bundle.sh
 ./dist-bundle/pae-*/install.sh   # install.ps1 on Windows
 pae start
 

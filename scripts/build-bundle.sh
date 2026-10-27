@@ -50,6 +50,31 @@ echo "  repo:   $REPO"
 echo "  stage:  $STAGE"
 echo "  python: $PYTHON"
 
+# --- Preflight ------------------------------------------------------------
+# Fail in seconds, naming the fix, instead of dying ten minutes in at
+# the PyInstaller freeze (the failure the Phase 3D buyer walk hit by
+# running the bare script with the system python).
+command -v cargo >/dev/null 2>&1 || {
+    echo "error: cargo not found on PATH — install Rust (rustup) first." >&2
+    exit 1
+}
+command -v npm >/dev/null 2>&1 || {
+    echo "error: npm not found on PATH — install Node.js first." >&2
+    exit 1
+}
+if ! PYTHONPATH="$REPO/analytics" "$PYTHON" -c \
+        "import PyInstaller, pae.server" >/dev/null 2>&1; then
+    echo "error: $PYTHON cannot build the analytics bundle:" >&2
+    echo "PyInstaller or the locked analytics dependencies are missing." >&2
+    echo "Create the build environment and point PAE_BUILD_PYTHON at it:" >&2
+    echo "  python3.12 -m venv venv" >&2
+    echo "  venv/bin/pip install -r analytics/requirements-lock.txt" >&2
+    echo "  venv/bin/pip install -e analytics" >&2
+    echo "  venv/bin/pip install pyinstaller   # build-time only" >&2
+    echo "  PAE_BUILD_PYTHON=\$PWD/venv/bin/python scripts/build-bundle.sh" >&2
+    exit 1
+fi
+
 rm -rf "$STAGE" "$WORK"
 mkdir -p "$STAGE/bin" "$STAGE/ui" "$WORK"
 
@@ -101,7 +126,10 @@ chmod +x "$STAGE/pae" "$STAGE/install.sh" \
          "$STAGE/analytics/pae-analytics$EXE" 2>/dev/null || true
 
 # --- 6. Archive -------------------------------------------------------------
-(cd "$OUT" && tar czf "$NAME.tar.gz" "$NAME")
+# Portable ownership: root:root numeric ids, never the build machine's
+# uid/gid — untarring as root (or any user) must be clean (Phase 3D W8;
+# GNU tar flags, which is what the Linux/WSL build hosts run).
+(cd "$OUT" && tar czf "$NAME.tar.gz" --owner=0 --group=0 --numeric-owner "$NAME")
 rm -rf "$WORK"
 
 echo ""
