@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pae-analytics"
-version = "0.2.0"
+version = "0.3.0"
 description = "PAE Analytics Engine - Factor models, optimization, decision intelligence"
 authors = [{ name = "Nrupal Akolkar", email = "nrupalakolkar@gmail.com" }]
 license = { text = "AGPL-3.0-or-later" }  # package-level; analytics/pae/mcp is Apache-2.0 per LICENSING.md
