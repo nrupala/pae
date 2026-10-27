@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use axum::extract::State;
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
@@ -240,6 +240,17 @@ fn validate_envelope_shape(envelope: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// State for `POST /api/v1/crypto/dek-envelope`: the store plus the
+/// per-install agent token that authorizes REPLACING an existing
+/// envelope (rotation — see the handler). Kept separate from the
+/// read routes' plain store state so the token reaches only the one
+/// handler that needs it.
+#[derive(Clone)]
+pub struct DekEnvelopeWriteState {
+    pub store: Arc<Store>,
+    pub agent_token: Option<String>,
+}
+
 /// POST /api/v1/crypto/dek-envelope
 ///
 /// Stores the client's KEK-wrapped DEK envelope verbatim. The envelope is
@@ -247,8 +258,19 @@ fn validate_envelope_shape(envelope: &str) -> Result<(), String> {
 /// the unwrapped DEK. Returns 400 if the envelope JSON is malformed;
 /// unknown request fields (e.g. "passphrase", "kek") are rejected with
 /// 422 by `deny_unknown_fields`.
+///
+/// Replacement guard (Phase 3C review fix): the stored envelope is the
+/// ONLY wrapped copy of the DEK, so an unauthenticated overwrite would
+/// permanently brick every encrypted record. The FIRST write (vault
+/// creation — the browser flow has no credential yet) is open, exactly
+/// as before. Once an envelope exists, replacing it requires the
+/// per-install agent token (`Authorization: Bearer`); without a valid
+/// token the request is refused with 409 and the stored envelope is
+/// left untouched. Presenting the token is the documented rotation
+/// path (see "The agent token" in docs/SELF_HOST.md).
 pub async fn set_dek_envelope(
-    State(store): State<Arc<Store>>,
+    State(state): State<DekEnvelopeWriteState>,
+    headers: HeaderMap,
     Json(req): Json<SetDekEnvelopeRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<CryptoErrorResponse>)> {
     if let Err(msg) = validate_envelope_shape(&req.envelope) {
@@ -260,7 +282,27 @@ pub async fn set_dek_envelope(
             }),
         ));
     }
-    store.set_dek_envelope(&req.envelope).map_err(|e| {
+    let existing = state.store.get_dek_envelope().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(CryptoErrorResponse {
+                error: format!("failed to load DEK envelope: {e}"),
+                code: "DEK_ENVELOPE_UNAVAILABLE".to_string(),
+            }),
+        )
+    })?;
+    if existing.is_some() && !crate::bearer_token_valid(&headers, &state.agent_token) {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(CryptoErrorResponse {
+                error: "a DEK envelope is already stored; replacing it requires \
+                        the agent token (Authorization: Bearer <token>)"
+                    .to_string(),
+                code: "DEK_ENVELOPE_EXISTS".to_string(),
+            }),
+        ));
+    }
+    state.store.set_dek_envelope(&req.envelope).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(CryptoErrorResponse {

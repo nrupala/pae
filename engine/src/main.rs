@@ -186,6 +186,24 @@ fn ct_eq(a: &str, b: &str) -> bool {
     diff == 0
 }
 
+/// Whether `headers` carry `Authorization: Bearer <token>` matching
+/// `expected` (constant-time comparison). Fail-closed: no configured
+/// token, or a missing/malformed/wrong header, is never a match.
+/// Shared by the `require_agent_token` middleware and the
+/// dek-envelope write handler (which demands the token only when an
+/// envelope already exists — see `api::crypto_api::set_dek_envelope`).
+pub(crate) fn bearer_token_valid(headers: &header::HeaderMap, expected: &Option<String>) -> bool {
+    let provided = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|v| v.trim());
+    match (expected, provided) {
+        (Some(expected), Some(provided)) => ct_eq(provided, expected),
+        _ => false,
+    }
+}
+
 /// Middleware: require `Authorization: Bearer <agent token>`.
 ///
 /// Fail-closed: when no token is configured (None — possible only in
@@ -196,17 +214,7 @@ async fn require_agent_token(
     req: Request,
     next: axum::middleware::Next,
 ) -> Response {
-    let provided = req
-        .headers()
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .map(|v| v.trim().to_string());
-    let ok = match (&*expected, &provided) {
-        (Some(expected), Some(provided)) => ct_eq(provided, expected),
-        _ => false,
-    };
-    if ok {
+    if bearer_token_valid(req.headers(), &expected) {
         next.run(req).await
     } else {
         (
@@ -313,9 +321,11 @@ fn build_app(store: Arc<storage::Store>, cfg: &AppConfig) -> Router {
     // additionally require the per-install agent token (below), so a
     // stray local process — or a web page reaching loopback — can no
     // longer use the engine as an unauthenticated key+data oracle.
-    // kdf-params and dek-envelope stay open: both serve only public
-    // parameters / opaque client ciphertext, and the browser vault
-    // flow depends on them before any credential exists.
+    // kdf-params and the dek-envelope READ stay open: both serve only
+    // public parameters / opaque client ciphertext, and the browser
+    // vault flow depends on them before any credential exists. The
+    // dek-envelope WRITE is first-write-open (vault creation) but
+    // token-gated for replacement — see set_dek_envelope.
     let oracle_routes = Router::new()
         .route("/api/v1/crypto/encrypt", post(api::crypto_api::encrypt))
         .route("/api/v1/crypto/decrypt", post(api::crypto_api::decrypt))
@@ -323,12 +333,21 @@ fn build_app(store: Arc<storage::Store>, cfg: &AppConfig) -> Router {
             Arc::new(cfg.agent_token.clone()),
             require_agent_token,
         ));
+    let dek_envelope_write = Router::new()
+        .route(
+            "/api/v1/crypto/dek-envelope",
+            post(api::crypto_api::set_dek_envelope),
+        )
+        .with_state(api::crypto_api::DekEnvelopeWriteState {
+            store: store.clone(),
+            agent_token: cfg.agent_token.clone(),
+        });
     let crypto_routes = Router::new()
         .route("/api/v1/crypto/kdf-params", get(api::crypto_api::kdf_params))
         .route("/api/v1/crypto/dek-envelope", get(api::crypto_api::get_dek_envelope))
-        .route("/api/v1/crypto/dek-envelope", post(api::crypto_api::set_dek_envelope))
         .with_state(store)
-        .merge(oracle_routes);
+        .merge(oracle_routes)
+        .merge(dek_envelope_write);
 
     // Routes without shared state (stateless compute)
     let stateless_routes = Router::new()
@@ -1073,6 +1092,59 @@ mod tests {
             envelope,
             "envelope must round-trip verbatim"
         );
+    }
+
+    /// Phase 3C review fix: the first dek-envelope write is open
+    /// (vault creation), but REPLACING a stored envelope requires the
+    /// agent token — an unauthenticated overwrite would permanently
+    /// brick every encrypted record. 409 without / with a wrong token
+    /// and the stored value untouched; 204 with the token (rotation).
+    #[tokio::test]
+    async fn dek_envelope_replace_requires_agent_token() {
+        let server = test_server();
+        let env1 = "{\"v\":2,\"wrapped_dek_b64\":\"QUJD\",\"dek_nonce_b64\":\"AAAAAAAAAAAAAAAA\"}";
+        let env2 = "{\"v\":2,\"wrapped_dek_b64\":\"REVG\",\"dek_nonce_b64\":\"AAAAAAAAAAAAAAAA\"}";
+
+        // First write: open, no token (vault creation).
+        let r = server
+            .post("/api/v1/crypto/dek-envelope")
+            .json(&serde_json::json!({ "envelope": env1 }))
+            .await;
+        assert_eq!(r.status_code().as_u16(), 204);
+
+        // Replace without a token: 409, stored value untouched.
+        let r = server
+            .post("/api/v1/crypto/dek-envelope")
+            .json(&serde_json::json!({ "envelope": env2 }))
+            .await;
+        assert_eq!(r.status_code().as_u16(), 409);
+        let body: serde_json::Value = r.json();
+        assert_eq!(body["code"], "DEK_ENVELOPE_EXISTS");
+        let g = server.get("/api/v1/crypto/dek-envelope").await;
+        let body: serde_json::Value = g.json();
+        assert_eq!(body["envelope"].as_str().unwrap(), env1);
+
+        // Replace with a WRONG token: still 409, still untouched.
+        let r = server
+            .post("/api/v1/crypto/dek-envelope")
+            .add_header("authorization", "Bearer not-the-token")
+            .json(&serde_json::json!({ "envelope": env2 }))
+            .await;
+        assert_eq!(r.status_code().as_u16(), 409);
+        let g = server.get("/api/v1/crypto/dek-envelope").await;
+        let body: serde_json::Value = g.json();
+        assert_eq!(body["envelope"].as_str().unwrap(), env1);
+
+        // Replace with the agent token: 204 (the rotation path).
+        let r = server
+            .post("/api/v1/crypto/dek-envelope")
+            .add_header("authorization", bearer())
+            .json(&serde_json::json!({ "envelope": env2 }))
+            .await;
+        assert_eq!(r.status_code().as_u16(), 204);
+        let g = server.get("/api/v1/crypto/dek-envelope").await;
+        let body: serde_json::Value = g.json();
+        assert_eq!(body["envelope"].as_str().unwrap(), env2);
     }
 
     /// POST rejects malformed envelopes with 400 (not 422 — the body shape

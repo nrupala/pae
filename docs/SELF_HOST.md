@@ -168,7 +168,9 @@ an AI agent uses on your behalf:
   `GET /.well-known/agent.json`, `POST /api/v1/a2a/message/send`,
   `GET /.well-known/pae.json`, `GET /api/v1/tools`;
 - the engine's caller-supplied-key crypto helpers —
-  `POST /api/v1/crypto/encrypt` and `POST /api/v1/crypto/decrypt`.
+  `POST /api/v1/crypto/encrypt` and `POST /api/v1/crypto/decrypt`;
+- replacing the stored DEK envelope on the engine —
+  `POST /api/v1/crypto/dek-envelope` (see the note below).
 
 **Where it lives.** The token is generated the first time the
 engine or the analytics service starts, and stored in a file only
@@ -204,6 +206,15 @@ Notes:
   not replace it.
 - To rotate the token: stop both services, delete the token file,
   and start again — a fresh one is generated on the next start.
+- **The stored DEK envelope is replace-protected.** The envelope your
+  browser vault creates on first run is the only wrapped copy of the
+  vault's data key: if it were overwritten, every encrypted record
+  would become permanently unreadable. The first write (vault
+  creation) is therefore open, but once an envelope exists the engine
+  refuses to replace it without the agent token
+  (`409 DEK_ENVELOPE_EXISTS`, stored envelope untouched). A legitimate
+  replacement — key rotation — sends the same POST with
+  `Authorization: Bearer <token>`.
 
 ## Troubleshooting
 
