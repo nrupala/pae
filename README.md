@@ -70,8 +70,12 @@ See [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for the full threat model.
 git clone https://github.com/nrupala/pae.git
 cd pae
 
-# Docker (recommended)
-docker compose -f infra/docker/docker-compose.yml up
+# Native self-host bundle — no Docker, no runtimes to install
+# (see docs/SELF_HOST.md for the user guide, docs/PACKAGING.md
+# for how the bundle is built):
+scripts/build-bundle.sh
+./dist-bundle/pae-*/install.sh   # install.ps1 on Windows
+pae start
 
 # Or build individually:
 
@@ -93,7 +97,7 @@ pae/
   engine/          Rust risk engine (Cargo.toml, Axum API, crypto vault, risk modules)
   analytics/       Python analytics (factor models, carry analysis, PKE, decision journal)
   ui/              Vanilla TypeScript dashboard (Web Components, CSS tokens, Canvas charts)
-  infra/           Docker, docker-compose, CI/CD
+  scripts/         Native bundle build, installers, launcher, demo seed
   docs/            Architecture, threat model, methodology
   knowledge/       PKE templates and content directory (content/ is gitignored)
 ```
