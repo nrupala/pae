@@ -1,30 +1,30 @@
 # PAE - Personal Analytics Engine
 
-**Zero-knowledge, zero-trust, user-sovereign financial analytics platform.**
+**Local-first, user-sovereign financial analytics — everything runs on your machine, under your control.**
 
-PAE is an open-source tool that aggregates portfolio data, runs risk analytics, and surfaces decision intelligence -- all without ever seeing your financial data. The server stores only ciphertext. You hold the keys.
+PAE is an open-source tool that aggregates portfolio data, runs risk analytics, and surfaces decision intelligence on your own computer. There is no PAE cloud and no account: both processes run on loopback and your data lives in files under your data directory. Vault records (the decision journal and other versioned records) are encrypted in your browser before the local engine stores them, so for those the engine holds ciphertext only. The analytics working store — the holdings you import for analysis — is a local database file, unencrypted, like any local app's data file. The Security Model below states exactly what is encrypted and what is not.
 
 > **PAE is an educational analytics tool, not a financial advisor.**
 > This tool provides data, calculations, and educational content only. The user is responsible for all investment decisions.
 
 ## What PAE Does
 
-- **Portfolio Aggregation**: Import holdings from CSV files (including IBKR Flex export files) or manual entry. PAE has no live brokerage connections — imports are files you provide. Holdings can be recorded in multiple currencies (CAD/USD/INR); values are tracked per currency (no FX conversion engine yet).
+- **Portfolio Aggregation**: Import holdings from CSV files (including IBKR Flex Query CSV exports whose headers match the IBKR layout) or manual entry. PAE has no live brokerage connections — imports are files you provide. Holdings can be recorded in multiple currencies (CAD/USD/INR); values are tracked per currency (no FX conversion engine yet).
 - **Risk Engine**: VaR, CVaR, Sharpe, Sortino, volatility, drawdown, beta -- calculated in Rust (see docs/BENCHMARKS.md for measured timings).
 - **Factor Decomposition**: Fama-French 5-Factor model via OLS. See exactly what drives your returns.
 - **Monte Carlo Simulation**: 1K-100K path simulation with geometric Brownian motion. Stress test allocations.
-- **Correlation Analysis**: Rolling correlation matrices across holdings. Spot hidden concentration risk.
-- **Stress Testing**: Apply historical scenarios (2008 GFC, 2020 COVID, rate shocks) to your current portfolio.
+- **Correlation Analysis**: Pairwise correlation matrices over holdings' return series, computed by the engine's REST API. Not yet surfaced as a dashboard view.
+- **Stress Testing**: Apply historical scenarios (2008 GFC, 2020 COVID, rate shocks) to your current portfolio, with per-asset-class shocks.
 - **Margin Intelligence**: Carry analysis for leveraged portfolios. Income coverage ratios, net carry, position-level carry attribution.
-- **Decision Journal**: Log rationale, confidence, and emotional state before trades. Track calibration over time.
-- **Personal Knowledge Engine (PKE)**: Ingest your own research (Buffett letters, coursework, book notes) into a private, encrypted, locally-indexed knowledge base.
+- **Decision Journal**: Log rationale, confidence, and emotional state before trades; entries are encrypted in your browser. (Calibration scoring exists in the analytics library and is not surfaced in the dashboard.)
+- **Personal Knowledge Engine (PKE)**: Ingest your own research (Buffett letters, coursework, book notes) into a locally-indexed knowledge base on your own machine. Chunk text is encrypted at rest when notes are ingested with a data key through the PKE library; otherwise notes are stored unencrypted, and the dashboard's Knowledge view says so plainly when that is your configuration.
 
 ## What PAE Does Not Do
 
 - **No investment advice.** Ever. The tool calculates; you decide.
 - **No recommendations.** No "buy X" or "sell Y" outputs.
 - **No personalized suggestions.** All parameters are user-specified.
-- **No data exfiltration.** Passphrases never leave the client — key derivation runs client-side in the browser (`ui/src/crypto/vault-client.ts`, Argon2id via vendored hash-wasm); the server exposes no passphrase-derivation endpoint. The engine stores ciphertext only; its `/encrypt` and `/decrypt` endpoints are caller-supplied-key oracles for local-first deployments (see Security Model).
+- **No data exfiltration.** Passphrases never leave the client — key derivation runs client-side in the browser (`ui/src/crypto/vault-client.ts`, Argon2id via vendored hash-wasm); the server exposes no passphrase-derivation endpoint. The engine's vault store holds ciphertext only; its `/encrypt` and `/decrypt` endpoints are caller-supplied-key oracles for local-first deployments (see Security Model).
 
 ## Architecture
 
@@ -54,12 +54,13 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full details.
 
 ## Security Model
 
-- **AES-256-GCM** encryption for all stored data
+- **AES-256-GCM** encryption for vault records (decision journal and other versioned records), encrypted in the browser before the engine stores them
+- **The analytics store is a local file, unencrypted**: imported holdings live in a SQLite database under your PAE data directory, readable by anyone who can read your files — the posture of any local app's data file. The knowledge base is the same unless its notes were ingested with a data key through the PKE library; the dashboard labels an unencrypted knowledge base plainly. Full-disk encryption is yours to enable.
 - **Argon2id** key derivation (3 iterations, 64MB memory, 4 threads - RFC 9106 first-recommended profile)
 - Per-vault Data Encryption Keys (DEKs) wrapped with user's Key Encryption Key (KEK) — random 32-byte DEK generated client-side, wrapped with the KEK via AES-256-GCM (WebCrypto); versioned v2 envelope stored opaquely server-side (`ui/src/crypto/vault-client.ts`, `GET/POST /api/v1/crypto/dek-envelope`); v1 vaults (direct-KEK) remain readable. Per-record DEKs remain a documented extension via the envelope's `kid` field.
 - KEK derived client-side from passphrase — **never transmitted** (`ui/src/crypto/vault-client.ts`; `POST /api/v1/crypto/derive-key` was removed 2026-10-05 — no server-side derivation path exists)
 - Optional **Shamir's Secret Sharing** (3-of-5) for key recovery — implemented client-side (`ui/src/crypto/shamir.ts`); the KEK never leaves the browser
-- Server compromise yields ciphertext only
+- A reader of the engine's vault store gets ciphertext only; the local-first posture trusts your machine for the analytics files, and the threat model says so
 
 See [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for the full threat model.
 

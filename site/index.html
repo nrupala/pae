@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PAE — Personal Analytics Engine | Zero-knowledge investment analytics for individuals</title>
-  <meta name="description" content="PAE (Personal Analytics Engine) is a zero-knowledge, institutional-grade investment analytics tool for individuals: VaR/CVaR, factor exposure, Monte Carlo, drawdown and stress tests on your own holdings. Your passphrase never leaves your device; the server stores ciphertext only. Educational analytics — the tool calculates, you decide.">
-  <meta name="keywords" content="PAE, Personal Analytics Engine, zero-knowledge, investment analytics, portfolio risk, VaR, CVaR, factor exposure, Monte Carlo, stress testing, drawdown">
+  <title>PAE — Personal Analytics Engine | Local-first investment analytics for individuals</title>
+  <meta name="description" content="PAE (Personal Analytics Engine) is a local-first, institutional-grade investment analytics tool for individuals: VaR/CVaR, factor exposure, Monte Carlo, drawdown and stress tests on your own holdings, computed on your own machine. Vault records are encrypted in your browser; your passphrase never leaves your device. Educational analytics — the tool calculates, you decide.">
+  <meta name="keywords" content="PAE, Personal Analytics Engine, local-first, investment analytics, portfolio risk, VaR, CVaR, factor exposure, Monte Carlo, stress testing, drawdown">
   <meta name="author" content="Nrupal Akolkar">
   <meta property="og:type" content="website">
   <meta property="og:title" content="PAE — Personal Analytics Engine">
-  <meta property="og:description" content="Zero-knowledge, institutional-grade investment analytics for individuals. VaR/CVaR, factor exposure, Monte Carlo, stress tests. Your data never leaves your control.">
+  <meta property="og:description" content="Local-first, institutional-grade investment analytics for individuals. VaR/CVaR, factor exposure, Monte Carlo, stress tests — computed on your own machine. Your data never leaves your control.">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="PAE — Personal Analytics Engine">
-  <meta name="twitter:description" content="Zero-knowledge, institutional-grade investment analytics for individuals. The tool calculates; you decide.">
+  <meta name="twitter:description" content="Local-first, institutional-grade investment analytics for individuals. The tool calculates; you decide.">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -22,7 +22,7 @@
     <a class="brand" href="index.html">PAE<span>.</span></a>
     <nav aria-label="Primary">
       <a class="nav-link" href="#what">What it is</a>
-      <a class="nav-link" href="#zero-knowledge">Zero-knowledge</a>
+      <a class="nav-link" href="#privacy">Privacy</a>
       <a class="nav-link" href="#surfaces">Surfaces</a>
       <a class="nav-link" href="#screenshots">Screenshots</a>
       <a class="nav-link" href="#docs">Docs</a>
@@ -37,7 +37,7 @@
     <div class="wrap">
       <span class="kicker">Personal Analytics Engine</span>
       <h1 id="hero-title">Know what risk <span class="accent">you</span> are actually carrying.</h1>
-      <p class="lede">PAE is a zero-knowledge, institutional-grade investment-analytics engine for individuals. It X-rays what you own — risk, factor exposure, drawdown, scenarios — while your data never leaves your control.</p>
+      <p class="lede">PAE is a local-first, institutional-grade investment-analytics engine for individuals. It X-rays what you own — risk, factor exposure, drawdown, scenarios — computed on your own machine, while your data never leaves your control.</p>
       <div class="cta-row">
         <a class="btn btn-primary" href="#surfaces">Explore the surfaces</a>
         <a class="btn btn-ghost" href="https://github.com/nrupala/pae/tree/main/docs">Read the docs</a>
@@ -76,30 +76,30 @@
         </article>
         <article class="card">
           <h3>Analytics companions</h3>
-          <p>The same analytics as standalone Excel and Google Sheet workbooks for offline or spreadsheet-native workflows — with one explicit boundary: spreadsheets are <strong>not</strong> zero-knowledge encrypted.</p>
+          <p>The same analytics as standalone Excel and Google Sheet workbooks for offline or spreadsheet-native workflows — with one explicit boundary: spreadsheets are <strong>not</strong> encrypted.</p>
         </article>
       </div>
     </div>
   </section>
 
-  <!-- ============ ZERO-KNOWLEDGE ============ -->
-  <section id="zero-knowledge" aria-labelledby="zk-title">
+  <!-- ============ PRIVACY ARCHITECTURE ============ -->
+  <section id="privacy" aria-labelledby="privacy-title">
     <div class="wrap">
       <p class="eyebrow">Privacy architecture</p>
-      <h2 id="zk-title">Zero-knowledge: what that actually means here</h2>
-      <p class="section-sub">Your holdings are the most sensitive data you own. PAE is built so that even the operator of the server cannot read them. Here is the mechanism, stated plainly:</p>
+      <h2 id="privacy-title">What is encrypted, and what is not</h2>
+      <p class="section-sub">PAE runs entirely on your own machine — there is no PAE cloud and no account, and both processes bind to loopback. Within that, here is the encryption posture, stated plainly:</p>
 
       <div class="zk">
         <ol>
           <li><strong>Key derivation happens in your browser.</strong> Your passphrase is stretched with Argon2id — client-side, in the dashboard app. The passphrase never leaves your device.</li>
-          <li><strong>Encryption is AES-256-GCM.</strong> Holdings are encrypted with a 256-bit key derived from your passphrase before anything is transmitted.</li>
-          <li><strong>The server stores ciphertext only.</strong> The engine keeps encrypted blobs; it holds no passphrase, no derived key, and no decryption path.</li>
-          <li><strong>Recovery is yours to set up — Shamir 3-of-5.</strong> PAE includes Shamir secret sharing: split your recovery key into 5 shares, any 3 reconstruct it. Nobody — including us — holds your key or your shares, and there is no recovery service. If you lose your passphrase <em>and</em> fewer than 3 shares survive, the data is unrecoverable. That is the price of real zero-knowledge, stated up front.</li>
+          <li><strong>Vault records are encrypted before storage.</strong> Decision-journal entries and other versioned records are encrypted with AES-256-GCM in your browser; the engine stores ciphertext only and holds no passphrase, no derived key, and no decryption path for them.</li>
+          <li><strong>The analytics working store is a local file, unencrypted.</strong> Holdings you import for analysis sit in a SQLite database in your PAE data directory — readable by anyone who can read your files, like any local app's data file. The knowledge base is the same, unless its notes were ingested with an encryption key through the PKE library; the dashboard labels an unencrypted knowledge base plainly.</li>
+          <li><strong>Recovery is yours to set up — Shamir 3-of-5.</strong> PAE includes Shamir secret sharing for the vault key: split your recovery key into 5 shares, any 3 reconstruct it. Nobody — including us — holds your key or your shares, and there is no recovery service. If you lose your passphrase <em>and</em> fewer than 3 shares survive, the encrypted records are unrecoverable. That is the price of real client-side encryption, stated up front.</li>
         </ol>
       </div>
 
       <div class="zk-boundary" role="note" aria-label="What we do not claim">
-        <strong>What we do not claim.</strong> No live brokerage connections (imports are files you provide), no FX conversion engine (holdings are tracked per currency), and no investment advice — PAE computes and explains; it never recommends. The privacy guarantee is exactly the four points above.
+        <strong>What we do not claim.</strong> No live brokerage connections (imports are files you provide), no FX conversion engine (holdings are tracked per currency), no encryption at rest for imported holdings (see point 3), and no investment advice — PAE computes and explains; it never recommends. The privacy posture is exactly the four points above.
       </div>
     </div>
   </section>
@@ -120,12 +120,12 @@
         <article class="card">
           <span class="tag">Humans</span>
           <h3>Product site</h3>
-          <p>This site — what PAE is, how the zero-knowledge design works, screenshots, and documentation entry points.</p>
+          <p>This site — what PAE is, how its privacy architecture works, screenshots, and documentation entry points.</p>
         </article>
         <article class="card">
           <span class="tag">Humans · offline</span>
           <h3>Excel + Google Sheet companions</h3>
-          <p>Standalone workbooks implementing the analytics for spreadsheet-native workflows. Plain disclosure: <strong>spreadsheets are not zero-knowledge encrypted</strong> — they are separate artifacts and carry that disclosure on their own pages.</p>
+          <p>Standalone workbooks implementing the analytics for spreadsheet-native workflows. Plain disclosure: <strong>spreadsheets are not encrypted</strong> — they are separate artifacts and carry that disclosure on their own pages.</p>
         </article>
         <article class="card">
           <span class="tag">Humans + agents</span>
@@ -261,8 +261,8 @@
           <li><strong>Educational analytics tool, not a financial advisor.</strong> PAE computes risk numbers; it does not give investment advice.</li>
           <li><strong>The tool calculates; you decide.</strong> Every number on this site and in the dashboard is a measurement, never a recommendation.</li>
           <li><strong>No buy/sell recommendations.</strong> PAE outputs analytics, not trade signals. It will never tell you what to buy or sell.</li>
-          <li><strong>We never sell user data.</strong> And under the zero-knowledge design, there is nothing readable to sell — the server holds ciphertext only.</li>
-          <li><strong>Spreadsheets are not zero-knowledge encrypted.</strong> The Excel and Google Sheet companions are separate, standalone artifacts without PAE's encryption guarantees.</li>
+          <li><strong>We never sell user data.</strong> PAE has no cloud and no telemetry: your data lives on your machine, and there is nothing on a server of ours to sell.</li>
+          <li><strong>Spreadsheets are not encrypted.</strong> The Excel and Google Sheet companions are separate, standalone artifacts without PAE's encryption guarantees.</li>
         </ul>
       </div>
     </div>
@@ -272,7 +272,7 @@
 <footer class="site-footer">
   <div class="footer-grid">
     <div>
-      <p><strong style="color:#eef2f7">PAE — Personal Analytics Engine.</strong> Zero-knowledge, institutional-grade investment analytics for individuals.</p>
+      <p><strong style="color:#eef2f7">PAE — Personal Analytics Engine.</strong> Local-first, institutional-grade investment analytics for individuals.</p>
       <p class="footer-note">Docs: <a href="https://github.com/nrupala/pae/tree/main/docs">github.com/nrupala/pae/tree/main/docs</a></p>
     </div>
     <div>

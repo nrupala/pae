@@ -102,7 +102,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:  # noqa: ARG001
 app = FastAPI(
     title="PAE - Personal Analytics Engine",
     version="0.1.0",
-    description="Non-advisory, zero-knowledge financial analytics platform.",
+    description="Non-advisory, local-first financial analytics platform.",
     lifespan=lifespan,
 )
 
@@ -1075,7 +1075,7 @@ AGENT_CARD: dict[str, Any] = {
 PAE_DISCOVERY: dict[str, Any] = {
     "name": "PAE",
     "description": (
-        "PAE (Personal Analytics Engine) — zero-knowledge, institutional-grade "
+        "PAE (Personal Analytics Engine) — local-first, institutional-grade "
         "investment analytics for individuals."
     ),
     "disclosure": DISCLOSURE,

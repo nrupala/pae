@@ -42,7 +42,7 @@
 
 **File:** `engine/src/crypto/vault.rs`
 
-Provides zero-knowledge cryptographic primitives for PAE's encryption layer. All data is encrypted client-side before storage. The server never sees plaintext.
+Provides cryptographic primitives for PAE's encryption layer. Vault data is encrypted client-side before storage. The server never sees plaintext.
 
 ### `CryptoError` (enum)
 
@@ -223,8 +223,8 @@ All portfolio endpoints share a common `validate_holdings()` function and a `san
 | **Signature** | `pub async fn stress_test(Json(input): Json<StressTestInput>) -> Result<Json<StressTestResponse>, ...>` |
 | **Route** | `POST /api/v1/portfolio/stress` |
 | **Purpose** | Run scenario-based stress test. |
-| **Request body** | `{ "holdings": [Holding], "scenario": string, "custom_shocks": [AssetShock] | null }` |
-| **Response** | `200 { scenario, portfolio_impact_pct, position_impacts: [{ symbol, impact_pct, impact_value }] }` |
+| **Request body** | `{ "holdings": [Holding], "scenario": string, "custom_shocks": [AssetShock] | null }` — `Holding` carries an optional `asset_class` used for the per-class shock lookup. |
+| **Response** | `200 { scenario, portfolio_impact_pct, position_impacts: [{ symbol, impact_pct, impact_value }] }` — impact_pct values are true percents (see `run_stress_test`). |
 | **Error responses** | `400` for invalid holdings, empty scenario, or invalid custom shock values. |
 | **Dependencies** | `validate_holdings`, `stress::run_stress_test` |
 
@@ -409,14 +409,14 @@ Pure computation functions. No I/O. All functions handle empty/single-element in
 |-------|-------|
 | **Signature** | `fn get_scenario_shocks(name: &str) -> Vec<(&'static str, f64)>` |
 | **Purpose** | Return historical shock profiles by scenario name. |
-| **Supported scenarios** | `gfc_2008`, `covid_2020`, `rate_shock_2022`, `dotcom_2000`, `stagflation_1970s`, `black_monday_1987`, `oil_shock_2020`. Unknown names -> moderate default profile. |
+| **Supported scenarios** | `gfc_2008`, `covid_2020`, `rate_shock_2022`, `dotcom_2000`, `stagflation_1970s`, `black_monday_1987`, `oil_shock_2020`. Legacy aliases `2008` / `2020` / `rate_shock` resolve to the first three (Phase 3D). Unknown names -> moderate default profile. Every profile carries an explicit `cash` shock of 0.0. |
 
 ### `classify_asset`
 
 | Field | Value |
 |-------|-------|
-| **Signature** | `fn classify_asset(_symbol: &str) -> &'static str` |
-| **Purpose** | Classify a holding into an asset class. Stub: always returns `"equity"`. |
+| **Signature** | `fn classify_asset(holding: &Holding) -> String` |
+| **Purpose** | Classify a holding into an asset class for shock lookup. Uses the holding's `asset_class` when supplied (lowercased); falls back to the documented default `"equity"` when absent or blank. (Was a stub that returned `"equity"` for everything before Phase 3D.) |
 
 ### `run_stress_test`
 
@@ -424,6 +424,7 @@ Pure computation functions. No I/O. All functions handle empty/single-element in
 |-------|-------|
 | **Signature** | `pub fn run_stress_test(input: &StressTestInput) -> StressTestResponse` |
 | **Purpose** | Apply scenario shocks to portfolio holdings. |
+| **Impact semantics** | `impact_pct` and `portfolio_impact_pct` are TRUE PERCENTS (impact_value / base value * 100) — a halved position reports -50.0, not -0.50 (Phase 3D; before, they were raw fractions). |
 | **Edge cases** | Empty holdings -> zero impact. Zero total market value -> `portfolio_impact_pct = 0.0`. NaN/Infinity in `shock_pct` -> sanitized to 0.0. NaN/Infinity in `impact_value` -> sanitized to 0.0. Unknown asset class -> default -10% shock. |
 | **Dependencies** | `get_scenario_shocks`, `classify_asset` |
 

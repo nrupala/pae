@@ -3,9 +3,12 @@
 > PAE is an educational analytics tool, not a financial advisor. The tool
 > calculates; the user decides. No investment advice, no buy/sell outputs.
 
-PAE is a zero-knowledge, institutional-grade investment-analytics product for
+PAE is a local-first, institutional-grade investment-analytics product for
 individuals. It X-rays what *you* own — risk, factor exposure, drawdown,
-scenarios — while your data never leaves your control.
+scenarios — computed on your own machine, while your data never leaves
+your control. Vault records are encrypted in the user's browser; the
+analytics working store is an unencrypted local file (see the README's
+Security Model for the exact split).
 
 ## Agent surfaces
 
