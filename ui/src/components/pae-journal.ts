@@ -25,14 +25,25 @@
  * ciphertext + a real random nonce. Reading an encrypted entry
  * likewise requires the unlocked vault.
  *
+ * Record metadata, stated plainly: the versioning API stores
+ * change_summary as PLAINTEXT next to the content, so entries
+ * written from this view send NO change_summary — the title lives
+ * only inside the encrypted content. (The first Phase 3C build
+ * still sent the title as the summary; entries it wrote carry that
+ * plaintext title until rewritten.) Tags and dates remain
+ * plaintext metadata by design, so the list stays readable and
+ * filterable; the write form and the detail view both say so. In
+ * the list, an entry this view cannot decode shows its real title
+ * once the vault is unlocked and "Encrypted entry" while locked.
+ *
  * Compatibility, stated plainly: entries written by the Phase 3B
  * version of this view (and by scripts/seed_demo.py) were stored as
  * base64-encoded JSON with a zero nonce — NOT encrypted. Those
  * still decode and display, and the detail view labels them as
  * written before encryption was wired. An entry this view can
  * neither decrypt nor decode was encrypted under a different key;
- * the view says so and shows its (never-encrypted) summary, date,
- * and tags instead of pretending to read it.
+ * the view says so and shows its date and tags instead of
+ * pretending to read it.
  *
  * The journal records the user's own reasoning. It never scores,
  * judges, or advises.
@@ -229,7 +240,14 @@ class PaeJournal extends HTMLElement {
     const decoded = this.decode(rec);
     const title = decoded?.data['title'];
     if (typeof title === 'string' && title.trim()) return title;
+    // Only pre-fix records can carry user text in the summary: the
+    // Phase 3B view stored entries unencrypted with the title as
+    // the summary, and the first Phase 3C build still sent it.
+    // Records written now send no summary at all, so this fallback
+    // never fires for them — an undecodable new record falls
+    // through to the neutral label below instead.
     if (rec.change_summary?.trim()) return rec.change_summary;
+    if (!decoded && !this.decodeLegacy(rec)) return 'Encrypted entry';
     return rec.entity_id;
   }
 
@@ -318,7 +336,13 @@ class PaeJournal extends HTMLElement {
         entity_type: 'decision_entry',
         content_encrypted_b64: sealed.ciphertext_b64,
         nonce_b64: sealed.nonce_b64,
-        change_summary: title || action,
+        // No change_summary: the versioning API stores it as
+        // PLAINTEXT record metadata, and the title already lives
+        // inside the encrypted content. Sending it here (as the
+        // first Phase 3C build did) quietly kept a plaintext copy
+        // of the title next to the ciphertext. Tags stay plaintext
+        // by design — the write form says so where they are typed.
+        change_summary: null,
         tags,
       });
       this.showForm = false;
@@ -398,12 +422,12 @@ class PaeJournal extends HTMLElement {
     } else if (this.session) {
       body = `<div style="color:var(--text-secondary)">
         This entry is encrypted with a different key than the vault you
-        unlocked, so its text cannot be shown here. Its summary, date,
-        and tags above are never encrypted.</div>`;
+        unlocked, so its text cannot be shown here. Its date and tags
+        are never encrypted${latest.change_summary ? ', and neither is the summary above' : ''}.</div>`;
     } else {
       body = `<div style="color:var(--text-secondary)">
         This entry is encrypted. Unlock your vault above to read it
-        here. Its summary, date, and tags above are never encrypted.</div>`;
+        here. Its date and tags are never encrypted${latest.change_summary ? ', and neither is the summary above' : ''}.</div>`;
     }
     const prior =
       sel.total_versions > 1
@@ -450,6 +474,9 @@ class PaeJournal extends HTMLElement {
           <textarea id="j-wrong" rows="2" style="${inputStyle}"></textarea></label>
         <label style="${labelStyle}">Tags (comma separated)
           <input id="j-tags" type="text" style="${inputStyle}" placeholder="e.g. rebalance, taxes" /></label>
+        <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-bottom:var(--space-4)">
+          Tags and dates are stored unencrypted so your list stays readable; the entry itself is encrypted.
+        </div>
         <div style="display:flex;gap:var(--space-3)">
           <button id="journal-save" ${this.saving ? 'disabled' : ''}
             style="padding:8px 16px;border-radius:6px;background:var(--accent-primary);color:var(--text-inverse);border:none;cursor:pointer">
