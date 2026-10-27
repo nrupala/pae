@@ -109,6 +109,7 @@ Everything persistent is under **PAE_HOME**
 |------|----------|
 | `data/engine/pae.db`    | Engine SQLite store: portfolios, holdings, import staging, and the append-only version store (decision journal and other versioned records) |
 | `data/analytics/pae.db` | Analytics SQLite store: portfolios, holdings, journal |
+| `data/agent-token`       | The per-install agent token (owner-only permissions) — see "The agent token" below |
 | `run/`                  | PID files for the two processes |
 | `logs/`                 | `engine.log`, `analytics.log` |
 
@@ -141,6 +142,8 @@ unit / plist / task you registered).
 | `PAE_HOME` | Data directory (default `~/.local/share/pae`). |
 | `PAE_ENGINE_PORT`, `PAE_ANALYTICS_PORT` | Ports (defaults 3001 / 3002). |
 | `PAE_API_KEY` (analytics) | When set, the analytics data routes require `Authorization: Bearer <key>` (or `X-API-Key`) on every call. Unset = open, which is only appropriate while analytics stays on loopback. **Set it before exposing analytics beyond your machine.** |
+| `PAE_AGENT_TOKEN` (both) | Your own agent-token value, if you don't want a generated one — see "The agent token" below. When set, the token file is not used. |
+| `PAE_AGENT_TOKEN_PATH` (both) | Where the agent token file lives. The launcher sets it to `data/agent-token` under PAE_HOME. |
 | `PAE_CORS_ORIGINS` (analytics) | Extra browser origins allowed to call the analytics API directly, comma-separated. The launcher already allows the loopback origins for both ports; add yours here if the dashboard is reached under another name. |
 | `PAE_CORS_ORIGIN` (engine) | Single origin allowed to call the engine directly from a browser (default `http://localhost:3000`). The bundled dashboard is served by the engine itself, so most installs never touch this. |
 | `PAE_ENGINE_HOST` (engine) | Bind address (default `127.0.0.1`). Set to `0.0.0.0` only deliberately — see the security note below. |
@@ -150,10 +153,57 @@ unit / plist / task you registered).
 Security posture for anything beyond your own machine: both processes
 bind loopback by default, and that is the supported posture. The
 engine's `/api/v1/crypto/encrypt` and `/decrypt` endpoints are
-caller-supplied-key utilities designed for local-first use (see
-`docs/THREAT_MODEL.md`). If you deliberately expose PAE on a network,
+caller-supplied-key utilities designed for local-first use, and since
+Phase 3C they also require the agent token (see `docs/THREAT_MODEL.md`).
+If you deliberately expose PAE on a network,
 put it behind your own authenticated reverse proxy, set
 `PAE_API_KEY`, and understand the threat model first.
+
+## The agent token (authorizing an AI agent)
+
+PAE has one **per-install agent token**. It authorises the surfaces
+an AI agent uses on your behalf:
+
+- the A2A / agent endpoints on the **analytics** service —
+  `GET /.well-known/agent.json`, `POST /api/v1/a2a/message/send`,
+  `GET /.well-known/pae.json`, `GET /api/v1/tools`;
+- the engine's caller-supplied-key crypto helpers —
+  `POST /api/v1/crypto/encrypt` and `POST /api/v1/crypto/decrypt`.
+
+**Where it lives.** The token is generated the first time the
+engine or the analytics service starts, and stored in a file only
+your OS account can read (permissions `0600`):
+
+| How you run PAE | Token file |
+| --- | --- |
+| Via the launcher | `data/agent-token` under PAE_HOME (default `~/.local/share/pae/data/agent-token`) |
+| Services started by hand | `~/.pae/agent-token` |
+| Custom location | Set `PAE_AGENT_TOKEN_PATH` for both processes |
+
+**How to give it to your agent.** Read the token value from that
+file and configure your agent/client to send it on those requests
+as an HTTP header:
+
+```
+Authorization: Bearer <token>
+```
+
+Requests without the header — or with the wrong token — get
+`401 AGENT_TOKEN_REQUIRED`. There is deliberately **no** "no token
+means open" mode: if no token can be resolved, those surfaces stay
+closed. Treat the token like a password — it is the credential that
+lets a program act as your agent against PAE — so don't paste it
+into shared prompts or commit it anywhere.
+
+Notes:
+
+- The dashboard in your browser does **not** need the token: the UI
+  routes, the version endpoints the journal uses, and the dashboard
+  data routes work exactly as before. The analytics *data* routes
+  keep their separate, opt-in `PAE_API_KEY`; the agent token does
+  not replace it.
+- To rotate the token: stop both services, delete the token file,
+  and start again — a fresh one is generated on the next start.
 
 ## Troubleshooting
 

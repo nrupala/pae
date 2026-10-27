@@ -81,18 +81,27 @@
 
 ## Residual risks (read before any hosted deployment)
 
-1. **`/encrypt` and `/decrypt` are key+data oracles BY DESIGN.** In the
-   local-first deployment (engine on the user's own machine, UI served
-   locally) this is the intended division of labor: the browser derives
-   the key, the engine does AES-GCM as a compute service, and no trust
-   boundary is crossed. In ANY hosted or multi-user deployment these two
-   endpoints let anyone who can reach the server encrypt/decrypt arbitrary
-   data with arbitrary keys — they MUST be disabled (or removed from the
-   router), or encryption must move fully client-side (WebCrypto), before
+1. **`/encrypt` and `/decrypt` are caller-supplied-key helpers BY
+   DESIGN.** In the local-first deployment (engine on the user's own
+   machine, UI served locally) this is the intended division of labor:
+   the browser derives the key, the engine does AES-GCM as a compute
+   service, and no trust boundary is crossed. Since Phase 3C both
+   endpoints additionally require the per-install agent token
+   (`Authorization: Bearer`), so they are no longer open to anything
+   that can reach the port — but the token is a single bearer
+   credential for the whole install, not per-user auth. In ANY hosted
+   or multi-user deployment these two endpoints still let anyone
+   holding the token encrypt/decrypt arbitrary data with arbitrary
+   keys — they MUST be disabled (or removed from the router), or
+   encryption must move fully client-side (WebCrypto), before
    the engine is exposed beyond loopback.
-2. **No authentication on any endpoint.** CORS narrows which web origins
-   can call the API from a browser, but it is not access control —
-   non-browser callers ignore it. Localhost deployment is the current
+2. **Most endpoints have no authentication.** Since Phase 3C the
+   agent/A2A surfaces and the two crypto helpers above require the
+   per-install agent token; everything else (portfolio data, version
+   store, dashboard proxy) is unauthenticated, and analytics' data
+   routes authenticate only when `PAE_API_KEY` is set. CORS narrows
+   which web origins can call the API from a browser, but it is not
+   access control — non-browser callers ignore it. Localhost deployment is the current
    access-control story; a hosted deployment needs real auth first.
 3. **No TLS in the engine.** See Man-in-the-Middle above.
 4. **Single-DEK model.** The vault uses one per-vault DEK wrapped by the KEK
