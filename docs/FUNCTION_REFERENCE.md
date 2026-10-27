@@ -131,6 +131,7 @@ HTTP endpoints for the crypto vault. All handlers return `Result` with proper HT
 |-------|-------|
 | **Signature** | `pub async fn encrypt(Json(req): Json<EncryptRequest>) -> Result<Json<EncryptResponse>, (StatusCode, Json<CryptoErrorResponse>)>` |
 | **Route** | `POST /api/v1/crypto/encrypt` |
+| **Auth** | Per-install agent token required (`Authorization: Bearer`) — Phase 3C; 401 without it. |
 | **Purpose** | HTTP wrapper for `vault::encrypt`. |
 | **Request body** | `{ "plaintext": string, "key_b64": string }` |
 | **Response** | `200 { "ciphertext_b64": string, "nonce_b64": string }` |
@@ -143,6 +144,7 @@ HTTP endpoints for the crypto vault. All handlers return `Result` with proper HT
 |-------|-------|
 | **Signature** | `pub async fn decrypt(Json(req): Json<DecryptRequest>) -> Result<Json<DecryptResponse>, (StatusCode, Json<CryptoErrorResponse>)>` |
 | **Route** | `POST /api/v1/crypto/decrypt` |
+| **Auth** | Per-install agent token required (`Authorization: Bearer`) — Phase 3C; 401 without it. |
 | **Purpose** | HTTP wrapper for `vault::decrypt`. |
 | **Request body** | `{ "ciphertext_b64": string, "nonce_b64": string, "key_b64": string }` |
 | **Response** | `200 { "plaintext": string }` |
