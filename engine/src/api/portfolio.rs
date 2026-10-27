@@ -105,6 +105,15 @@ pub struct Holding {
     pub yield_pct: Option<f64>,
     pub cost_basis: Option<f64>,
     pub market_value: f64,
+    /// Asset class for the stress test's per-class shock table
+    /// (e.g. "equity", "fixed_income", "cash"). Optional: callers
+    /// that do not classify their holdings omit it, and the stress
+    /// test falls back to its documented default classification
+    /// ("equity"). Added in Phase 3D so the analytics layer — which
+    /// stores an asset class per holding — can pass it through
+    /// instead of the class being dropped at this boundary.
+    #[serde(default)]
+    pub asset_class: Option<String>,
 }
 
 #[derive(Serialize)]

@@ -40,6 +40,18 @@ mod tests {
             yield_pct: None,
             cost_basis: None,
             market_value,
+            asset_class: None,
+        }
+    }
+
+    fn holding_classed(
+        symbol: &str,
+        market_value: f64,
+        asset_class: &str,
+    ) -> Holding {
+        Holding {
+            asset_class: Some(asset_class.to_string()),
+            ..holding(symbol, market_value, vec![])
         }
     }
 
@@ -277,9 +289,14 @@ mod tests {
     // -----------------------------------------------------------------
     // Stress test — arithmetic by hand.
     //
-    // NOTE: classify_asset() is currently a stub — every holding is
-    // classified "equity" — so these vectors pin scenario/custom
-    // shock arithmetic under that stated premise.
+    // Phase 3D semantics: impact_pct values are TRUE PERCENTS
+    // (impact / base * 100), and classification comes from each
+    // holding's asset_class when supplied. The first three vectors
+    // use UNCLASSED holdings, which take the documented default
+    // classification ("equity"); the classed vectors after them pin
+    // the per-class table itself. These are the cases the analytics
+    // mirror tests (analytics/tests/test_known_answers.py) replay
+    // through the dashboard's stress path.
     // -----------------------------------------------------------------
 
     fn stress_holdings() -> Vec<Holding> {
@@ -291,24 +308,24 @@ mod tests {
 
     #[test]
     fn stress_gfc_hand_computed() {
-        // gfc_2008 equity shock = -0.50. Both holdings classify as
-        // equity (stub): impacts -30000 and -20000, total -50000 on
-        // 100000 -> portfolio impact exactly -0.50.
+        // gfc_2008 equity shock = -0.50. Unclassed holdings take the
+        // default "equity" classification: impacts -30000 and -20000,
+        // total -50000 on 100000 -> portfolio impact exactly -50.0%.
         let out = run_stress_test(&StressTestInput {
             holdings: stress_holdings(),
             scenario: "gfc_2008".to_string(),
             custom_shocks: None,
         });
-        assert!((out.portfolio_impact_pct - (-0.50)).abs() < 1e-12);
+        assert!((out.portfolio_impact_pct - (-50.0)).abs() < 1e-12);
         assert!((out.position_impacts[0].impact_value - (-30_000.0)).abs() < 1e-9);
         assert!((out.position_impacts[1].impact_value - (-20_000.0)).abs() < 1e-9);
-        assert!((out.position_impacts[0].impact_pct - (-0.50)).abs() < 1e-12);
+        assert!((out.position_impacts[0].impact_pct - (-50.0)).abs() < 1e-12);
     }
 
     #[test]
     fn stress_custom_shock_hand_computed() {
         // Custom equity shock -0.30: impacts -18000 and -12000 ->
-        // portfolio impact exactly -0.30.
+        // portfolio impact exactly -30.0%.
         let out = run_stress_test(&StressTestInput {
             holdings: stress_holdings(),
             scenario: "custom".to_string(),
@@ -317,7 +334,7 @@ mod tests {
                 shock_pct: -0.30,
             }]),
         });
-        assert!((out.portfolio_impact_pct - (-0.30)).abs() < 1e-12);
+        assert!((out.portfolio_impact_pct - (-30.0)).abs() < 1e-12);
         assert!((out.position_impacts[0].impact_value - (-18_000.0)).abs() < 1e-9);
         assert!((out.position_impacts[1].impact_value - (-12_000.0)).abs() < 1e-9);
     }
@@ -325,7 +342,8 @@ mod tests {
     #[test]
     fn stress_missing_class_uses_documented_default() {
         // Custom shocks name only fixed_income; holdings classify as
-        // equity -> the documented -0.10 default applies to both.
+        // equity -> the documented -0.10 default applies to both ->
+        // portfolio impact exactly -10.0%.
         let out = run_stress_test(&StressTestInput {
             holdings: stress_holdings(),
             scenario: "custom".to_string(),
@@ -334,7 +352,46 @@ mod tests {
                 shock_pct: 0.05,
             }]),
         });
-        assert!((out.portfolio_impact_pct - (-0.10)).abs() < 1e-12);
+        assert!((out.portfolio_impact_pct - (-10.0)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn stress_per_class_gfc_hand_computed() {
+        // The Phase 3D buyer-walk case, by hand. gfc_2008 table:
+        // cash 0.0, equity -0.50, fixed_income +0.05.
+        //   CASH-CAD  5000 cash         -> impact     0, pct   0.0
+        //   DEMO-EQ  10000 equity       -> impact -5000, pct -50.0
+        //   DEMO-BD  10000 fixed_income -> impact  +500, pct  +5.0
+        // Portfolio: -4500 / 25000 = -18.0%.
+        let out = run_stress_test(&StressTestInput {
+            holdings: vec![
+                holding_classed("CASH-CAD", 5_000.0, "cash"),
+                holding_classed("DEMO-EQ", 10_000.0, "equity"),
+                holding_classed("DEMO-BD", 10_000.0, "fixed_income"),
+            ],
+            scenario: "gfc_2008".to_string(),
+            custom_shocks: None,
+        });
+        assert!((out.portfolio_impact_pct - (-18.0)).abs() < 1e-12);
+        let pct = |i: usize| out.position_impacts[i].impact_pct;
+        let val = |i: usize| out.position_impacts[i].impact_value;
+        assert!((pct(0) - 0.0).abs() < 1e-12 && (val(0) - 0.0).abs() < 1e-9);
+        assert!((pct(1) - (-50.0)).abs() < 1e-12 && (val(1) - (-5_000.0)).abs() < 1e-9);
+        assert!((pct(2) - 5.0).abs() < 1e-12 && (val(2) - 500.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn stress_alias_2008_matches_gfc_table() {
+        // The dashboard sends "2008". Before Phase 3D that string
+        // matched no table key and silently took the flat default
+        // profile (equity -0.20 for everything). It must now resolve
+        // to the gfc_2008 table: classed equity -> exactly -50.0%.
+        let out = run_stress_test(&StressTestInput {
+            holdings: vec![holding_classed("DEMO-EQ", 10_000.0, "equity")],
+            scenario: "2008".to_string(),
+            custom_shocks: None,
+        });
+        assert!((out.portfolio_impact_pct - (-50.0)).abs() < 1e-12);
     }
 
     // -----------------------------------------------------------------

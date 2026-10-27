@@ -3,26 +3,50 @@
 
 use crate::api::portfolio::{PositionImpact, StressTestInput, StressTestResponse};
 
+/// Canonical scenario name for a caller-supplied scenario string.
+///
+/// The canonical names are the table keys below. Three legacy short
+/// names are accepted as aliases because shipped callers use them:
+/// the dashboard's scenario picker sends `2008` / `2020` /
+/// `rate_shock`, and the MCP `stress_test` tool historically
+/// documented the same short names. Before Phase 3D those strings
+/// matched NO table key and silently fell through to the flat
+/// default profile — the alias map is the fix, kept in exactly one
+/// place so every caller resolves identically.
+fn canonical_scenario(name: &str) -> &str {
+    match name {
+        "2008" => "gfc_2008",
+        "2020" => "covid_2020",
+        "rate_shock" => "rate_shock_2022",
+        other => other,
+    }
+}
+
 /// Historical scenario shock profiles.
-/// Each maps asset classes to percentage shocks observed during the event.
+/// Each maps asset classes to fractional shocks observed during the event
+/// (-0.50 = the class loses half its value). Cash is an explicit 0.0 in
+/// every profile: before Phase 3D the tables had no "cash" entry at all,
+/// so a cash holding fell through to the -0.10 unknown-class default and
+/// was reported as losing 10% in a crisis it does not participate in.
 ///
 /// Supported scenarios:
-/// - `gfc_2008`: Global Financial Crisis
-/// - `covid_2020`: COVID-19 pandemic crash
-/// - `rate_shock_2022`: 2022 interest rate hiking cycle
+/// - `gfc_2008`: Global Financial Crisis (alias: `2008`)
+/// - `covid_2020`: COVID-19 pandemic crash (alias: `2020`)
+/// - `rate_shock_2022`: 2022 interest rate hiking cycle (alias: `rate_shock`)
 /// - `dotcom_2000`: Dot-com bubble burst
 /// - `stagflation_1970s`: 1970s stagflation era
 /// - `black_monday_1987`: October 1987 crash
 /// - `oil_shock_2020`: Oil price collapse
 /// - Any other string: uses a moderate default shock profile
 fn get_scenario_shocks(name: &str) -> Vec<(&'static str, f64)> {
-    match name {
+    match canonical_scenario(name) {
         "gfc_2008" => vec![
             ("equity", -0.50),
             ("fixed_income", 0.05),
             ("commodity", -0.35),
             ("real_estate", -0.30),
             ("preferred", -0.25),
+            ("cash", 0.0),
         ],
         "covid_2020" => vec![
             ("equity", -0.34),
@@ -30,6 +54,7 @@ fn get_scenario_shocks(name: &str) -> Vec<(&'static str, f64)> {
             ("commodity", -0.25),
             ("real_estate", -0.15),
             ("preferred", -0.20),
+            ("cash", 0.0),
         ],
         "rate_shock_2022" => vec![
             ("equity", -0.25),
@@ -37,6 +62,7 @@ fn get_scenario_shocks(name: &str) -> Vec<(&'static str, f64)> {
             ("commodity", 0.10),
             ("real_estate", -0.10),
             ("preferred", -0.15),
+            ("cash", 0.0),
         ],
         "dotcom_2000" => vec![
             ("equity", -0.45),
@@ -44,6 +70,7 @@ fn get_scenario_shocks(name: &str) -> Vec<(&'static str, f64)> {
             ("commodity", -0.05),
             ("real_estate", 0.05),
             ("preferred", -0.10),
+            ("cash", 0.0),
         ],
         "stagflation_1970s" => vec![
             ("equity", -0.40),
@@ -51,6 +78,7 @@ fn get_scenario_shocks(name: &str) -> Vec<(&'static str, f64)> {
             ("commodity", 0.30),
             ("real_estate", -0.15),
             ("preferred", -0.20),
+            ("cash", 0.0),
         ],
         "black_monday_1987" => vec![
             ("equity", -0.22),
@@ -58,6 +86,7 @@ fn get_scenario_shocks(name: &str) -> Vec<(&'static str, f64)> {
             ("commodity", -0.05),
             ("real_estate", -0.05),
             ("preferred", -0.10),
+            ("cash", 0.0),
         ],
         "oil_shock_2020" => vec![
             ("equity", -0.15),
@@ -65,6 +94,7 @@ fn get_scenario_shocks(name: &str) -> Vec<(&'static str, f64)> {
             ("commodity", -0.60),
             ("real_estate", -0.05),
             ("preferred", -0.10),
+            ("cash", 0.0),
         ],
         _ => vec![
             ("equity", -0.20),
@@ -72,17 +102,26 @@ fn get_scenario_shocks(name: &str) -> Vec<(&'static str, f64)> {
             ("commodity", -0.10),
             ("real_estate", -0.10),
             ("preferred", -0.10),
+            ("cash", 0.0),
         ],
     }
 }
 
-/// Classify a holding into a broad asset class.
+/// Classify a holding into a broad asset class for shock lookup.
 ///
-/// Stub implementation: defaults all holdings to "equity".
-/// Production version uses GICS codes or user-defined tags from holdings metadata.
-fn classify_asset(_symbol: &str) -> &'static str {
-    // Stub: default to equity. Real implementation uses holdings metadata.
-    "equity"
+/// Uses the holding's own `asset_class` when the caller supplied one
+/// (the analytics layer stores one per holding and passes it through),
+/// normalized to lowercase. When absent or blank, falls back to the
+/// historic default "equity" — callers that do not classify holdings
+/// keep the pre-3D behavior, now as an explicit documented default
+/// rather than a stub. (Phase 3D buyer-walk fix: previously this
+/// ignored holdings metadata entirely, so every position — cash and
+/// bonds included — took the equity shock.)
+fn classify_asset(holding: &crate::api::portfolio::Holding) -> String {
+    match holding.asset_class.as_deref() {
+        Some(class) if !class.trim().is_empty() => class.trim().to_lowercase(),
+        _ => "equity".to_string(),
+    }
 }
 
 /// Run a scenario-based stress test on the portfolio.
@@ -103,6 +142,10 @@ fn classify_asset(_symbol: &str) -> &'static str {
 ///
 /// # Returns
 /// `StressTestResponse` with per-position and aggregate portfolio impact.
+/// Both `impact_pct` fields are TRUE PERCENTS (impact_value / base_value
+/// * 100): a -0.50 equity shock reports `impact_pct: -50.0`, not -0.50.
+///   (Before Phase 3D they were raw fractions and the dashboard printed
+///   them with a "%" sign, understating every impact a hundredfold.)
 pub fn run_stress_test(input: &StressTestInput) -> StressTestResponse {
     let shocks: Vec<(&str, f64)> = if let Some(ref custom) = input.custom_shocks {
         custom
@@ -129,8 +172,8 @@ pub fn run_stress_test(input: &StressTestInput) -> StressTestResponse {
     let mut position_impacts = Vec::new();
 
     for holding in &input.holdings {
-        let asset_class = classify_asset(&holding.symbol);
-        let shock = shock_map.get(asset_class).copied().unwrap_or(-0.10);
+        let asset_class = classify_asset(holding);
+        let shock = shock_map.get(asset_class.as_str()).copied().unwrap_or(-0.10);
         let impact_value = holding.market_value * shock;
 
         // Guard against NaN/Infinity propagation from market_value
@@ -144,13 +187,15 @@ pub fn run_stress_test(input: &StressTestInput) -> StressTestResponse {
 
         position_impacts.push(PositionImpact {
             symbol: holding.symbol.clone(),
-            impact_pct: shock,
+            // True percent: the shock IS impact/base for a single
+            // position (base = its market value), so pct = shock * 100.
+            impact_pct: shock * 100.0,
             impact_value: safe_impact,
         });
     }
 
     let portfolio_impact_pct = if total_value > 0.0 && !total_value.is_nan() && !total_value.is_infinite() {
-        total_impact / total_value
+        total_impact / total_value * 100.0
     } else {
         0.0
     };
@@ -176,6 +221,7 @@ mod tests {
                 yield_pct: None,
                 cost_basis: None,
                 market_value: 60000.0,
+                asset_class: None,
             },
             Holding {
                 symbol: "AGG".to_string(),
@@ -184,6 +230,7 @@ mod tests {
                 yield_pct: None,
                 cost_basis: None,
                 market_value: 40000.0,
+                asset_class: None,
             },
         ]
     }
@@ -236,6 +283,7 @@ mod tests {
                 yield_pct: None,
                 cost_basis: None,
                 market_value: 0.0,
+                asset_class: None,
             }],
             scenario: "gfc_2008".to_string(),
             custom_shocks: None,
@@ -256,6 +304,74 @@ mod tests {
         let result = run_stress_test(&input);
         // NaN shock should be sanitized to 0.0, so zero impact
         assert_eq!(result.portfolio_impact_pct, 0.0);
+    }
+
+    fn classified(symbol: &str, class: &str, market_value: f64) -> Holding {
+        Holding {
+            symbol: symbol.to_string(),
+            weight: 0.0,
+            returns: vec![],
+            yield_pct: None,
+            cost_basis: None,
+            market_value,
+            asset_class: Some(class.to_string()),
+        }
+    }
+
+    #[test]
+    fn test_stress_per_class_shocks_and_true_percent() {
+        // GFC: cash is explicitly unshocked, fixed_income gains 5%,
+        // equity halves. impact_pct is a true percent (Phase 3D).
+        let input = StressTestInput {
+            holdings: vec![
+                classified("CASH", "cash", 5000.0),
+                classified("EQ", "equity", 10000.0),
+                classified("BD", "fixed_income", 10000.0),
+            ],
+            scenario: "gfc_2008".to_string(),
+            custom_shocks: None,
+        };
+        let result = run_stress_test(&input);
+        let by_symbol: std::collections::HashMap<&str, &PositionImpact> = result
+            .position_impacts
+            .iter()
+            .map(|p| (p.symbol.as_str(), p))
+            .collect();
+        assert_eq!(by_symbol["CASH"].impact_pct, 0.0);
+        assert_eq!(by_symbol["CASH"].impact_value, 0.0);
+        assert_eq!(by_symbol["EQ"].impact_pct, -50.0);
+        assert_eq!(by_symbol["EQ"].impact_value, -5000.0);
+        assert_eq!(by_symbol["BD"].impact_pct, 5.0);
+        assert_eq!(by_symbol["BD"].impact_value, 500.0);
+        // (-5000 + 500 + 0) / 25000 * 100 = -18.0
+        assert_eq!(result.portfolio_impact_pct, -18.0);
+    }
+
+    #[test]
+    fn test_stress_legacy_aliases_resolve_to_canonical_tables() {
+        // The dashboard sends "2008"; it must produce the gfc_2008
+        // table, not the flat default profile (Phase 3D root cause).
+        let holdings = vec![classified("EQ", "equity", 10000.0)];
+        for (alias, canonical) in [
+            ("2008", "gfc_2008"),
+            ("2020", "covid_2020"),
+            ("rate_shock", "rate_shock_2022"),
+        ] {
+            let via_alias = run_stress_test(&StressTestInput {
+                holdings: holdings.clone(),
+                scenario: alias.to_string(),
+                custom_shocks: None,
+            });
+            let via_canonical = run_stress_test(&StressTestInput {
+                holdings: holdings.clone(),
+                scenario: canonical.to_string(),
+                custom_shocks: None,
+            });
+            assert_eq!(
+                via_alias.portfolio_impact_pct, via_canonical.portfolio_impact_pct,
+                "alias {alias} must resolve to {canonical}"
+            );
+        }
     }
 
     #[test]

@@ -173,6 +173,7 @@ mod tests {
                 yield_pct: None,
                 cost_basis: None,
                 market_value: 10000.0,
+                asset_class: None,
             }],
             num_simulations: Some(1000),
             time_horizon_months: Some(12),
@@ -214,6 +215,7 @@ mod tests {
                 yield_pct: None,
                 cost_basis: None,
                 market_value: 1000.0,
+                asset_class: None,
             }],
             num_simulations: Some(2_000_000), // exceeds MAX_SIMULATIONS
             time_horizon_months: Some(1),
