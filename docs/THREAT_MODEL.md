@@ -9,7 +9,14 @@
 
 ## Principles
 
-1. **Zero-knowledge**: Server stores only ciphertext. Operator cannot read user data.
+1. **Zero-knowledge — vault plane**: For vault records (the versioned
+   records, such as the decision journal), the server stores only
+   ciphertext and the operator cannot read them. This principle is
+   scoped to that plane: the analytics working store — the holdings
+   imported for analysis — is a local database file, unencrypted,
+   like any local app's data file (see README, "Security Model"). The
+   local-first posture trusts the user's own machine and files for
+   the analytics store.
 2. **Zero-trust**: Every component assumes breach. No implicit trust between services.
 3. **User-held keys**: Master key derived from user passphrase **client-side**.
    Server never sees passphrase or derived key.
@@ -18,13 +25,19 @@
 
 ### Server Compromise
 - **Threat**: Attacker gains full access to server, database, and filesystem.
-- **Mitigation**: All stored data is AES-256-GCM ciphertext (random 96-bit
+- **Mitigation**: All vault-plane stored data (the versioned records)
+  is AES-256-GCM ciphertext (random 96-bit
   nonce per encryption). Record keys are derived client-side via Argon2id
   (3 iterations, 64 MiB, 4 lanes, v19, 32-byte output — the RFC 9106
   second-recommended profile) against the
   per-database salt served by `GET /api/v1/crypto/kdf-params`. The server
   holds no passphrase-derivation code path — there is nothing to coerce or
-  dump for user passphrases. Attacker gets ciphertext only.
+  dump for user passphrases. For the vault plane, an attacker gets
+  ciphertext only. The analytics working store is plaintext SQLite on
+  the user's own machine (see Principle 1): a filesystem compromise
+  exposes the imported holdings in it, as it would any local app's
+  data file — full-disk encryption is the user's control for that
+  plane, and README says so.
 - **Residual**: `/encrypt` and `/decrypt` accept caller-supplied key+data
   (see Residual risks below).
 
