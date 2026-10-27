@@ -57,11 +57,20 @@ function bytesToB64(bytes: Uint8Array): string {
   return btoa(bin);
 }
 
+/**
+ * POST a JSON body and parse the JSON response. Returns null when
+ * the server answers with no body (204 No Content, or an empty 200):
+ * POST /api/v1/crypto/dek-envelope legitimately returns 204, and
+ * `res.json()` would throw on the empty body — which previously made
+ * createVault's store step fail in the browser after the envelope
+ * had actually been stored. Non-2xx still throws, with status and
+ * response text.
+ */
 async function postJson<T>(
   url: string,
   body: unknown,
   agentToken?: string
-): Promise<T> {
+): Promise<T | null> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (agentToken) {
     headers['Authorization'] = `Bearer ${agentToken}`;
@@ -75,7 +84,14 @@ async function postJson<T>(
     const text = await res.text().catch(() => '');
     throw new Error(`POST ${url} failed: ${res.status} ${text}`);
   }
-  return (await res.json()) as T;
+  if (res.status === 204) {
+    return null;
+  }
+  const text = await res.text();
+  if (!text.trim()) {
+    return null;
+  }
+  return JSON.parse(text) as T;
 }
 
 /**
@@ -141,7 +157,7 @@ export async function encrypt(
   plaintext: string,
   agentToken?: string
 ): Promise<EncryptResult> {
-  return postJson<EncryptResult>(
+  const out = await postJson<EncryptResult>(
     `${engineUrl}/api/v1/crypto/encrypt`,
     {
       plaintext,
@@ -149,6 +165,10 @@ export async function encrypt(
     },
     agentToken
   );
+  if (!out) {
+    throw new Error('POST /api/v1/crypto/encrypt returned an empty response');
+  }
+  return out;
 }
 
 /** Decrypt ciphertext via the engine. See encrypt() re: the token. */
@@ -164,6 +184,9 @@ export async function decrypt(
     { ciphertext_b64, nonce_b64, key_b64: keyB64 },
     agentToken
   );
+  if (!out) {
+    throw new Error('POST /api/v1/crypto/decrypt returned an empty response');
+  }
   return out.plaintext;
 }
 
