@@ -92,6 +92,12 @@ wait_healthy() {
 common_env() {
     PAE_CORS_ORIGINS="http://localhost:$ENGINE_PORT,http://127.0.0.1:$ENGINE_PORT,http://localhost:$ANALYTICS_PORT,http://127.0.0.1:$ANALYTICS_PORT${PAE_CORS_ORIGINS:+,$PAE_CORS_ORIGINS}"
     export PAE_CORS_ORIGINS
+    # Both services must see the SAME PAE_HOME the launcher resolved:
+    # analytics locates the knowledge base at $PAE_HOME/data/pke.db
+    # (Phase 3D), and without the export it would silently fall back
+    # to the XDG default — outside the data directory the user backs
+    # up. (A PAE_HOME the user already exported is kept as-is.)
+    export PAE_HOME
     # One per-install agent token for both processes (Phase 3C): the
     # engine gates its crypto oracle endpoints with it and analytics
     # gates the A2A/agent surfaces. Whichever starts first creates
