@@ -3,18 +3,20 @@
 
 //! Holdings and portfolio CRUD endpoints, backed by encrypted SQLite.
 //!
-//! Endpoints:
-//! - `GET    /api/v1/holdings`        list holdings (filter by portfolio/account)
-//! - `POST   /api/v1/holdings`        add a holding
-//! - `PUT    /api/v1/holdings/:id`    update a holding
-//! - `DELETE /api/v1/holdings/:id`    delete a holding
-//! - `GET    /api/v1/portfolios`      list portfolios
-//! - `POST   /api/v1/portfolios`      create a portfolio
+//! Endpoints (the engine's ciphertext "vault" plane; since Phase 3D
+//! these live under `/api/v1/vault/` — the unprefixed paths belong
+//! to the analytics data plane, proxied by the engine):
+//! - `GET    /api/v1/vault/holdings`        list holdings (filter by portfolio/account)
+//! - `POST   /api/v1/vault/holdings`        add a holding
+//! - `PUT    /api/v1/vault/holdings/:id`    update a holding
+//! - `DELETE /api/v1/vault/holdings/:id`    delete a holding
+//! - `GET    /api/v1/vault/portfolios`      list portfolios
+//! - `POST   /api/v1/vault/portfolios`      create a portfolio
 //!
-//! Zero-knowledge: every sensitive field is a client-side AES-256-GCM
-//! ciphertext blob. The engine validates structure and persists ciphertext;
-//! it never sees plaintext symbols or financials. Base64 is used on the wire,
-//! decoded to raw bytes before storage.
+//! Ciphertext-only storage: every sensitive field is a client-side
+//! AES-256-GCM ciphertext blob. The engine validates structure and
+//! persists ciphertext; it never sees plaintext symbols or financials.
+//! Base64 is used on the wire, decoded to raw bytes before storage.
 
 use std::sync::Arc;
 
@@ -142,7 +144,7 @@ impl From<Portfolio> for PortfolioResponse {
     }
 }
 
-// --- GET /api/v1/holdings ---
+// --- GET /api/v1/vault/holdings ---
 
 /// Query params for listing holdings.
 #[derive(Deserialize)]
@@ -161,7 +163,7 @@ pub struct ListHoldingsResponse {
     pub holdings: Vec<HoldingResponse>,
 }
 
-/// `GET /api/v1/holdings?portfolio_id=...&account_id=...`
+/// `GET /api/v1/vault/holdings?portfolio_id=...&account_id=...`
 ///
 /// Lists every holding in a portfolio, optionally filtered by account.
 /// Returns 400 if `portfolio_id` is missing/empty.
@@ -185,7 +187,7 @@ pub async fn list_holdings(
     }))
 }
 
-// --- POST /api/v1/holdings ---
+// --- POST /api/v1/vault/holdings ---
 
 /// Request body to create a holding. All financial content is supplied as
 /// client-side ciphertext (base64).
@@ -205,7 +207,7 @@ pub struct CreateHoldingResponse {
     pub id: String,
 }
 
-/// `POST /api/v1/holdings`
+/// `POST /api/v1/vault/holdings`
 ///
 /// Adds a holding to a portfolio. Returns 400 for empty/invalid base64 or
 /// an empty portfolio_id; 404 if the portfolio does not exist.
@@ -235,7 +237,7 @@ pub async fn create_holding(
     Ok((StatusCode::CREATED, Json(CreateHoldingResponse { id })))
 }
 
-// --- PUT /api/v1/holdings/:id ---
+// --- PUT /api/v1/vault/holdings/:id ---
 
 /// Request body to update a holding's encrypted symbol/payload.
 #[derive(Deserialize)]
@@ -253,7 +255,7 @@ pub struct AckResponse {
     pub status: &'static str,
 }
 
-/// `PUT /api/v1/holdings/:id`
+/// `PUT /api/v1/vault/holdings/:id`
 ///
 /// Replaces the encrypted symbol and payload of an existing holding.
 /// Returns 400 for invalid base64; 404 if the holding does not exist.
@@ -278,9 +280,9 @@ pub async fn update_holding(
     Ok(Json(AckResponse { id, status: "updated" }))
 }
 
-// --- DELETE /api/v1/holdings/:id ---
+// --- DELETE /api/v1/vault/holdings/:id ---
 
-/// `DELETE /api/v1/holdings/:id`
+/// `DELETE /api/v1/vault/holdings/:id`
 ///
 /// Deletes a holding. Returns 404 if it does not exist.
 pub async fn delete_holding(
@@ -295,7 +297,7 @@ pub async fn delete_holding(
     Ok(Json(AckResponse { id, status: "deleted" }))
 }
 
-// --- GET /api/v1/portfolios ---
+// --- GET /api/v1/vault/portfolios ---
 
 /// Response wrapper for a list of portfolios.
 #[derive(Serialize)]
@@ -304,7 +306,7 @@ pub struct ListPortfoliosResponse {
     pub portfolios: Vec<PortfolioResponse>,
 }
 
-/// `GET /api/v1/portfolios`
+/// `GET /api/v1/vault/portfolios`
 ///
 /// Lists all portfolios, newest first.
 pub async fn list_portfolios(
@@ -319,7 +321,7 @@ pub async fn list_portfolios(
     }))
 }
 
-// --- POST /api/v1/portfolios ---
+// --- POST /api/v1/vault/portfolios ---
 
 /// Request body to create a portfolio. The name is client-side ciphertext.
 #[derive(Deserialize)]
@@ -334,7 +336,7 @@ pub struct CreatePortfolioResponse {
     pub id: String,
 }
 
-/// `POST /api/v1/portfolios`
+/// `POST /api/v1/vault/portfolios`
 ///
 /// Creates a portfolio. Returns 400 for empty/invalid base64 fields.
 pub async fn create_portfolio(

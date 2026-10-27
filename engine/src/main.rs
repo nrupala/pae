@@ -237,7 +237,8 @@ struct AppConfig {
     /// None = API only (development, tests).
     ui_dir: Option<PathBuf>,
     /// Base URL of the analytics service (`PAE_ANALYTICS_URL`), target
-    /// of the /api/v1/analytics and /api/v1/dashboard proxy routes.
+    /// of the analytics proxy routes (/api/v1/analytics, /api/v1/dashboard,
+    /// and the analytics data plane — see `analytics_proxy_routes`).
     analytics_base: String,
     /// Per-install agent token required on the crypto oracle
     /// endpoints (Phase 3C). Resolved from the environment / token
@@ -299,16 +300,25 @@ fn build_app(store: Arc<storage::Store>, cfg: &AppConfig) -> Router {
         .route("/api/v1/version/diff", post(api::versioning_api::get_diff))
         .with_state(version_store);
 
-    // Routes backed by the SQLite persistence store (holdings, portfolios, import)
+    // Routes backed by the SQLite persistence store: the engine's
+    // ciphertext (vault) plane — holdings/portfolios/import records
+    // whose payloads are client-side-encrypted blobs the engine never
+    // reads. Phase 3D moved these from /api/v1/holdings etc. to the
+    // /api/v1/vault/* prefix: the unprefixed paths now belong to the
+    // analytics data plane (proxied below), which is the contract
+    // the dashboard, the seed, and the MCP tools all use. Nothing in
+    // the product consumed the ciphertext plane at the old paths
+    // (verified by a repo-wide search before the move); the handlers
+    // and their semantics are unchanged.
     let storage_routes = Router::new()
-        .route("/api/v1/holdings", get(api::holdings_api::list_holdings))
-        .route("/api/v1/holdings", post(api::holdings_api::create_holding))
-        .route("/api/v1/holdings/{id}", put(api::holdings_api::update_holding))
-        .route("/api/v1/holdings/{id}", delete(api::holdings_api::delete_holding))
-        .route("/api/v1/portfolios", get(api::holdings_api::list_portfolios))
-        .route("/api/v1/portfolios", post(api::holdings_api::create_portfolio))
-        .route("/api/v1/import/csv", post(api::import_api::import_csv))
-        .route("/api/v1/import/confirm", post(api::import_api::confirm_import))
+        .route("/api/v1/vault/holdings", get(api::holdings_api::list_holdings))
+        .route("/api/v1/vault/holdings", post(api::holdings_api::create_holding))
+        .route("/api/v1/vault/holdings/{id}", put(api::holdings_api::update_holding))
+        .route("/api/v1/vault/holdings/{id}", delete(api::holdings_api::delete_holding))
+        .route("/api/v1/vault/portfolios", get(api::holdings_api::list_portfolios))
+        .route("/api/v1/vault/portfolios", post(api::holdings_api::create_portfolio))
+        .route("/api/v1/vault/import/csv", post(api::import_api::import_csv))
+        .route("/api/v1/vault/import/confirm", post(api::import_api::confirm_import))
         .with_state(store.clone());
 
     // Crypto routes. NOTE (2026-10-05, zero-knowledge fix):
@@ -468,7 +478,9 @@ fn content_type_for(path: &Path) -> &'static str {
 }
 
 // ---------------------------------------------------------------------------
-// Analytics reverse proxy (/api/v1/analytics/*, /api/v1/dashboard/*)
+// Analytics reverse proxy (/api/v1/analytics/*, /api/v1/dashboard/*, and
+// the analytics data plane: /api/v1/portfolios, /api/v1/holdings,
+// /api/v1/import/*, /api/v1/knowledge/*)
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -482,10 +494,25 @@ struct AnalyticsProxy {
 /// through the engine origin so the product is same-origin. The
 /// engine's own `/api/v1/analytics/bond` route is an exact match and
 /// takes precedence over the wildcard below.
+///
+/// Phase 3D: the analytics DATA plane joins the proxy set —
+/// `/api/v1/portfolios`, `/api/v1/holdings`, `/api/v1/import/*`,
+/// `/api/v1/knowledge/*`. Before this, those paths on the engine
+/// origin were the engine's own ciphertext store (now under
+/// `/api/v1/vault/*`), so the dashboard had to hardcode the
+/// analytics origin (http://localhost:3002) and broke whenever the
+/// analytics port or host differed. Same-origin relative calls now
+/// work at any configured port pair.
 fn analytics_proxy_routes(base: String) -> Router {
     Router::new()
         .route("/api/v1/analytics/{*rest}", any(proxy_to_analytics))
         .route("/api/v1/dashboard/{*rest}", any(proxy_to_analytics))
+        .route("/api/v1/portfolios", any(proxy_to_analytics))
+        .route("/api/v1/portfolios/{*rest}", any(proxy_to_analytics))
+        .route("/api/v1/holdings", any(proxy_to_analytics))
+        .route("/api/v1/holdings/{*rest}", any(proxy_to_analytics))
+        .route("/api/v1/import/{*rest}", any(proxy_to_analytics))
+        .route("/api/v1/knowledge/{*rest}", any(proxy_to_analytics))
         .with_state(AnalyticsProxy { base })
 }
 
@@ -1376,5 +1403,62 @@ mod tests {
             .json(&serde_json::json!({}))
             .await;
         assert_eq!(resp.status_code().as_u16(), 502);
+    }
+
+    /// Phase 3D: the analytics data plane is proxied at the paths the
+    /// dashboard actually calls. With analytics down each answers 502
+    /// (proof the proxy owns the path — before 3D, /api/v1/portfolios
+    /// on this origin was the engine's ciphertext store and answered
+    /// 200 with the wrong contract).
+    #[tokio::test]
+    async fn data_plane_paths_proxy_to_analytics() {
+        let cfg = AppConfig {
+            ui_dir: None,
+            analytics_base: "http://127.0.0.1:1".to_string(),
+            agent_token: None,
+        };
+        let server = configured_server(&cfg);
+        for path in [
+            "/api/v1/portfolios",
+            "/api/v1/portfolios/some-id",
+            "/api/v1/holdings?portfolio_id=some-id",
+            "/api/v1/knowledge/chunks",
+        ] {
+            let resp = server.get(path).await;
+            assert_eq!(resp.status_code().as_u16(), 502, "GET {path} must proxy");
+        }
+        let resp = server
+            .post("/api/v1/import/csv?portfolio_id=some-id")
+            .json(&serde_json::json!({}))
+            .await;
+        assert_eq!(resp.status_code().as_u16(), 502, "POST import must proxy");
+    }
+
+    /// Phase 3D: the engine's ciphertext (vault) plane answers under
+    /// its new /api/v1/vault/* prefix with unchanged semantics.
+    #[tokio::test]
+    async fn vault_routes_live_under_vault_prefix() {
+        let cfg = AppConfig {
+            ui_dir: None,
+            analytics_base: "http://127.0.0.1:1".to_string(),
+            agent_token: None,
+        };
+        let server = configured_server(&cfg);
+        let created = server
+            .post("/api/v1/vault/portfolios")
+            .json(&serde_json::json!({
+                "name_encrypted_b64": "bmFtZQ==",
+                "name_nonce_b64": "bm9uY2U="
+            }))
+            .await;
+        assert_eq!(created.status_code().as_u16(), 201);
+        let created_body: serde_json::Value = created.json();
+        let portfolio_id = created_body["id"].as_str().expect("created id");
+        let listed = server.get("/api/v1/vault/portfolios").await;
+        assert_eq!(listed.status_code().as_u16(), 200);
+        let holdings = server
+            .get(&format!("/api/v1/vault/holdings?portfolio_id={portfolio_id}"))
+            .await;
+        assert_eq!(holdings.status_code().as_u16(), 200);
     }
 }

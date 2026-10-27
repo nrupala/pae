@@ -5,15 +5,22 @@
 //!
 //! Two-step flow so the user can review before anything is persisted:
 //!
-//! 1. `POST /api/v1/import/csv` — multipart upload of a broker CSV. The
-//!    file is size/type-validated and parsed into holdings, which are
+//! 1. `POST /api/v1/vault/import/csv` — multipart upload of a broker CSV.
+//!    The file is size/type-validated and parsed into holdings, which are
 //!    returned as JSON for review. **Nothing is saved here.**
-//! 2. `POST /api/v1/import/confirm` — the client posts back the reviewed,
-//!    **client-side-encrypted** holdings, which are persisted to SQLite.
+//! 2. `POST /api/v1/vault/import/confirm` — the client posts back the
+//!    reviewed, **client-side-encrypted** holdings, which are persisted
+//!    to SQLite.
 //!
-//! Consistent with PAE's zero-knowledge model, the confirm step accepts
-//! only ciphertext blobs (symbol + payload), never plaintext financials.
-//! Plaintext parsing in step 1 happens in-memory and is never stored.
+//! (Since Phase 3D these live under `/api/v1/vault/`; the unprefixed
+//! `/api/v1/import/*` paths are the analytics data plane's import,
+//! proxied by the engine — a plaintext working store, a different
+//! contract from this ciphertext plane.)
+//!
+//! Consistent with this plane's ciphertext-only model, the confirm step
+//! accepts only ciphertext blobs (symbol + payload), never plaintext
+//! financials. Plaintext parsing in step 1 happens in-memory and is
+//! never stored.
 //!
 //! The canonical multi-format importer (Interactive Brokers / Questrade /
 //! Wealthsimple / OFX) lives in Python at `analytics/pae/data/csv_import.py`.
@@ -149,7 +156,7 @@ pub struct ImportPreviewResponse {
     pub rows_imported: usize,
 }
 
-/// `POST /api/v1/import/csv`
+/// `POST /api/v1/vault/import/csv`
 ///
 /// Accepts a multipart form upload with a `file` field. Validates the
 /// file size (<= 10 MB) and extension (.csv/.ofx/.qfx), parses it, and
@@ -420,7 +427,7 @@ pub struct ConfirmHolding {
     pub account_id: Option<String>,
 }
 
-/// Request body for `POST /api/v1/import/confirm`.
+/// Request body for `POST /api/v1/vault/import/confirm`.
 #[derive(Deserialize)]
 pub struct ConfirmImportRequest {
     pub portfolio_id: String,
@@ -435,7 +442,7 @@ pub struct ConfirmImportResponse {
     pub holding_ids: Vec<String>,
 }
 
-/// `POST /api/v1/import/confirm`
+/// `POST /api/v1/vault/import/confirm`
 ///
 /// Persists reviewed, client-encrypted holdings to SQLite under
 /// `portfolio_id`. Returns the generated holding ids.
