@@ -58,7 +58,10 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = os.environ.get("PAE_DB_PATH", "data/pae.db")
 RUST_ENGINE_URL = os.environ.get("PAE_ENGINE_URL", "http://localhost:3001")
-# PKE knowledge base location (pae.pke.store.default_store_path() shape).
+# PKE knowledge base location. Resolution: PAE_PKE_PATH override,
+# else default_store_path() — $PAE_HOME/data/pke.db when PAE_HOME is
+# set, else ~/.local/share/pae/pke.db (Phase 3D; before this the PKE
+# ignored PAE_HOME and lived outside the documented backup tree).
 PKE_PATH = os.environ.get("PAE_PKE_PATH", str(default_store_path()))
 
 # --- App Lifecycle ---
@@ -960,15 +963,38 @@ def _open_knowledge_store() -> KnowledgeStore:
     return KnowledgeStore(PKE_PATH)
 
 
+def _knowledge_db_exists() -> bool:
+    """Whether a knowledge-base file exists yet.
+
+    A missing DB is the normal first-run state, not an error: the
+    endpoints answer with the empty state instead of opening (which
+    would create) a store — and instead of the 500 a fresh PAE_HOME
+    produced before Phase 3D, when the store's parent directory did
+    not exist and the open failed.
+    """
+    return os.path.exists(PKE_PATH)
+
+
 @app.get("/api/v1/knowledge/chunks", dependencies=[Depends(require_api_key)])
 async def list_knowledge_chunks(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> dict[str, Any]:
-    """List knowledge-base chunks, newest first (metadata + text)."""
+    """List knowledge-base chunks, newest first (metadata + text).
+
+    The response also carries ``cleartext_chunks`` — how many stored
+    chunks are unencrypted — so the dashboard can label a cleartext
+    configuration plainly instead of implying encryption.
+    """
+    if not _knowledge_db_exists():
+        return {"total": 0, "chunks": [], "cleartext_chunks": 0}
     store = _open_knowledge_store()
     try:
-        return {"total": store.count_chunks(), "chunks": store.list_chunks(limit, offset)}
+        return {
+            "total": store.count_chunks(),
+            "chunks": store.list_chunks(limit, offset),
+            "cleartext_chunks": store.count_cleartext_chunks(),
+        }
     finally:
         store.close()
 
@@ -981,6 +1007,8 @@ async def search_knowledge(
     """Keyword-search the knowledge base (the store's deterministic
     token-overlap ranking — the same fallback retrieval uses when no
     embedding index is available)."""
+    if not _knowledge_db_exists():
+        return {"query": q, "results": []}
     store = _open_knowledge_store()
     try:
         try:

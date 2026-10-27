@@ -132,3 +132,71 @@ def test_encrypted_base_lists_metadata_but_locks_text(
     body = resp.json()
     assert body["results"] == []
     assert body["locked"] is True
+
+
+# --- Phase 3D (W4): path resolution, empty state, cleartext signal ---
+
+
+def test_missing_database_is_empty_state_not_500(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A fresh PAE_HOME has no pke.db — and before 3D, not even its
+    parent directory. The endpoints must answer the empty state."""
+    from pae import server
+
+    missing = tmp_path / "fresh-home" / "data" / "pke.db"
+    monkeypatch.setattr(server, "PKE_PATH", str(missing))
+
+    resp = client.get("/api/v1/knowledge/chunks")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 0
+    assert body["chunks"] == []
+    assert body["cleartext_chunks"] == 0
+    # A read must not create the file as a side effect.
+    assert not missing.exists()
+
+    resp = client.get("/api/v1/knowledge/search", params={"q": "anything"})
+    assert resp.status_code == 200
+    assert resp.json()["results"] == []
+
+
+def test_cleartext_chunks_reported_for_cleartext_store(client: TestClient) -> None:
+    """The module fixture seeds a cleartext store with 2 chunks; the
+    response must say so, so the dashboard can label it."""
+    resp = client.get("/api/v1/knowledge/chunks")
+    assert resp.status_code == 200
+    assert resp.json()["cleartext_chunks"] == 2
+
+
+def test_cleartext_chunks_zero_for_encrypted_store(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pae import server
+
+    pke_path = tmp_path / "pke-encrypted2.db"
+    _seed(pke_path, dek=DEK)
+    monkeypatch.setattr(server, "PKE_PATH", str(pke_path))
+
+    resp = client.get("/api/v1/knowledge/chunks")
+    assert resp.status_code == 200
+    assert resp.json()["cleartext_chunks"] == 0
+
+
+def test_default_store_path_prefers_pae_home(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pae.pke.store import default_store_path
+
+    monkeypatch.setenv("PAE_HOME", "/some/pae-home")
+    assert default_store_path() == Path("/some/pae-home/data/pke.db")
+    monkeypatch.delenv("PAE_HOME")
+    assert default_store_path() == Path.home() / ".local" / "share" / "pae" / "pke.db"
+
+
+def test_store_creates_missing_parent_directory(tmp_path: Path) -> None:
+    deep = tmp_path / "fresh" / "data" / "pke.db"
+    store = KnowledgeStore(deep)
+    try:
+        assert store.count_chunks() == 0
+    finally:
+        store.close()
+    assert deep.exists()

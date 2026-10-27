@@ -38,6 +38,7 @@ interface KnowledgeChunk {
 interface ChunksResponse {
   total: number;
   chunks: KnowledgeChunk[];
+  cleartext_chunks?: number;
 }
 
 interface SearchResponse {
@@ -50,6 +51,7 @@ class PaeKnowledge extends HTMLElement {
   private shadow: ShadowRoot;
   private chunks: KnowledgeChunk[] = [];
   private total: number = 0;
+  private cleartextChunks: number = 0;
   private results: KnowledgeChunk[] | null = null;
   private searchLocked: boolean = false;
   private query: string = '';
@@ -84,6 +86,7 @@ class PaeKnowledge extends HTMLElement {
       const data = (await resp.json()) as ChunksResponse;
       this.total = data.total;
       this.chunks = data.chunks;
+      this.cleartextChunks = data.cleartext_chunks ?? 0;
       this.loading = false;
     } catch (e) {
       this.loading = false;
@@ -191,6 +194,22 @@ class PaeKnowledge extends HTMLElement {
           </form>
         </div>
         ${this.error ? `<div style="padding:var(--space-4);margin-bottom:var(--space-4);color:var(--color-negative)">Something went wrong: ${this.esc(this.error)}</div>` : ''}
+        ${
+          this.cleartextChunks > 0
+            ? `<div class="pae-card" style="margin-bottom:var(--space-6)">
+            <div style="font-weight:600;color:var(--text-primary);margin-bottom:var(--space-2)">Your notes are stored unencrypted in this configuration</div>
+            <div style="font-size:var(--font-size-sm);color:var(--text-secondary)">
+              ${this.cleartextChunks} note chunk(s) sit in the knowledge-base file as plain
+              text — anyone who can read that file on this machine can read them.
+              Notes ingested through the PKE library with a data key
+              (a 32-byte <code>dek=</code> passed to <code>KnowledgeStore</code>) are stored
+              encrypted with AES-256-GCM; this service never holds a key, so it cannot
+              encrypt notes that are already stored — re-ingest them with a key to
+              change that.
+            </div>
+          </div>`
+            : ''
+        }
         ${listing}
         <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:var(--space-6)">
           These are your own notes and documents, stored on this
