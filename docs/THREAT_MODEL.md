@@ -54,6 +54,25 @@
   terminate TLS at a reverse proxy; localhost deployment is loopback-only
   by convention.
 
+### DNS Rebinding / Cross-Site Loopback Requests
+- **Threat**: A web page the user visits reaches the loopback services
+  behind the user's back — by DNS rebinding (an attacker domain whose
+  DNS flips to 127.0.0.1, so requests arrive carrying the attacker's
+  Host header) or by posting cross-site to 127.0.0.1 with the page's
+  own Origin. CORS does not cover either path: it governs which
+  origins may read responses, never which Host a request may carry.
+- **Mitigation**: Both processes run a loopback guard ahead of every
+  route (engine: `loopback_guard` in `engine/src/main.rs`; analytics:
+  `LoopbackGuardMiddleware` in `analytics/pae/server.py`). Any request
+  whose Host is not loopback (127.0.0.0/8, localhost, or ::1, any
+  port) is refused 403, and a state-changing request (POST, PUT,
+  DELETE, PATCH) whose Origin is present and not loopback is refused
+  403. Requests without an Origin — curl, the MCP server, the
+  engine↔analytics proxy — pass unchanged.
+- **Residual**: The guard defends the browser path only. A non-browser
+  local process can still call the unauthenticated surfaces directly
+  (see Residual risks #2); that posture is unchanged.
+
 ### Brute Force on Passphrase
 - **Threat**: Attacker attempts to brute-force the user's passphrase from
   stored material.
@@ -103,7 +122,10 @@
    store, dashboard proxy) is unauthenticated, and analytics' data
    routes authenticate only when `PAE_API_KEY` is set. CORS narrows
    which web origins can call the API from a browser, but it is not
-   access control — non-browser callers ignore it. Localhost deployment is the current
+   access control — non-browser callers ignore it. The loopback guard
+   (see "DNS Rebinding / Cross-Site Loopback Requests" above) closes
+   the browser rebinding and cross-site-write paths; the non-browser
+   posture is unchanged. Localhost deployment is the current
    access-control story; a hosted deployment needs real auth first.
 3. **No TLS in the engine.** See Man-in-the-Middle above.
 4. **Single-DEK model.** The vault uses one per-vault DEK wrapped by the KEK

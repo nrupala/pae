@@ -228,6 +228,107 @@ async fn require_agent_token(
     }
 }
 
+/// Loopback guard (release-gate F-01): DNS-rebinding and cross-site
+/// request defense for a loopback-only service.
+///
+/// CORS narrows which origins a browser lets READ responses, but it
+/// never inspects the Host header: a DNS-rebinding page (an attacker
+/// domain whose DNS flips to 127.0.0.1) issues requests whose Host is
+/// the attacker's name, and nothing in the CORS layer notices. So,
+/// for EVERY request, the Host must be loopback (127.0.0.0/8,
+/// localhost, or ::1, any port). Additionally, for state-changing
+/// methods (POST/PUT/DELETE/PATCH), an Origin header that is present
+/// must itself be loopback: a cross-site page posting to 127.0.0.1
+/// sends its own (non-loopback) Origin, and it is rejected before any
+/// handler runs. Requests with no Origin — curl, the MCP server, the
+/// analytics proxy, tests — are unaffected: they are not web pages,
+/// and the threat this guards against is a page in the user's browser
+/// reaching loopback behind the user's back.
+async fn loopback_guard(req: Request, next: axum::middleware::Next) -> Response {
+    let host_ok = match req
+        .headers()
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+    {
+        Some(host) => is_loopback_authority(host),
+        None => req.uri().host().is_some_and(is_loopback_hostname),
+    };
+    if !host_ok {
+        return guard_rejection(
+            "NON_LOOPBACK_HOST",
+            "The PAE engine only serves loopback hosts (127.0.0.1, \
+             localhost, [::1]); this request arrived with a \
+             non-loopback Host header and was rejected.",
+        );
+    }
+    if matches!(req.method().as_str(), "POST" | "PUT" | "DELETE" | "PATCH") {
+        if let Some(origin) = req
+            .headers()
+            .get(header::ORIGIN)
+            .and_then(|v| v.to_str().ok())
+        {
+            if !origin_is_loopback(origin) {
+                return guard_rejection(
+                    "CROSS_SITE_ORIGIN",
+                    "State-changing requests to the PAE engine must come \
+                     from a loopback origin; this request's Origin is \
+                     cross-site and was rejected.",
+                );
+            }
+        }
+    }
+    next.run(req).await
+}
+
+fn guard_rejection(code: &str, message: &str) -> Response {
+    (
+        StatusCode::FORBIDDEN,
+        axum::Json(serde_json::json!({ "error": message, "code": code })),
+    )
+        .into_response()
+}
+
+/// Hostname portion of an authority (`host`, `host:port`, `[v6]`,
+/// `[v6]:port`) as it appears in a Host header or an Origin URL.
+fn authority_hostname(authority: &str) -> &str {
+    let authority = authority.trim();
+    if let Some(rest) = authority.strip_prefix('[') {
+        // IPv6 literal: `[::1]` or `[::1]:3001`.
+        return rest.split(']').next().unwrap_or("");
+    }
+    match authority.rsplit_once(':') {
+        Some((host, port))
+            if !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) =>
+        {
+            host
+        }
+        _ => authority,
+    }
+}
+
+fn is_loopback_hostname(hostname: &str) -> bool {
+    if hostname.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    hostname
+        .parse::<std::net::IpAddr>()
+        .is_ok_and(|ip| ip.is_loopback())
+}
+
+fn is_loopback_authority(authority: &str) -> bool {
+    is_loopback_hostname(authority_hostname(authority))
+}
+
+/// Whether a serialized Origin (`scheme://host[:port]`, or the opaque
+/// `null`) names a loopback host.
+fn origin_is_loopback(origin: &str) -> bool {
+    let Some((_, rest)) = origin.trim().split_once("://") else {
+        return false; // e.g. the literal "null" — never a loopback origin
+    };
+    let authority = rest.split('/').next().unwrap_or("");
+    is_loopback_authority(authority)
+}
+
 /// Runtime wiring that `main` takes from the environment and the
 /// HTTP-layer integration tests set directly.
 struct AppConfig {
@@ -386,7 +487,13 @@ fn build_app(store: Arc<storage::Store>, cfg: &AppConfig) -> Router {
         None => app,
     };
 
-    app.layer(cors_layer()).layer(TraceLayer::new_for_http())
+    // Layer order (outermost first): the loopback guard runs before
+    // CORS and tracing so a rebound or cross-site request is refused
+    // before any other layer — including the CORS layer's own
+    // preflight responses — acts on it.
+    app.layer(cors_layer())
+        .layer(TraceLayer::new_for_http())
+        .layer(axum::middleware::from_fn(loopback_guard))
 }
 
 // ---------------------------------------------------------------------------
@@ -1061,6 +1168,103 @@ mod tests {
             }))
             .await;
         assert_eq!(resp.status_code().as_u16(), 401);
+    }
+
+    /// F-01 loopback guard, parsing level: loopback authorities and
+    /// origins are recognized in every spelling the platform produces;
+    /// attacker-shaped ones are not.
+    #[test]
+    fn loopback_guard_parsing() {
+        for authority in [
+            "127.0.0.1",
+            "127.0.0.1:3001",
+            "127.0.1.9:3001",
+            "localhost",
+            "localhost:3001",
+            "LOCALHOST:3001",
+            "[::1]",
+            "[::1]:3001",
+        ] {
+            assert!(is_loopback_authority(authority), "{authority} is loopback");
+        }
+        for authority in [
+            "evil.example",
+            "evil.example:3001",
+            "localhost.evil.example",
+            "0.0.0.0:3001",
+            "192.168.1.10:3001",
+            "[2001:db8::1]:3001",
+            "",
+        ] {
+            assert!(
+                !is_loopback_authority(authority),
+                "{authority} is not loopback"
+            );
+        }
+        assert!(origin_is_loopback("http://localhost:3001"));
+        assert!(origin_is_loopback("http://127.0.0.1:3001"));
+        assert!(origin_is_loopback("https://[::1]:8443"));
+        assert!(!origin_is_loopback("https://evil.example"));
+        assert!(!origin_is_loopback("http://localhost.evil.example"));
+        assert!(!origin_is_loopback("null"));
+    }
+
+    /// F-01: a request whose Host is not loopback (the DNS-rebinding
+    /// shape) is refused 403 before routing, whatever the method.
+    #[tokio::test]
+    async fn loopback_guard_rejects_non_loopback_host() {
+        let server = test_server();
+        let resp = server
+            .get("/health")
+            .add_header("host", "evil.example")
+            .await;
+        assert_eq!(resp.status_code().as_u16(), 403);
+        let body: serde_json::Value = resp.json();
+        assert_eq!(body["code"], "NON_LOOPBACK_HOST");
+
+        // Loopback Host spellings pass through to the handler.
+        for host in ["localhost:3001", "127.0.0.1:3001", "[::1]:3001"] {
+            let resp = server.get("/health").add_header("host", host).await;
+            assert_eq!(resp.status_code().as_u16(), 200, "host {host} passes");
+        }
+    }
+
+    /// F-01: a state-changing request carrying a cross-site Origin is
+    /// refused 403; a loopback Origin, or no Origin at all (curl, the
+    /// MCP server, server-side callers), passes the guard and reaches
+    /// the handler (which then judges the body on its own terms).
+    #[tokio::test]
+    async fn loopback_guard_rejects_cross_site_origin_on_mutations() {
+        let server = test_server();
+        let cross = server
+            .post("/api/v1/vault/portfolios")
+            .add_header("origin", "https://evil.example")
+            .json(&serde_json::json!({ "name": "x" }))
+            .await;
+        assert_eq!(cross.status_code().as_u16(), 403);
+        let body: serde_json::Value = cross.json();
+        assert_eq!(body["code"], "CROSS_SITE_ORIGIN");
+
+        let same_site = server
+            .post("/api/v1/vault/portfolios")
+            .add_header("origin", "http://localhost:3001")
+            .json(&serde_json::json!({ "name": "guard-pass" }))
+            .await;
+        assert_ne!(
+            same_site.status_code().as_u16(),
+            403,
+            "loopback Origin must pass the guard"
+        );
+
+        let no_origin = server
+            .post("/api/v1/vault/portfolios")
+            .json(&serde_json::json!({ "name": "guard-pass-2" }))
+            .await;
+        assert_ne!(
+            no_origin.status_code().as_u16(),
+            403,
+            "no Origin (non-browser caller) must pass the guard"
+        );
     }
 
     /// kdf-params serves the production spec and a stable per-database salt.
