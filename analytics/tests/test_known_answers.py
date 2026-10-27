@@ -198,3 +198,141 @@ def test_carry_no_margin_hand_computed() -> None:
     for p in out.positions:
         assert p.margin_allocated == 0.0
         assert p.net_carry == p.annual_income
+
+
+# ---------------------------------------------------------------------
+# Stress — the analytics half of the dashboard stress path (Phase 3D).
+#
+# The dashboard's stress endpoint (POST /api/v1/analytics/stress) has
+# no math of its own: it builds engine holdings from the DB and
+# proxies to the engine's POST /api/v1/portfolio/stress, whose
+# arithmetic is pinned by engine/src/risk/known_answers.rs. These
+# tests pin the analytics half of that path — where the buyer-walk
+# defects lived:
+#   1. get_holdings_for_engine must forward each holding's
+#      asset_class (it dropped it, so every position — cash and
+#      bonds included — took the equity shock);
+#   2. the endpoint must forward the scenario unchanged and return
+#      the engine's TRUE-PERCENT impacts untouched.
+# The engine outputs replayed below are the hand-computed values
+# from the engine vectors for the same inputs (gfc_2008 table:
+# cash 0.0, equity -0.50, fixed_income +0.05).
+# ---------------------------------------------------------------------
+
+_STRESS_ROWS = [
+    ("CASH-CAD", "cash", 5_000.0),
+    ("DEMO-EQ", "equity", 10_000.0),
+    ("DEMO-BD", "fixed_income", 10_000.0),
+]
+
+
+def test_engine_holdings_carry_asset_class(tmp_path) -> None:
+    from pae.storage.db import Holding, PAEDatabase, Portfolio
+
+    database = PAEDatabase(str(tmp_path / "pae.db"))
+    database.initialize()
+    portfolio = database.insert_portfolio(Portfolio(name="Stress Mirror"))
+    for symbol, asset_class, value in _STRESS_ROWS:
+        database.insert_holding(
+            Holding(
+                portfolio_id=portfolio.id,
+                symbol=symbol,
+                asset_class=asset_class,
+                quantity=1.0,
+                market_value=value,
+                cost_basis=value,
+                returns_json="[0.001, 0.002]",
+            )
+        )
+
+    engine_holdings = database.get_holdings_for_engine(portfolio.id)
+    by_symbol = {h["symbol"]: h for h in engine_holdings}
+    assert by_symbol["CASH-CAD"]["asset_class"] == "cash"
+    assert by_symbol["DEMO-EQ"]["asset_class"] == "equity"
+    assert by_symbol["DEMO-BD"]["asset_class"] == "fixed_income"
+
+
+@pytest.fixture(scope="module")
+def _stress_client(tmp_path_factory):
+    import os
+
+    from fastapi.testclient import TestClient
+
+    db_path = tmp_path_factory.mktemp("pae-stress") / "pae.db"
+    os.environ["PAE_DB_PATH"] = str(db_path)
+    from pae.server import app
+
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+def test_analytics_stress_forwards_classes_and_engine_percents(
+    _stress_client, monkeypatch
+) -> None:
+    from pae import server
+
+    captured: dict = {}
+
+    async def fake_proxy(path, payload):
+        captured["path"] = path
+        captured["payload"] = payload
+        # The engine's pinned outputs for these inputs (see header).
+        return {
+            "scenario": payload["scenario"],
+            "portfolio_impact_pct": -18.0,
+            "position_impacts": [
+                {"symbol": "CASH-CAD", "impact_pct": 0.0, "impact_value": 0.0},
+                {"symbol": "DEMO-EQ", "impact_pct": -50.0, "impact_value": -5_000.0},
+                {"symbol": "DEMO-BD", "impact_pct": 5.0, "impact_value": 500.0},
+            ],
+        }
+
+    monkeypatch.setattr(server, "_proxy_engine_post", fake_proxy)
+
+    created = _stress_client.post(
+        "/api/v1/portfolios", json={"name": "Stress Mirror API"}
+    )
+    assert created.status_code == 201
+    portfolio_id = created.json()["portfolio"]["id"]
+    for symbol, asset_class, value in _STRESS_ROWS:
+        resp = _stress_client.post(
+            "/api/v1/holdings",
+            json={
+                "portfolio_id": portfolio_id,
+                "symbol": symbol,
+                "asset_class": asset_class,
+                "quantity": 1.0,
+                "market_value": value,
+                "cost_basis": value,
+                "returns": [0.001, 0.002],
+            },
+        )
+        assert resp.status_code in (200, 201)
+
+    resp = _stress_client.post(
+        f"/api/v1/analytics/stress?portfolio_id={portfolio_id}&scenario=2008"
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+
+    # The engine was called at its own path, scenario untouched, and
+    # every holding carried its stored asset class.
+    assert captured["path"] == "/api/v1/portfolio/stress"
+    assert captured["payload"]["scenario"] == "2008"
+    sent = {h["symbol"]: h for h in captured["payload"]["holdings"]}
+    assert sent["CASH-CAD"]["asset_class"] == "cash"
+    assert sent["DEMO-EQ"]["asset_class"] == "equity"
+    assert sent["DEMO-BD"]["asset_class"] == "fixed_income"
+
+    # The response is the engine's, with true-percent semantics:
+    # pct == impact_value / base * 100 for every position.
+    bases = {symbol: value for symbol, _, value in _STRESS_ROWS}
+    impacts = {p["symbol"]: p for p in body["position_impacts"]}
+    assert body["portfolio_impact_pct"] == -18.0
+    assert impacts["CASH-CAD"]["impact_pct"] == 0.0
+    assert impacts["DEMO-EQ"]["impact_pct"] == -50.0
+    assert impacts["DEMO-BD"]["impact_pct"] == 5.0
+    for symbol, impact in impacts.items():
+        assert impact["impact_pct"] == pytest.approx(
+            impact["impact_value"] / bases[symbol] * 100
+        )

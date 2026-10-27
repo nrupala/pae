@@ -143,7 +143,16 @@ class PAETools:
         scenario: str,
         custom_shocks: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        """Run a stress-test scenario (e.g. '2008', '2020', 'rate_shock') via the engine."""
+        """Run a stress-test scenario via the engine.
+
+        Scenario names are the engine's canonical table keys
+        ('gfc_2008', 'covid_2020', 'rate_shock_2022', 'dotcom_2000',
+        'stagflation_1970s', 'black_monday_1987', 'oil_shock_2020');
+        the legacy short names '2008', '2020' and 'rate_shock' are
+        accepted as aliases. Shocks are applied per asset class from
+        each holding's stored class. impact_pct values in the result
+        are true percents (impact / base * 100).
+        """
         holdings = self._engine_holdings(portfolio_id)
         return await self._post_engine(
             "/api/v1/portfolio/stress",
