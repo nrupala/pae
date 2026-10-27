@@ -67,15 +67,42 @@ fn cors_layer() -> CorsLayer {
 // files); `main` generates on real startup.
 // ---------------------------------------------------------------------------
 
+/// Expand a leading `~` (bare, or as `~/…`) against $HOME, mirroring
+/// Python's `Path.expanduser()` for those cases. analytics/pae/auth.py
+/// expands both PAE_AGENT_TOKEN_PATH and PAE_HOME this way; without
+/// the same expansion here, a tilde in either variable made the two
+/// processes resolve DIFFERENT token files (the engine used a literal
+/// `~` directory relative to its working directory) and agent auth
+/// desynchronized between them (Phase 3C review fix). `~user` is
+/// intentionally NOT expanded: Python resolves it through the account
+/// database, and a per-install path has no business pointing into
+/// another account's home.
+fn expand_tilde(path: &str) -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    expand_tilde_with_home(path, &home)
+}
+
+fn expand_tilde_with_home(path: &str, home: &str) -> PathBuf {
+    if path == "~" {
+        return PathBuf::from(home);
+    }
+    if let Some(rest) = path.strip_prefix("~/") {
+        return PathBuf::from(home).join(rest);
+    }
+    PathBuf::from(path)
+}
+
 fn agent_token_path() -> PathBuf {
     if let Ok(p) = std::env::var("PAE_AGENT_TOKEN_PATH") {
-        if !p.trim().is_empty() {
-            return PathBuf::from(p);
+        let p = p.trim();
+        if !p.is_empty() {
+            return expand_tilde(p);
         }
     }
     if let Ok(h) = std::env::var("PAE_HOME") {
-        if !h.trim().is_empty() {
-            return PathBuf::from(h).join("data").join("agent-token");
+        let h = h.trim();
+        if !h.is_empty() {
+            return expand_tilde(h).join("data").join("agent-token");
         }
     }
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
@@ -784,6 +811,38 @@ mod tests {
 
     fn bearer() -> String {
         format!("Bearer {TEST_AGENT_TOKEN}")
+    }
+
+    /// Tilde expansion in the agent-token path resolution must match
+    /// Python's `Path.expanduser()` (analytics/pae/auth.py), or a
+    /// `~` in PAE_AGENT_TOKEN_PATH / PAE_HOME desynchronizes the two
+    /// processes' token files (Phase 3C review fix).
+    #[test]
+    fn expand_tilde_matches_python_expanduser() {
+        let home = "/home/tester";
+        assert_eq!(
+            expand_tilde_with_home("~/x", home),
+            PathBuf::from("/home/tester/x")
+        );
+        assert_eq!(
+            expand_tilde_with_home("~/data/agent-token", home),
+            PathBuf::from("/home/tester/data/agent-token")
+        );
+        assert_eq!(expand_tilde_with_home("~", home), PathBuf::from(home));
+        // Non-tilde paths pass through untouched.
+        assert_eq!(
+            expand_tilde_with_home("/abs/path", home),
+            PathBuf::from("/abs/path")
+        );
+        assert_eq!(
+            expand_tilde_with_home("relative/path", home),
+            PathBuf::from("relative/path")
+        );
+        // `~user` is deliberately not expanded (see expand_tilde docs).
+        assert_eq!(
+            expand_tilde_with_home("~other/x", home),
+            PathBuf::from("~other/x")
+        );
     }
 
     /// The passphrase-bearing derive-key endpoint must be gone entirely.
