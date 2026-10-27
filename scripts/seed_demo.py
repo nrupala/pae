@@ -39,6 +39,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import random
 import sys
 import time
 import urllib.error
@@ -52,16 +53,19 @@ ANALYTICS_URL = os.environ.get("PAE_ANALYTICS_URL", "").rstrip("/")
 DEMO_NONCE_B64 = base64.b64encode(b"\x00" * 12).decode()
 
 # Fictional sample positions. Tickers are invented on purpose.
+# yield_pct is set on every position so the Carry view shows real
+# income numbers on the demo (before Phase 3D the seed left yields
+# unset and Carry showed $0 everywhere).
 SAMPLE_POSITIONS_V1 = [
     {"symbol": "CASH-CAD", "name": "Sample cash (CAD)", "asset_class": "cash",
      "quantity": 5000.0, "market_value": 5000.0, "cost_basis": 5000.0,
-     "currency": "CAD"},
+     "currency": "CAD", "yield_pct": 2.1},
     {"symbol": "DEMO-EQ", "name": "Sample equity fund", "asset_class": "equity",
      "quantity": 120.0, "market_value": 9840.0, "cost_basis": 9000.0,
-     "currency": "CAD"},
+     "currency": "CAD", "yield_pct": 1.6},
     {"symbol": "DEMO-BD", "name": "Sample bond fund", "asset_class": "fixed_income",
      "quantity": 200.0, "market_value": 10150.0, "cost_basis": 10000.0,
-     "currency": "CAD"},
+     "currency": "CAD", "yield_pct": 3.4},
 ]
 # Version 2: the sample cash position moved — gives history/diff content.
 SAMPLE_POSITIONS_V2 = [
@@ -71,13 +75,32 @@ SAMPLE_POSITIONS_V2 = [
     for p in SAMPLE_POSITIONS_V1
 ]
 
-# Small monthly return series so the analytics views have something to
-# compute over. Fictional, illustrative only.
-SAMPLE_RETURNS = {
-    "CASH-CAD": [0.002, 0.002, 0.002, 0.002, 0.002, 0.002],
-    "DEMO-EQ": [0.021, -0.014, 0.032, 0.008, -0.006, 0.017],
-    "DEMO-BD": [0.004, 0.001, -0.002, 0.003, 0.002, 0.001],
+# Monthly return series so the analytics views have something real
+# to compute over: 36 periods per holding (the factor decomposition
+# needs >= 12 overlapping periods; the 6-period series seeded before
+# Phase 3D made Factors refuse and the risk/optimizer outputs
+# degenerate). Deterministic — a fixed-seed generator with plausible
+# distinct drift/volatility per holding — so every seeded install
+# shows the same fictional dataset and the seed stays reproducible.
+# Fictional, illustrative only.
+_SAMPLE_SERIES_PARAMS = {
+    # symbol: (monthly drift, monthly volatility)
+    "CASH-CAD": (0.0015, 0.0015),
+    "DEMO-EQ": (0.0075, 0.042),
+    "DEMO-BD": (0.0028, 0.009),
 }
+_SAMPLE_PERIODS = 36
+
+
+def _synthetic_returns() -> dict[str, list[float]]:
+    rng = random.Random(20261026)
+    return {
+        symbol: [round(rng.gauss(mu, sigma), 6) for _ in range(_SAMPLE_PERIODS)]
+        for symbol, (mu, sigma) in _SAMPLE_SERIES_PARAMS.items()
+    }
+
+
+SAMPLE_RETURNS = _synthetic_returns()
 
 
 def _request(method: str, url: str, payload: dict | None = None) -> dict:

@@ -300,6 +300,7 @@ mod tests {
                 yield_pct: None,
                 cost_basis: None,
                 market_value: 1000.0,
+                asset_class: None,
             })
             .collect()
     }
@@ -363,6 +364,7 @@ mod tests {
                 yield_pct: None,
                 cost_basis: None,
                 market_value: 1000.0,
+                asset_class: None,
             },
             Holding {
                 symbol: "N".to_string(),
@@ -373,6 +375,7 @@ mod tests {
                 yield_pct: None,
                 cost_basis: None,
                 market_value: 1000.0,
+                asset_class: None,
             },
         ];
         let result = compute_matrix(&CorrelationInput {
@@ -394,6 +397,7 @@ mod tests {
                         yield_pct: None,
                         cost_basis: None,
                         market_value: 1000.0,
+                        asset_class: None,
                     },
                     Holding {
                         symbol: "N".to_string(),
@@ -404,6 +408,7 @@ mod tests {
                         yield_pct: None,
                         cost_basis: None,
                         market_value: 1000.0,
+                        asset_class: None,
                     },
                 ],
                 window_days: Some(20),

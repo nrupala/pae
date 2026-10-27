@@ -8,7 +8,12 @@
  * - view="stress": scenario selector + position-impact bars from POST /api/v1/analytics/stress
  */
 
-const API_BASE = 'http://localhost:3002';
+// Same-origin (Phase 3D, W5): the engine serves this dashboard and
+// proxies the analytics data plane, so relative paths work at any
+// configured port pair. Do not hardcode a host:port here again.
+import { selectedPortfolioId } from '../portfolio-selection.js';
+
+const API_BASE = '';
 
 interface MonteCarloResponse {
   percentiles: { p5: number[]; p25: number[]; p50: number[]; p75: number[]; p95: number[] };
@@ -66,11 +71,9 @@ class PaeScenarios extends HTMLElement {
   }
 
   private async firstPortfolioId(): Promise<string> {
-    const resp = await fetch(`${API_BASE}/api/v1/portfolios`);
-    if (!resp.ok) throw new Error(`portfolios: HTTP ${resp.status}`);
-    const portfolios = (await resp.json()).portfolios || [];
-    if (!portfolios.length) throw new Error('empty');
-    return portfolios[0].id;
+    // The shell's shared selection (portfolio-selection.ts) — before
+    // Phase 3D this returned portfolios[0], the empty Default.
+    return selectedPortfolioId();
   }
 
   private async loadData(): Promise<void> {

@@ -26,7 +26,6 @@ base64 = "0.22"
 
 # Data
 arrow = { version = "53", features = ["json"] }
-parquet = "53"
 rusqlite = { version = "0.32", features = ["bundled"] }
 
 # Numerics

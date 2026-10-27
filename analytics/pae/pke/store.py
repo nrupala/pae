@@ -63,8 +63,10 @@ Schema:
     pke_meta        key/value registry (embedding model name + dimensions, so
                     a stale index built with a different model is detectable)
 
-Zero-knowledge posture: everything stays in this file on the user's machine.
-The file itself inherits the host's disk protections.
+Local-only posture: everything stays in this file on the user's machine.
+The file itself inherits the host's disk protections — which is exactly
+why the cleartext configuration is labelled wherever it surfaces: an
+unencrypted knowledge base is readable by anyone who can read the file.
 """
 
 from __future__ import annotations
@@ -114,7 +116,21 @@ class PkeEncryptionError(Exception):
 
 
 def default_store_path() -> Path:
-    """Default on-disk location for the PKE knowledge base (XDG data dir)."""
+    """Default on-disk location for the PKE knowledge base.
+
+    Resolution order (the caller — analytics/pae/server.py — applies
+    the PAE_PKE_PATH override before this):
+
+    1. ``$PAE_HOME/data/pke.db`` when PAE_HOME is set — the same data
+       directory as every other PAE store, so the documented backup
+       (copy ``PAE_HOME/data``) actually includes the knowledge base.
+       Before Phase 3D this function ignored PAE_HOME entirely and
+       the knowledge base lived outside the backed-up tree.
+    2. The historic XDG default, ``~/.local/share/pae/pke.db``.
+    """
+    pae_home = os.environ.get("PAE_HOME", "").strip()
+    if pae_home:
+        return Path(pae_home).expanduser() / "data" / "pke.db"
     return Path.home() / ".local" / "share" / "pae" / "pke.db"
 
 
@@ -163,6 +179,12 @@ class KnowledgeStore:
             )
         self.db_path = str(db_path)
         self._dek = bytes(dek) if dek is not None else None
+        if self.db_path != ":memory:":
+            # Create the parent directory on open: under a fresh
+            # PAE_HOME the data directory may not exist yet, and a
+            # missing directory must not make the store unopenable
+            # (the knowledge endpoints 500'd on exactly this).
+            Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(self.db_path)
         self._conn.row_factory = sqlite3.Row
         self._vec_available = self._load_vec_extension()
@@ -408,6 +430,19 @@ class KnowledgeStore:
     def count_chunks(self) -> int:
         """Number of chunks stored."""
         row = self._conn.execute("SELECT COUNT(*) AS n FROM pke_chunks").fetchone()
+        return int(row["n"])
+
+    def count_cleartext_chunks(self) -> int:
+        """Number of chunks stored UNENCRYPTED (nonce IS NULL).
+
+        The dashboard's Knowledge view disclosure reads this: a store
+        can hold cleartext rows alongside encrypted ones (mixed
+        ingest), so the honest signal is a count of unencrypted
+        chunks, not a flag about the store as a whole.
+        """
+        row = self._conn.execute(
+            "SELECT COUNT(*) AS n FROM pke_chunks WHERE nonce IS NULL"
+        ).fetchone()
         return int(row["n"])
 
     def count_vectors(self) -> int:

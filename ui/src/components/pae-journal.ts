@@ -15,26 +15,51 @@
  * Since Phase 3B the engine persists those records to its SQLite
  * database, so entries written here survive engine restarts.
  *
- * Content encoding (honest note): real PAE clients encrypt entry
- * content client-side before appending; the engine only ever stores
- * opaque bytes. No dashboard component wires the browser vault yet,
- * so — exactly like scripts/seed_demo.py — this view writes
- * base64-encoded JSON with a zero nonce and decodes entries the same
- * way for display. An entry whose content does not decode as JSON
- * was encrypted on the device that wrote it; the view says so and
- * shows its (never-encrypted) summary, date, and tags instead of
+ * Content encryption (Phase 3C): entries written from this view are
+ * encrypted IN THE BROWSER before they are saved. The user unlocks
+ * the vault with their passphrase (vault-client's unlockVault —
+ * Argon2id derivation and DEK unwrap happen client-side; the
+ * passphrase never leaves this page and the key lives only in page
+ * memory), and each new entry is sealed with encryptWithDEK
+ * (AES-256-GCM, WebCrypto) so the engine stores only opaque
+ * ciphertext + a real random nonce. Reading an encrypted entry
+ * likewise requires the unlocked vault.
+ *
+ * Record metadata, stated plainly: the versioning API stores
+ * change_summary as PLAINTEXT next to the content, so entries
+ * written from this view send NO change_summary — the title lives
+ * only inside the encrypted content. (The first Phase 3C build
+ * still sent the title as the summary; entries it wrote carry that
+ * plaintext title until rewritten.) Tags and dates remain
+ * plaintext metadata by design, so the list stays readable and
+ * filterable; the write form and the detail view both say so. In
+ * the list, an entry this view cannot decode shows its real title
+ * once the vault is unlocked and "Encrypted entry" while locked.
+ *
+ * Compatibility, stated plainly: entries written by the Phase 3B
+ * version of this view (and by scripts/seed_demo.py) were stored as
+ * base64-encoded JSON with a zero nonce — NOT encrypted. Those
+ * still decode and display, and the detail view labels them as
+ * written before encryption was wired. An entry this view can
+ * neither decrypt nor decode was encrypted under a different key;
+ * the view says so and shows its date and tags instead of
  * pretending to read it.
  *
  * The journal records the user's own reasoning. It never scores,
  * judges, or advises.
  */
 
-const ENGINE_BASE = 'http://localhost:3001';
+import {
+  decryptWithDEK,
+  encryptWithDEK,
+  unlockVault,
+  type VaultSession,
+} from '../crypto/vault-client.js';
 
-// Base64 of 12 zero bytes — the AES-256-GCM nonce size. Placeholder
-// only: content written by this view is base64(JSON), not ciphertext
-// (see the header comment).
-const PLACEHOLDER_NONCE_B64 = 'AAAAAAAAAAAAAAAA';
+// Same-origin (Phase 3D, W5): the engine serves this dashboard and
+// proxies the vault API, so relative paths work at any
+// configured port pair. Do not hardcode a host:port here again.
+const ENGINE_BASE = '';
 
 interface VersionRecord {
   version_hash: string;
@@ -73,6 +98,12 @@ const FIELD_LABELS: Array<{ key: string; label: string }> = [
   { key: 'trigger', label: 'What prompted it' },
 ];
 
+/** A decoded entry plus how it was stored (for honest labelling). */
+interface DecodedEntry {
+  data: Record<string, unknown>;
+  encrypted: boolean;
+}
+
 class PaeJournal extends HTMLElement {
   private shadow: ShadowRoot;
   private entries: VersionRecord[] = [];
@@ -81,6 +112,12 @@ class PaeJournal extends HTMLElement {
   private loading: boolean = true;
   private saving: boolean = false;
   private error: string = '';
+  /** Unlocked vault session (DEK in page memory only; never stored). */
+  private session: VaultSession | null = null;
+  private unlocking: boolean = false;
+  private vaultError: string = '';
+  /** version_hash -> decoded content, filled by decodeVisible(). */
+  private decoded = new Map<string, DecodedEntry>();
 
   constructor() {
     super();
@@ -126,6 +163,7 @@ class PaeJournal extends HTMLElement {
         b.created_at.localeCompare(a.created_at),
       );
       this.loading = false;
+      await this.decodeVisible();
     } catch (e) {
       this.loading = false;
       this.error = e instanceof Error ? e.message : 'Unknown error';
@@ -138,14 +176,52 @@ class PaeJournal extends HTMLElement {
       this.selected = await this.postJson<HistoryResponse>('/api/v1/version/history', {
         entity_id: entityId,
       });
+      await this.decodeVisible();
     } catch (e) {
       this.error = e instanceof Error ? e.message : 'Unknown error';
     }
     this.render();
   }
 
-  /** Decode an entry's content if it is base64 JSON (see header). */
-  private decode(rec: VersionRecord): Record<string, unknown> | null {
+  /**
+   * Fill the decoded-content cache for everything currently loaded.
+   * Legacy base64-JSON entries (Phase 3B stand-in, see header) decode
+   * synchronously; genuinely encrypted entries need the unlocked
+   * vault's DEK and WebCrypto, hence the async pass.
+   */
+  private async decodeVisible(): Promise<void> {
+    const records = [...this.entries, ...(this.selected?.versions ?? [])];
+    for (const rec of records) {
+      if (this.decoded.has(rec.version_hash)) continue;
+      const legacy = this.decodeLegacy(rec);
+      if (legacy) {
+        this.decoded.set(rec.version_hash, { data: legacy, encrypted: false });
+        continue;
+      }
+      if (this.session) {
+        try {
+          const text = await decryptWithDEK(
+            this.session.dek,
+            rec.content_encrypted_b64,
+            rec.nonce_b64,
+          );
+          const parsed: unknown = JSON.parse(text);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            this.decoded.set(rec.version_hash, {
+              data: parsed as Record<string, unknown>,
+              encrypted: true,
+            });
+          }
+        } catch {
+          // Wrong key or tampered content — stays undecoded; the
+          // detail view explains instead of pretending to read it.
+        }
+      }
+    }
+  }
+
+  /** Decode a pre-3C entry: base64-encoded JSON, not ciphertext. */
+  private decodeLegacy(rec: VersionRecord): Record<string, unknown> | null {
     try {
       const bin = atob(rec.content_encrypted_b64);
       const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
@@ -154,26 +230,61 @@ class PaeJournal extends HTMLElement {
         return parsed as Record<string, unknown>;
       }
     } catch {
-      // Not decodable JSON — an entry encrypted on its writing device.
+      // Not decodable JSON — genuinely encrypted content.
     }
     return null;
   }
 
+  private decode(rec: VersionRecord): DecodedEntry | null {
+    return this.decoded.get(rec.version_hash) ?? null;
+  }
+
   private titleOf(rec: VersionRecord): string {
     const decoded = this.decode(rec);
-    const title = decoded?.['title'];
+    const title = decoded?.data['title'];
     if (typeof title === 'string' && title.trim()) return title;
+    // Only pre-fix records can carry user text in the summary: the
+    // Phase 3B view stored entries unencrypted with the title as
+    // the summary, and the first Phase 3C build still sent it.
+    // Records written now send no summary at all, so this fallback
+    // never fires for them — an undecodable new record falls
+    // through to the neutral label below instead.
     if (rec.change_summary?.trim()) return rec.change_summary;
+    if (!decoded && !this.decodeLegacy(rec)) return 'Encrypted entry';
     return rec.entity_id;
   }
 
-  private encodeContent(obj: Record<string, unknown>): string {
-    const bytes = new TextEncoder().encode(JSON.stringify(obj));
-    let bin = '';
-    bytes.forEach((b) => {
-      bin += String.fromCharCode(b);
-    });
-    return btoa(bin);
+  /** Unlock the vault with the passphrase typed in the vault bar. */
+  private async unlock(): Promise<void> {
+    const input = this.shadow.querySelector('#j-pass') as HTMLInputElement | null;
+    const passphrase = input?.value ?? '';
+    if (!passphrase) {
+      this.vaultError = 'Type your vault passphrase first.';
+      this.render();
+      return;
+    }
+    this.unlocking = true;
+    this.vaultError = '';
+    this.render();
+    try {
+      this.session = await unlockVault(ENGINE_BASE, passphrase);
+      this.unlocking = false;
+      await this.decodeVisible();
+    } catch {
+      this.unlocking = false;
+      this.session = null;
+      this.vaultError =
+        'Could not unlock — wrong passphrase, or the engine is not reachable.';
+    }
+    this.render();
+  }
+
+  /** Lock the vault: the key leaves page memory with the session. */
+  private lock(): void {
+    this.session = null;
+    this.decoded.clear();
+    void this.decodeVisible().then(() => this.render());
+    this.render();
   }
 
   private async saveEntry(): Promise<void> {
@@ -183,6 +294,14 @@ class PaeJournal extends HTMLElement {
     const action = get('#j-action');
     if (!title && !action) {
       this.error = 'Give the entry a title or say what you decided.';
+      this.render();
+      return;
+    }
+    if (!this.session) {
+      // Entries are genuinely encrypted (Phase 3C) — that needs the
+      // unlocked vault. No silent plaintext fallback.
+      this.error =
+        'Unlock your vault above first — entries are encrypted in your browser before they are saved.';
       this.render();
       return;
     }
@@ -211,12 +330,22 @@ class PaeJournal extends HTMLElement {
     this.error = '';
     this.render();
     try {
+      const sealed = await encryptWithDEK(
+        this.session.dek,
+        JSON.stringify(content),
+      );
       await this.postJson('/api/v1/version', {
         entity_id: entityId,
         entity_type: 'decision_entry',
-        content_encrypted_b64: this.encodeContent(content),
-        nonce_b64: PLACEHOLDER_NONCE_B64,
-        change_summary: title || action,
+        content_encrypted_b64: sealed.ciphertext_b64,
+        nonce_b64: sealed.nonce_b64,
+        // No change_summary: the versioning API stores it as
+        // PLAINTEXT record metadata, and the title already lives
+        // inside the encrypted content. Sending it here (as the
+        // first Phase 3C build did) quietly kept a plaintext copy
+        // of the title next to the ciphertext. Tags stay plaintext
+        // by design — the write form says so where they are typed.
+        change_summary: null,
         tags,
       });
       this.showForm = false;
@@ -268,8 +397,9 @@ class PaeJournal extends HTMLElement {
     const decoded = this.decode(latest);
     let body: string;
     if (decoded) {
+      const data = decoded.data;
       const fields = FIELD_LABELS.map(({ key, label }) => {
-        const v = decoded[key];
+        const v = data[key];
         if (v === undefined || v === null || v === '') return '';
         const text = Array.isArray(v) ? v.map((x) => String(x)).join(', ') : String(v);
         if (!text.trim()) return '';
@@ -278,7 +408,7 @@ class PaeJournal extends HTMLElement {
           <div style="color:var(--text-primary);white-space:pre-wrap">${this.esc(text)}</div>
         </div>`;
       }).join('');
-      const confidence = decoded['confidence'];
+      const confidence = data['confidence'];
       const confidenceLine =
         typeof confidence === 'number'
           ? `<div style="margin-bottom:var(--space-4)">
@@ -286,12 +416,21 @@ class PaeJournal extends HTMLElement {
                <div style="color:var(--text-primary)">${confidence} / 10</div>
              </div>`
           : '';
-      body = fields + confidenceLine;
+      const provenanceLine = decoded.encrypted
+        ? ''
+        : `<div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:var(--space-3)">
+             Written before journal encryption was wired (Phase 3C) — this
+             entry was stored as readable text, not encrypted.</div>`;
+      body = fields + confidenceLine + provenanceLine;
+    } else if (this.session) {
+      body = `<div style="color:var(--text-secondary)">
+        This entry is encrypted with a different key than the vault you
+        unlocked, so its text cannot be shown here. Its date and tags
+        are never encrypted${latest.change_summary ? ', and neither is the summary above' : ''}.</div>`;
     } else {
       body = `<div style="color:var(--text-secondary)">
-        This entry was encrypted on the device that wrote it, so its
-        text cannot be shown here. Its summary, date, and tags above
-        are never encrypted.</div>`;
+        This entry is encrypted. Unlock your vault above to read it
+        here. Its date and tags are never encrypted${latest.change_summary ? ', and neither is the summary above' : ''}.</div>`;
     }
     const prior =
       sel.total_versions > 1
@@ -338,6 +477,9 @@ class PaeJournal extends HTMLElement {
           <textarea id="j-wrong" rows="2" style="${inputStyle}"></textarea></label>
         <label style="${labelStyle}">Tags (comma separated)
           <input id="j-tags" type="text" style="${inputStyle}" placeholder="e.g. rebalance, taxes" /></label>
+        <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-bottom:var(--space-4)">
+          Tags and dates are stored unencrypted so your list stays readable; the entry itself is encrypted.
+        </div>
         <div style="display:flex;gap:var(--space-3)">
           <button id="journal-save" ${this.saving ? 'disabled' : ''}
             style="padding:8px 16px;border-radius:6px;background:var(--accent-primary);color:var(--text-inverse);border:none;cursor:pointer">
@@ -346,6 +488,43 @@ class PaeJournal extends HTMLElement {
             style="padding:8px 16px;border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);cursor:pointer">
             Cancel</button>
         </div>
+      </div>`;
+  }
+
+  private renderVaultBar(): string {
+    const inputStyle =
+      'box-sizing:border-box;padding:8px 10px;border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color)';
+    if (this.session) {
+      return `
+        <div class="pae-card" style="margin-bottom:var(--space-6);display:flex;align-items:center;gap:var(--space-4)">
+          <div style="flex:1;color:var(--text-secondary);font-size:var(--font-size-sm)">
+            Vault unlocked — entries you write are encrypted in your
+            browser before they are saved, and encrypted entries can be
+            read here. The key stays in this page's memory only.
+          </div>
+          <button id="journal-lock" style="padding:8px 16px;border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);cursor:pointer">Lock vault</button>
+        </div>`;
+    }
+    return `
+      <div class="pae-card" style="margin-bottom:var(--space-6)">
+        <div style="color:var(--text-secondary);font-size:var(--font-size-sm);margin-bottom:var(--space-3)">
+          Your journal entries are encrypted in your browser. Unlock
+          your vault to write new entries and read encrypted ones —
+          your passphrase never leaves this page, and the key is kept
+          only in this page's memory.
+        </div>
+        <div style="display:flex;gap:var(--space-3);align-items:center">
+          <input id="j-pass" type="password" autocomplete="current-password"
+            style="${inputStyle};flex:1" placeholder="Vault passphrase" />
+          <button id="journal-unlock" ${this.unlocking ? 'disabled' : ''}
+            style="padding:8px 16px;border-radius:6px;background:var(--accent-primary);color:var(--text-inverse);border:none;cursor:pointer">
+            ${this.unlocking ? 'Unlocking…' : 'Unlock vault'}</button>
+        </div>
+        ${
+          this.vaultError
+            ? `<div style="margin-top:var(--space-3);color:var(--color-negative)">${this.esc(this.vaultError)}</div>`
+            : ''
+        }
       </div>`;
   }
 
@@ -370,13 +549,15 @@ class PaeJournal extends HTMLElement {
           }
         </div>
         ${errorLine}
+        ${this.renderVaultBar()}
         ${form}
         ${detail}
         ${list}
         <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:var(--space-6)">
           Your journal records your reasoning in your own words — it is
-          kept in your local PAE database and survives restarts. PAE
-          stores what you wrote; it does not score it or act on it.
+          kept, encrypted, in your local PAE database and survives
+          restarts. PAE stores what you wrote; it does not score it or
+          act on it.
         </div>`;
     }
     this.shadow.innerHTML = `
@@ -388,6 +569,15 @@ class PaeJournal extends HTMLElement {
     this.shadow.querySelector('#journal-new')?.addEventListener('click', () => {
       this.showForm = true;
       this.render();
+    });
+    this.shadow.querySelector('#journal-unlock')?.addEventListener('click', () => {
+      void this.unlock();
+    });
+    this.shadow.querySelector('#journal-lock')?.addEventListener('click', () => {
+      this.lock();
+    });
+    this.shadow.querySelector('#j-pass')?.addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Enter') void this.unlock();
     });
     this.shadow.querySelector('#journal-cancel')?.addEventListener('click', () => {
       this.showForm = false;

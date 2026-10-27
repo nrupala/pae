@@ -5,8 +5,8 @@
 //!
 //! Holdings, portfolios, and accounts are persisted to a local SQLite
 //! database so portfolio state survives between sessions. Consistent with
-//! PAE's zero-knowledge model, every sensitive field (returns series,
-//! cost basis, market value, names) is stored as a **client-side
+//! this store's ciphertext-only model, every sensitive field (returns
+//! series, cost basis, market value, names) is stored as a **client-side
 //! AES-256-GCM ciphertext blob** plus its nonce. The engine never sees
 //! plaintext and never holds the user's key.
 //!

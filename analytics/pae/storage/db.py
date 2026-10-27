@@ -475,7 +475,11 @@ class PAEDatabase:
         """Get holdings formatted for the Rust risk engine API.
 
         Returns list of dicts matching the Rust Holding struct:
-        {symbol, weight, returns, yield_pct, cost_basis, market_value}
+        {symbol, weight, returns, yield_pct, cost_basis, market_value,
+        asset_class}. The asset_class matters: the engine's stress
+        test applies per-class shocks, and before Phase 3D this
+        builder dropped the class, so every position was stressed
+        as equity.
         """
         holdings = self.get_holdings(portfolio_id=portfolio_id)
         if not holdings:
@@ -499,6 +503,7 @@ class PAEDatabase:
                 "yield_pct": h.yield_pct,
                 "cost_basis": h.cost_basis,
                 "market_value": h.market_value,
+                "asset_class": h.asset_class,
             })
 
         return result

@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use axum::extract::State;
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
@@ -15,10 +15,17 @@ use crate::storage::Store;
 /// Argon2id parameters the server expects clients to use for key
 /// derivation. These MUST match the production spec served by
 /// `GET /api/v1/crypto/kdf-params` (kept in sync by the kdf-params test).
+///
+/// The profile is RFC 9106's SECOND RECOMMENDED Argon2id parameter set
+/// (m = 64 MiB, t = 3, p = 4). `KDF_ITERATIONS` was 600_000 until
+/// Phase 3C — a PBKDF2-scale pass count transplanted onto Argon2id,
+/// where the time cost is meant to be single-digit: at 64 MiB per
+/// pass, derivation never completed in practice (>8.6 minutes in the
+/// WASM client, killed), which left the browser vault flow unusable.
 pub const KDF_ALGORITHM: &str = "argon2id";
 pub const KDF_VERSION: u32 = 19;
 pub const KDF_MEMORY_KIB: u32 = 65536;
-pub const KDF_ITERATIONS: u32 = 600_000;
+pub const KDF_ITERATIONS: u32 = 3;
 pub const KDF_PARALLELISM: u32 = 4;
 pub const KDF_OUTPUT_BYTES: u32 = 32;
 
@@ -158,6 +165,8 @@ pub async fn kdf_params(
 /// POST /api/v1/crypto/encrypt
 ///
 /// Encrypts plaintext with AES-256-GCM using a caller-supplied key.
+/// Requires the per-install agent token (`Authorization: Bearer`,
+/// enforced by middleware in main.rs — Phase 3C): 401 without it.
 /// Returns 400 if key_b64 is not valid base64 or wrong length, or if the
 /// request body contains unknown fields (e.g. "passphrase").
 /// Returns 422 if encryption fails.
@@ -175,6 +184,8 @@ pub async fn encrypt(
 /// POST /api/v1/crypto/decrypt
 ///
 /// Decrypts ciphertext with AES-256-GCM using a caller-supplied key.
+/// Requires the per-install agent token (`Authorization: Bearer`,
+/// enforced by middleware in main.rs — Phase 3C): 401 without it.
 /// Returns 400 if any base64 field is invalid or nonce is wrong length,
 /// or if the request body contains unknown fields (e.g. "passphrase").
 /// Returns 422 if decryption fails (wrong key, tampered data).
@@ -229,6 +240,17 @@ fn validate_envelope_shape(envelope: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// State for `POST /api/v1/crypto/dek-envelope`: the store plus the
+/// per-install agent token that authorizes REPLACING an existing
+/// envelope (rotation — see the handler). Kept separate from the
+/// read routes' plain store state so the token reaches only the one
+/// handler that needs it.
+#[derive(Clone)]
+pub struct DekEnvelopeWriteState {
+    pub store: Arc<Store>,
+    pub agent_token: Option<String>,
+}
+
 /// POST /api/v1/crypto/dek-envelope
 ///
 /// Stores the client's KEK-wrapped DEK envelope verbatim. The envelope is
@@ -236,8 +258,19 @@ fn validate_envelope_shape(envelope: &str) -> Result<(), String> {
 /// the unwrapped DEK. Returns 400 if the envelope JSON is malformed;
 /// unknown request fields (e.g. "passphrase", "kek") are rejected with
 /// 422 by `deny_unknown_fields`.
+///
+/// Replacement guard (Phase 3C review fix): the stored envelope is the
+/// ONLY wrapped copy of the DEK, so an unauthenticated overwrite would
+/// permanently brick every encrypted record. The FIRST write (vault
+/// creation — the browser flow has no credential yet) is open, exactly
+/// as before. Once an envelope exists, replacing it requires the
+/// per-install agent token (`Authorization: Bearer`); without a valid
+/// token the request is refused with 409 and the stored envelope is
+/// left untouched. Presenting the token is the documented rotation
+/// path (see "The agent token" in docs/SELF_HOST.md).
 pub async fn set_dek_envelope(
-    State(store): State<Arc<Store>>,
+    State(state): State<DekEnvelopeWriteState>,
+    headers: HeaderMap,
     Json(req): Json<SetDekEnvelopeRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<CryptoErrorResponse>)> {
     if let Err(msg) = validate_envelope_shape(&req.envelope) {
@@ -249,7 +282,27 @@ pub async fn set_dek_envelope(
             }),
         ));
     }
-    store.set_dek_envelope(&req.envelope).map_err(|e| {
+    let existing = state.store.get_dek_envelope().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(CryptoErrorResponse {
+                error: format!("failed to load DEK envelope: {e}"),
+                code: "DEK_ENVELOPE_UNAVAILABLE".to_string(),
+            }),
+        )
+    })?;
+    if existing.is_some() && !crate::bearer_token_valid(&headers, &state.agent_token) {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(CryptoErrorResponse {
+                error: "a DEK envelope is already stored; replacing it requires \
+                        the agent token (Authorization: Bearer <token>)"
+                    .to_string(),
+                code: "DEK_ENVELOPE_EXISTS".to_string(),
+            }),
+        ));
+    }
+    state.store.set_dek_envelope(&req.envelope).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(CryptoErrorResponse {

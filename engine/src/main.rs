@@ -34,6 +34,9 @@ mod versioning;
 ///
 /// Replaces the old `CorsLayer::permissive()`, which left the key+data
 /// oracle endpoints (/encrypt, /decrypt) reachable from any origin.
+/// Those endpoints additionally require the per-install agent token
+/// (Phase 3C), so `Authorization` is an allowed header for the
+/// configured origin's credentialed calls.
 fn cors_layer() -> CorsLayer {
     let origin: HeaderValue = std::env::var("PAE_CORS_ORIGIN")
         .unwrap_or_else(|_| "http://localhost:3000".to_string())
@@ -42,7 +45,288 @@ fn cors_layer() -> CorsLayer {
     CorsLayer::new()
         .allow_origin(origin)
         .allow_methods([Method::GET, Method::POST])
-        .allow_headers([header::CONTENT_TYPE])
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+}
+
+// ---------------------------------------------------------------------------
+// Per-install agent token (Phase 3C)
+//
+// One token per PAE install guards the credentialed surfaces in BOTH
+// processes: analytics requires it on the A2A/agent routes and the
+// engine requires it on the crypto oracle endpoints
+// (/api/v1/crypto/encrypt and /decrypt — the vault client's
+// caller-supplied-key helpers). Resolution mirrors
+// analytics/pae/auth.py exactly:
+//   1. PAE_AGENT_TOKEN env (explicit token value), else
+//   2. a token file: PAE_AGENT_TOKEN_PATH, else
+//      $PAE_HOME/data/agent-token, else ~/.pae/agent-token.
+// The file is created with owner-only permissions (0600) by whichever
+// process starts first; creation is race-safe (create-new, loser
+// re-reads). The engine resolves WITHOUT generating in
+// AppConfig::from_env (so tests and read-only contexts never create
+// files); `main` generates on real startup.
+// ---------------------------------------------------------------------------
+
+/// Expand a leading `~` (bare, or as `~/…`) against $HOME, mirroring
+/// Python's `Path.expanduser()` for those cases. analytics/pae/auth.py
+/// expands both PAE_AGENT_TOKEN_PATH and PAE_HOME this way; without
+/// the same expansion here, a tilde in either variable made the two
+/// processes resolve DIFFERENT token files (the engine used a literal
+/// `~` directory relative to its working directory) and agent auth
+/// desynchronized between them (Phase 3C review fix). `~user` is
+/// intentionally NOT expanded: Python resolves it through the account
+/// database, and a per-install path has no business pointing into
+/// another account's home.
+fn expand_tilde(path: &str) -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    expand_tilde_with_home(path, &home)
+}
+
+fn expand_tilde_with_home(path: &str, home: &str) -> PathBuf {
+    if path == "~" {
+        return PathBuf::from(home);
+    }
+    if let Some(rest) = path.strip_prefix("~/") {
+        return PathBuf::from(home).join(rest);
+    }
+    PathBuf::from(path)
+}
+
+fn agent_token_path() -> PathBuf {
+    if let Ok(p) = std::env::var("PAE_AGENT_TOKEN_PATH") {
+        let p = p.trim();
+        if !p.is_empty() {
+            return expand_tilde(p);
+        }
+    }
+    if let Ok(h) = std::env::var("PAE_HOME") {
+        let h = h.trim();
+        if !h.is_empty() {
+            return expand_tilde(h).join("data").join("agent-token");
+        }
+    }
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(home).join(".pae").join("agent-token")
+}
+
+fn read_agent_token_file() -> Option<String> {
+    let text = std::fs::read_to_string(agent_token_path()).ok()?;
+    let token = text.trim().to_string();
+    if token.is_empty() {
+        None
+    } else {
+        Some(token)
+    }
+}
+
+/// Resolve the agent token, generating and persisting it if needed.
+/// Called by `main` on startup (analytics does the same in its
+/// lifespan); the two processes converge on one file.
+fn get_or_create_agent_token() -> String {
+    if let Ok(t) = std::env::var("PAE_AGENT_TOKEN") {
+        if !t.trim().is_empty() {
+            return t.trim().to_string();
+        }
+    }
+    if let Some(t) = read_agent_token_file() {
+        return t;
+    }
+    use base64::Engine as _;
+    use rand::RngCore as _;
+    let mut raw = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut raw);
+    let token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw);
+
+    let path = agent_token_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        opts.mode(0o600);
+    }
+    match opts.open(&path) {
+        Ok(mut f) => {
+            use std::io::Write as _;
+            if f.write_all(format!("{token}\n").as_bytes()).is_ok() {
+                return token;
+            }
+        }
+        Err(_) => {
+            // Lost a creation race (or the file appeared meanwhile):
+            // the winner's token is the install's token.
+            if let Some(t) = read_agent_token_file() {
+                return t;
+            }
+        }
+    }
+    // Last resort (e.g. read-only home): an ephemeral token keeps the
+    // surfaces fail-closed rather than open; it changes per restart
+    // and the startup log says the file could not be written.
+    tracing::error!(
+        "could not persist agent token to {}; using an ephemeral token for this run",
+        path.display()
+    );
+    token
+}
+
+/// Constant-time string equality for token comparison.
+fn ct_eq(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for i in 0..a.len() {
+        diff |= a[i] ^ b[i];
+    }
+    diff == 0
+}
+
+/// Whether `headers` carry `Authorization: Bearer <token>` matching
+/// `expected` (constant-time comparison). Fail-closed: no configured
+/// token, or a missing/malformed/wrong header, is never a match.
+/// Shared by the `require_agent_token` middleware and the
+/// dek-envelope write handler (which demands the token only when an
+/// envelope already exists — see `api::crypto_api::set_dek_envelope`).
+pub(crate) fn bearer_token_valid(headers: &header::HeaderMap, expected: &Option<String>) -> bool {
+    let provided = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|v| v.trim());
+    match (expected, provided) {
+        (Some(expected), Some(provided)) => ct_eq(provided, expected),
+        _ => false,
+    }
+}
+
+/// Middleware: require `Authorization: Bearer <agent token>`.
+///
+/// Fail-closed: when no token is configured (None — possible only in
+/// tests / embedded use, since `main` always resolves one), every
+/// request is rejected.
+async fn require_agent_token(
+    State(expected): State<Arc<Option<String>>>,
+    req: Request,
+    next: axum::middleware::Next,
+) -> Response {
+    if bearer_token_valid(req.headers(), &expected) {
+        next.run(req).await
+    } else {
+        (
+            StatusCode::UNAUTHORIZED,
+            axum::Json(serde_json::json!({
+                "error": "A valid agent token is required (Authorization: Bearer <token>).",
+                "code": "AGENT_TOKEN_REQUIRED",
+            })),
+        )
+            .into_response()
+    }
+}
+
+/// Loopback guard (release-gate F-01): DNS-rebinding and cross-site
+/// request defense for a loopback-only service.
+///
+/// CORS narrows which origins a browser lets READ responses, but it
+/// never inspects the Host header: a DNS-rebinding page (an attacker
+/// domain whose DNS flips to 127.0.0.1) issues requests whose Host is
+/// the attacker's name, and nothing in the CORS layer notices. So,
+/// for EVERY request, the Host must be loopback (127.0.0.0/8,
+/// localhost, or ::1, any port). Additionally, for state-changing
+/// methods (POST/PUT/DELETE/PATCH), an Origin header that is present
+/// must itself be loopback: a cross-site page posting to 127.0.0.1
+/// sends its own (non-loopback) Origin, and it is rejected before any
+/// handler runs. Requests with no Origin — curl, the MCP server, the
+/// analytics proxy, tests — are unaffected: they are not web pages,
+/// and the threat this guards against is a page in the user's browser
+/// reaching loopback behind the user's back.
+async fn loopback_guard(req: Request, next: axum::middleware::Next) -> Response {
+    let host_ok = match req
+        .headers()
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+    {
+        Some(host) => is_loopback_authority(host),
+        None => req.uri().host().is_some_and(is_loopback_hostname),
+    };
+    if !host_ok {
+        return guard_rejection(
+            "NON_LOOPBACK_HOST",
+            "The PAE engine only serves loopback hosts (127.0.0.1, \
+             localhost, [::1]); this request arrived with a \
+             non-loopback Host header and was rejected.",
+        );
+    }
+    if matches!(req.method().as_str(), "POST" | "PUT" | "DELETE" | "PATCH") {
+        if let Some(origin) = req
+            .headers()
+            .get(header::ORIGIN)
+            .and_then(|v| v.to_str().ok())
+        {
+            if !origin_is_loopback(origin) {
+                return guard_rejection(
+                    "CROSS_SITE_ORIGIN",
+                    "State-changing requests to the PAE engine must come \
+                     from a loopback origin; this request's Origin is \
+                     cross-site and was rejected.",
+                );
+            }
+        }
+    }
+    next.run(req).await
+}
+
+fn guard_rejection(code: &str, message: &str) -> Response {
+    (
+        StatusCode::FORBIDDEN,
+        axum::Json(serde_json::json!({ "error": message, "code": code })),
+    )
+        .into_response()
+}
+
+/// Hostname portion of an authority (`host`, `host:port`, `[v6]`,
+/// `[v6]:port`) as it appears in a Host header or an Origin URL.
+fn authority_hostname(authority: &str) -> &str {
+    let authority = authority.trim();
+    if let Some(rest) = authority.strip_prefix('[') {
+        // IPv6 literal: `[::1]` or `[::1]:3001`.
+        return rest.split(']').next().unwrap_or("");
+    }
+    match authority.rsplit_once(':') {
+        Some((host, port))
+            if !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) =>
+        {
+            host
+        }
+        _ => authority,
+    }
+}
+
+fn is_loopback_hostname(hostname: &str) -> bool {
+    if hostname.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    hostname
+        .parse::<std::net::IpAddr>()
+        .is_ok_and(|ip| ip.is_loopback())
+}
+
+fn is_loopback_authority(authority: &str) -> bool {
+    is_loopback_hostname(authority_hostname(authority))
+}
+
+/// Whether a serialized Origin (`scheme://host[:port]`, or the opaque
+/// `null`) names a loopback host.
+fn origin_is_loopback(origin: &str) -> bool {
+    let Some((_, rest)) = origin.trim().split_once("://") else {
+        return false; // e.g. the literal "null" — never a loopback origin
+    };
+    let authority = rest.split('/').next().unwrap_or("");
+    is_loopback_authority(authority)
 }
 
 /// Runtime wiring that `main` takes from the environment and the
@@ -54,8 +338,14 @@ struct AppConfig {
     /// None = API only (development, tests).
     ui_dir: Option<PathBuf>,
     /// Base URL of the analytics service (`PAE_ANALYTICS_URL`), target
-    /// of the /api/v1/analytics and /api/v1/dashboard proxy routes.
+    /// of the analytics proxy routes (/api/v1/analytics, /api/v1/dashboard,
+    /// and the analytics data plane — see `analytics_proxy_routes`).
     analytics_base: String,
+    /// Per-install agent token required on the crypto oracle
+    /// endpoints (Phase 3C). Resolved from the environment / token
+    /// file WITHOUT generating: `main` generates on startup; tests
+    /// set it explicitly. None = fail closed.
+    agent_token: Option<String>,
 }
 
 impl AppConfig {
@@ -67,6 +357,11 @@ impl AppConfig {
                 .map(PathBuf::from),
             analytics_base: std::env::var("PAE_ANALYTICS_URL")
                 .unwrap_or_else(|_| "http://127.0.0.1:3002".to_string()),
+            agent_token: std::env::var("PAE_AGENT_TOKEN")
+                .ok()
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty())
+                .or_else(read_agent_token_file),
         }
     }
 }
@@ -106,16 +401,25 @@ fn build_app(store: Arc<storage::Store>, cfg: &AppConfig) -> Router {
         .route("/api/v1/version/diff", post(api::versioning_api::get_diff))
         .with_state(version_store);
 
-    // Routes backed by the SQLite persistence store (holdings, portfolios, import)
+    // Routes backed by the SQLite persistence store: the engine's
+    // ciphertext (vault) plane — holdings/portfolios/import records
+    // whose payloads are client-side-encrypted blobs the engine never
+    // reads. Phase 3D moved these from /api/v1/holdings etc. to the
+    // /api/v1/vault/* prefix: the unprefixed paths now belong to the
+    // analytics data plane (proxied below), which is the contract
+    // the dashboard, the seed, and the MCP tools all use. Nothing in
+    // the product consumed the ciphertext plane at the old paths
+    // (verified by a repo-wide search before the move); the handlers
+    // and their semantics are unchanged.
     let storage_routes = Router::new()
-        .route("/api/v1/holdings", get(api::holdings_api::list_holdings))
-        .route("/api/v1/holdings", post(api::holdings_api::create_holding))
-        .route("/api/v1/holdings/{id}", put(api::holdings_api::update_holding))
-        .route("/api/v1/holdings/{id}", delete(api::holdings_api::delete_holding))
-        .route("/api/v1/portfolios", get(api::holdings_api::list_portfolios))
-        .route("/api/v1/portfolios", post(api::holdings_api::create_portfolio))
-        .route("/api/v1/import/csv", post(api::import_api::import_csv))
-        .route("/api/v1/import/confirm", post(api::import_api::confirm_import))
+        .route("/api/v1/vault/holdings", get(api::holdings_api::list_holdings))
+        .route("/api/v1/vault/holdings", post(api::holdings_api::create_holding))
+        .route("/api/v1/vault/holdings/{id}", put(api::holdings_api::update_holding))
+        .route("/api/v1/vault/holdings/{id}", delete(api::holdings_api::delete_holding))
+        .route("/api/v1/vault/portfolios", get(api::holdings_api::list_portfolios))
+        .route("/api/v1/vault/portfolios", post(api::holdings_api::create_portfolio))
+        .route("/api/v1/vault/import/csv", post(api::import_api::import_csv))
+        .route("/api/v1/vault/import/confirm", post(api::import_api::confirm_import))
         .with_state(store.clone());
 
     // Crypto routes. NOTE (2026-10-05, zero-knowledge fix):
@@ -123,16 +427,38 @@ fn build_app(store: Arc<storage::Store>, cfg: &AppConfig) -> Router {
     // passphrase server-side, inverting the threat model. Key derivation
     // now happens exclusively client-side (ui/src/crypto/vault-client.ts)
     // against the parameters served by GET /api/v1/crypto/kdf-params.
-    // /encrypt and /decrypt remain key+data oracles BY DESIGN for
-    // local-first deployment (caller supplies key+data); see
-    // docs/THREAT_MODEL.md for the hosted-deployment caveat.
-    let crypto_routes = Router::new()
-        .route("/api/v1/crypto/kdf-params", get(api::crypto_api::kdf_params))
+    // /encrypt and /decrypt are caller-supplied-key helpers whose only
+    // in-product caller is that same vault client; since Phase 3C they
+    // additionally require the per-install agent token (below), so a
+    // stray local process — or a web page reaching loopback — can no
+    // longer use the engine as an unauthenticated key+data oracle.
+    // kdf-params and the dek-envelope READ stay open: both serve only
+    // public parameters / opaque client ciphertext, and the browser
+    // vault flow depends on them before any credential exists. The
+    // dek-envelope WRITE is first-write-open (vault creation) but
+    // token-gated for replacement — see set_dek_envelope.
+    let oracle_routes = Router::new()
         .route("/api/v1/crypto/encrypt", post(api::crypto_api::encrypt))
         .route("/api/v1/crypto/decrypt", post(api::crypto_api::decrypt))
+        .layer(axum::middleware::from_fn_with_state(
+            Arc::new(cfg.agent_token.clone()),
+            require_agent_token,
+        ));
+    let dek_envelope_write = Router::new()
+        .route(
+            "/api/v1/crypto/dek-envelope",
+            post(api::crypto_api::set_dek_envelope),
+        )
+        .with_state(api::crypto_api::DekEnvelopeWriteState {
+            store: store.clone(),
+            agent_token: cfg.agent_token.clone(),
+        });
+    let crypto_routes = Router::new()
+        .route("/api/v1/crypto/kdf-params", get(api::crypto_api::kdf_params))
         .route("/api/v1/crypto/dek-envelope", get(api::crypto_api::get_dek_envelope))
-        .route("/api/v1/crypto/dek-envelope", post(api::crypto_api::set_dek_envelope))
-        .with_state(store);
+        .with_state(store)
+        .merge(oracle_routes)
+        .merge(dek_envelope_write);
 
     // Routes without shared state (stateless compute)
     let stateless_routes = Router::new()
@@ -161,7 +487,13 @@ fn build_app(store: Arc<storage::Store>, cfg: &AppConfig) -> Router {
         None => app,
     };
 
-    app.layer(cors_layer()).layer(TraceLayer::new_for_http())
+    // Layer order (outermost first): the loopback guard runs before
+    // CORS and tracing so a rebound or cross-site request is refused
+    // before any other layer — including the CORS layer's own
+    // preflight responses — acts on it.
+    app.layer(cors_layer())
+        .layer(TraceLayer::new_for_http())
+        .layer(axum::middleware::from_fn(loopback_guard))
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +585,9 @@ fn content_type_for(path: &Path) -> &'static str {
 }
 
 // ---------------------------------------------------------------------------
-// Analytics reverse proxy (/api/v1/analytics/*, /api/v1/dashboard/*)
+// Analytics reverse proxy (/api/v1/analytics/*, /api/v1/dashboard/*, and
+// the analytics data plane: /api/v1/portfolios, /api/v1/holdings,
+// /api/v1/import/*, /api/v1/knowledge/*)
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -267,10 +601,25 @@ struct AnalyticsProxy {
 /// through the engine origin so the product is same-origin. The
 /// engine's own `/api/v1/analytics/bond` route is an exact match and
 /// takes precedence over the wildcard below.
+///
+/// Phase 3D: the analytics DATA plane joins the proxy set —
+/// `/api/v1/portfolios`, `/api/v1/holdings`, `/api/v1/import/*`,
+/// `/api/v1/knowledge/*`. Before this, those paths on the engine
+/// origin were the engine's own ciphertext store (now under
+/// `/api/v1/vault/*`), so the dashboard had to hardcode the
+/// analytics origin (http://localhost:3002) and broke whenever the
+/// analytics port or host differed. Same-origin relative calls now
+/// work at any configured port pair.
 fn analytics_proxy_routes(base: String) -> Router {
     Router::new()
         .route("/api/v1/analytics/{*rest}", any(proxy_to_analytics))
         .route("/api/v1/dashboard/{*rest}", any(proxy_to_analytics))
+        .route("/api/v1/portfolios", any(proxy_to_analytics))
+        .route("/api/v1/portfolios/{*rest}", any(proxy_to_analytics))
+        .route("/api/v1/holdings", any(proxy_to_analytics))
+        .route("/api/v1/holdings/{*rest}", any(proxy_to_analytics))
+        .route("/api/v1/import/{*rest}", any(proxy_to_analytics))
+        .route("/api/v1/knowledge/{*rest}", any(proxy_to_analytics))
         .with_state(AnalyticsProxy { base })
 }
 
@@ -532,7 +881,18 @@ async fn main() -> Result<()> {
     );
     tracing::info!("PAE storage initialized at {}", db_path);
 
-    let cfg = AppConfig::from_env();
+    let mut cfg = AppConfig::from_env();
+    // Agent token: resolve (creating the token file on first start)
+    // before the app is built, so the gated surfaces are never open.
+    // The token VALUE is never logged — only where it lives.
+    if cfg.agent_token.is_none() {
+        cfg.agent_token = Some(get_or_create_agent_token());
+    }
+    if std::env::var("PAE_AGENT_TOKEN").map(|t| !t.trim().is_empty()).unwrap_or(false) {
+        tracing::info!("Agent token: provided via PAE_AGENT_TOKEN");
+    } else {
+        tracing::info!("Agent token file: {}", agent_token_path().display());
+    }
     if let Some(dir) = &cfg.ui_dir {
         tracing::info!("Serving dashboard from {}", dir.display());
     }
@@ -592,11 +952,50 @@ mod tests {
     use super::*;
     use axum_test::TestServer;
 
+    const TEST_AGENT_TOKEN: &str = "test-agent-token";
+
     fn test_server() -> TestServer {
-        let store = Arc::new(
-            storage::Store::open_in_memory().expect("in-memory store for tests"),
+        configured_server(&AppConfig {
+            ui_dir: None,
+            analytics_base: "http://127.0.0.1:3002".to_string(),
+            agent_token: Some(TEST_AGENT_TOKEN.to_string()),
+        })
+    }
+
+    fn bearer() -> String {
+        format!("Bearer {TEST_AGENT_TOKEN}")
+    }
+
+    /// Tilde expansion in the agent-token path resolution must match
+    /// Python's `Path.expanduser()` (analytics/pae/auth.py), or a
+    /// `~` in PAE_AGENT_TOKEN_PATH / PAE_HOME desynchronizes the two
+    /// processes' token files (Phase 3C review fix).
+    #[test]
+    fn expand_tilde_matches_python_expanduser() {
+        let home = "/home/tester";
+        assert_eq!(
+            expand_tilde_with_home("~/x", home),
+            PathBuf::from("/home/tester/x")
         );
-        TestServer::new(create_app(store)).expect("test server")
+        assert_eq!(
+            expand_tilde_with_home("~/data/agent-token", home),
+            PathBuf::from("/home/tester/data/agent-token")
+        );
+        assert_eq!(expand_tilde_with_home("~", home), PathBuf::from(home));
+        // Non-tilde paths pass through untouched.
+        assert_eq!(
+            expand_tilde_with_home("/abs/path", home),
+            PathBuf::from("/abs/path")
+        );
+        assert_eq!(
+            expand_tilde_with_home("relative/path", home),
+            PathBuf::from("relative/path")
+        );
+        // `~user` is deliberately not expanded (see expand_tilde docs).
+        assert_eq!(
+            expand_tilde_with_home("~other/x", home),
+            PathBuf::from("~other/x")
+        );
     }
 
     /// The passphrase-bearing derive-key endpoint must be gone entirely.
@@ -626,7 +1025,11 @@ mod tests {
         for field in ["passphrase", "kek", "dek", "unwrapped_dek"] {
             let mut body = base.clone();
             body[field] = serde_json::json!("must-not-be-accepted");
-            let resp = server.post("/api/v1/crypto/encrypt").json(&body).await;
+            let resp = server
+                .post("/api/v1/crypto/encrypt")
+                .add_header("authorization", bearer())
+                .json(&body)
+                .await;
             assert_eq!(
                 resp.status_code().as_u16(),
                 422,
@@ -647,7 +1050,11 @@ mod tests {
         for field in ["passphrase", "kek", "dek", "unwrapped_dek"] {
             let mut body = base.clone();
             body[field] = serde_json::json!("must-not-be-accepted");
-            let resp = server.post("/api/v1/crypto/decrypt").json(&body).await;
+            let resp = server
+                .post("/api/v1/crypto/decrypt")
+                .add_header("authorization", bearer())
+                .json(&body)
+                .await;
             assert_eq!(
                 resp.status_code().as_u16(),
                 422,
@@ -677,12 +1084,14 @@ mod tests {
         }
     }
 
-    /// The oracle endpoints still work for well-formed bodies.
+    /// The oracle endpoints still work for well-formed bodies —
+    /// with the agent token (Phase 3C).
     #[tokio::test]
     async fn encrypt_accepts_valid_body() {
         let server = test_server();
         let resp = server
             .post("/api/v1/crypto/encrypt")
+            .add_header("authorization", bearer())
             .json(&serde_json::json!({
                 "plaintext": "hello",
                 "key_b64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
@@ -692,6 +1101,170 @@ mod tests {
         let body: serde_json::Value = resp.json();
         assert!(body.get("ciphertext_b64").is_some());
         assert!(body.get("nonce_b64").is_some());
+    }
+
+    /// Phase 3C: /encrypt and /decrypt reject requests without the
+    /// agent token and with a wrong token; the right token round-trips.
+    #[tokio::test]
+    async fn oracle_endpoints_require_agent_token() {
+        let server = test_server();
+        let enc_body = serde_json::json!({
+            "plaintext": "hello",
+            "key_b64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        });
+
+        let no_token = server.post("/api/v1/crypto/encrypt").json(&enc_body).await;
+        assert_eq!(no_token.status_code().as_u16(), 401);
+
+        let wrong = server
+            .post("/api/v1/crypto/encrypt")
+            .add_header("authorization", "Bearer not-the-token")
+            .json(&enc_body)
+            .await;
+        assert_eq!(wrong.status_code().as_u16(), 401);
+
+        let enc = server
+            .post("/api/v1/crypto/encrypt")
+            .add_header("authorization", bearer())
+            .json(&enc_body)
+            .await;
+        assert_eq!(enc.status_code().as_u16(), 200);
+        let enc_json: serde_json::Value = enc.json();
+
+        let dec_body = serde_json::json!({
+            "ciphertext_b64": enc_json["ciphertext_b64"],
+            "nonce_b64": enc_json["nonce_b64"],
+            "key_b64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        });
+        let dec_no_token = server.post("/api/v1/crypto/decrypt").json(&dec_body).await;
+        assert_eq!(dec_no_token.status_code().as_u16(), 401);
+
+        let dec = server
+            .post("/api/v1/crypto/decrypt")
+            .add_header("authorization", bearer())
+            .json(&dec_body)
+            .await;
+        assert_eq!(dec.status_code().as_u16(), 200);
+        let dec_json: serde_json::Value = dec.json();
+        assert_eq!(dec_json["plaintext"], "hello");
+    }
+
+    /// Phase 3C: with no token configured the oracle endpoints fail
+    /// closed — a Bearer header alone never opens them.
+    #[tokio::test]
+    async fn oracle_endpoints_fail_closed_without_configured_token() {
+        let cfg = AppConfig {
+            ui_dir: None,
+            analytics_base: "http://127.0.0.1:3002".to_string(),
+            agent_token: None,
+        };
+        let server = configured_server(&cfg);
+        let resp = server
+            .post("/api/v1/crypto/encrypt")
+            .add_header("authorization", "Bearer anything")
+            .json(&serde_json::json!({
+                "plaintext": "hello",
+                "key_b64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            }))
+            .await;
+        assert_eq!(resp.status_code().as_u16(), 401);
+    }
+
+    /// F-01 loopback guard, parsing level: loopback authorities and
+    /// origins are recognized in every spelling the platform produces;
+    /// attacker-shaped ones are not.
+    #[test]
+    fn loopback_guard_parsing() {
+        for authority in [
+            "127.0.0.1",
+            "127.0.0.1:3001",
+            "127.0.1.9:3001",
+            "localhost",
+            "localhost:3001",
+            "LOCALHOST:3001",
+            "[::1]",
+            "[::1]:3001",
+        ] {
+            assert!(is_loopback_authority(authority), "{authority} is loopback");
+        }
+        for authority in [
+            "evil.example",
+            "evil.example:3001",
+            "localhost.evil.example",
+            "0.0.0.0:3001",
+            "192.168.1.10:3001",
+            "[2001:db8::1]:3001",
+            "",
+        ] {
+            assert!(
+                !is_loopback_authority(authority),
+                "{authority} is not loopback"
+            );
+        }
+        assert!(origin_is_loopback("http://localhost:3001"));
+        assert!(origin_is_loopback("http://127.0.0.1:3001"));
+        assert!(origin_is_loopback("https://[::1]:8443"));
+        assert!(!origin_is_loopback("https://evil.example"));
+        assert!(!origin_is_loopback("http://localhost.evil.example"));
+        assert!(!origin_is_loopback("null"));
+    }
+
+    /// F-01: a request whose Host is not loopback (the DNS-rebinding
+    /// shape) is refused 403 before routing, whatever the method.
+    #[tokio::test]
+    async fn loopback_guard_rejects_non_loopback_host() {
+        let server = test_server();
+        let resp = server
+            .get("/health")
+            .add_header("host", "evil.example")
+            .await;
+        assert_eq!(resp.status_code().as_u16(), 403);
+        let body: serde_json::Value = resp.json();
+        assert_eq!(body["code"], "NON_LOOPBACK_HOST");
+
+        // Loopback Host spellings pass through to the handler.
+        for host in ["localhost:3001", "127.0.0.1:3001", "[::1]:3001"] {
+            let resp = server.get("/health").add_header("host", host).await;
+            assert_eq!(resp.status_code().as_u16(), 200, "host {host} passes");
+        }
+    }
+
+    /// F-01: a state-changing request carrying a cross-site Origin is
+    /// refused 403; a loopback Origin, or no Origin at all (curl, the
+    /// MCP server, server-side callers), passes the guard and reaches
+    /// the handler (which then judges the body on its own terms).
+    #[tokio::test]
+    async fn loopback_guard_rejects_cross_site_origin_on_mutations() {
+        let server = test_server();
+        let cross = server
+            .post("/api/v1/vault/portfolios")
+            .add_header("origin", "https://evil.example")
+            .json(&serde_json::json!({ "name": "x" }))
+            .await;
+        assert_eq!(cross.status_code().as_u16(), 403);
+        let body: serde_json::Value = cross.json();
+        assert_eq!(body["code"], "CROSS_SITE_ORIGIN");
+
+        let same_site = server
+            .post("/api/v1/vault/portfolios")
+            .add_header("origin", "http://localhost:3001")
+            .json(&serde_json::json!({ "name": "guard-pass" }))
+            .await;
+        assert_ne!(
+            same_site.status_code().as_u16(),
+            403,
+            "loopback Origin must pass the guard"
+        );
+
+        let no_origin = server
+            .post("/api/v1/vault/portfolios")
+            .json(&serde_json::json!({ "name": "guard-pass-2" }))
+            .await;
+        assert_ne!(
+            no_origin.status_code().as_u16(),
+            403,
+            "no Origin (non-browser caller) must pass the guard"
+        );
     }
 
     /// kdf-params serves the production spec and a stable per-database salt.
@@ -704,7 +1277,7 @@ mod tests {
         assert_eq!(p1["algorithm"], "argon2id");
         assert_eq!(p1["version"], 19);
         assert_eq!(p1["memory_kib"], 65536);
-        assert_eq!(p1["iterations"], 600000);
+        assert_eq!(p1["iterations"], 3);
         assert_eq!(p1["parallelism"], 4);
         assert_eq!(p1["output_bytes"], 32);
         let salt1 = p1["salt_b64"].as_str().expect("salt_b64 is a string");
@@ -750,6 +1323,59 @@ mod tests {
             envelope,
             "envelope must round-trip verbatim"
         );
+    }
+
+    /// Phase 3C review fix: the first dek-envelope write is open
+    /// (vault creation), but REPLACING a stored envelope requires the
+    /// agent token — an unauthenticated overwrite would permanently
+    /// brick every encrypted record. 409 without / with a wrong token
+    /// and the stored value untouched; 204 with the token (rotation).
+    #[tokio::test]
+    async fn dek_envelope_replace_requires_agent_token() {
+        let server = test_server();
+        let env1 = "{\"v\":2,\"wrapped_dek_b64\":\"QUJD\",\"dek_nonce_b64\":\"AAAAAAAAAAAAAAAA\"}";
+        let env2 = "{\"v\":2,\"wrapped_dek_b64\":\"REVG\",\"dek_nonce_b64\":\"AAAAAAAAAAAAAAAA\"}";
+
+        // First write: open, no token (vault creation).
+        let r = server
+            .post("/api/v1/crypto/dek-envelope")
+            .json(&serde_json::json!({ "envelope": env1 }))
+            .await;
+        assert_eq!(r.status_code().as_u16(), 204);
+
+        // Replace without a token: 409, stored value untouched.
+        let r = server
+            .post("/api/v1/crypto/dek-envelope")
+            .json(&serde_json::json!({ "envelope": env2 }))
+            .await;
+        assert_eq!(r.status_code().as_u16(), 409);
+        let body: serde_json::Value = r.json();
+        assert_eq!(body["code"], "DEK_ENVELOPE_EXISTS");
+        let g = server.get("/api/v1/crypto/dek-envelope").await;
+        let body: serde_json::Value = g.json();
+        assert_eq!(body["envelope"].as_str().unwrap(), env1);
+
+        // Replace with a WRONG token: still 409, still untouched.
+        let r = server
+            .post("/api/v1/crypto/dek-envelope")
+            .add_header("authorization", "Bearer not-the-token")
+            .json(&serde_json::json!({ "envelope": env2 }))
+            .await;
+        assert_eq!(r.status_code().as_u16(), 409);
+        let g = server.get("/api/v1/crypto/dek-envelope").await;
+        let body: serde_json::Value = g.json();
+        assert_eq!(body["envelope"].as_str().unwrap(), env1);
+
+        // Replace with the agent token: 204 (the rotation path).
+        let r = server
+            .post("/api/v1/crypto/dek-envelope")
+            .add_header("authorization", bearer())
+            .json(&serde_json::json!({ "envelope": env2 }))
+            .await;
+        assert_eq!(r.status_code().as_u16(), 204);
+        let g = server.get("/api/v1/crypto/dek-envelope").await;
+        let body: serde_json::Value = g.json();
+        assert_eq!(body["envelope"].as_str().unwrap(), env2);
     }
 
     /// POST rejects malformed envelopes with 400 (not 422 — the body shape
@@ -845,6 +1471,7 @@ mod tests {
         let cfg = AppConfig {
             ui_dir: Some(dir.path().to_path_buf()),
             analytics_base: "http://127.0.0.1:3002".to_string(),
+            agent_token: None,
         };
         let server = configured_server(&cfg);
 
@@ -888,6 +1515,7 @@ mod tests {
         let cfg = AppConfig {
             ui_dir: None,
             analytics_base: "http://127.0.0.1:3002".to_string(),
+            agent_token: None,
         };
         let server = configured_server(&cfg);
         let resp = server.get("/").await;
@@ -950,6 +1578,7 @@ mod tests {
         let cfg = AppConfig {
             ui_dir: None,
             analytics_base: format!("http://{addr}"),
+            agent_token: None,
         };
         let server = configured_server(&cfg);
         let resp = server
@@ -970,6 +1599,7 @@ mod tests {
             ui_dir: None,
             // Port 1 is closed on loopback by definition.
             analytics_base: "http://127.0.0.1:1".to_string(),
+            agent_token: None,
         };
         let server = configured_server(&cfg);
         let resp = server
@@ -977,5 +1607,62 @@ mod tests {
             .json(&serde_json::json!({}))
             .await;
         assert_eq!(resp.status_code().as_u16(), 502);
+    }
+
+    /// Phase 3D: the analytics data plane is proxied at the paths the
+    /// dashboard actually calls. With analytics down each answers 502
+    /// (proof the proxy owns the path — before 3D, /api/v1/portfolios
+    /// on this origin was the engine's ciphertext store and answered
+    /// 200 with the wrong contract).
+    #[tokio::test]
+    async fn data_plane_paths_proxy_to_analytics() {
+        let cfg = AppConfig {
+            ui_dir: None,
+            analytics_base: "http://127.0.0.1:1".to_string(),
+            agent_token: None,
+        };
+        let server = configured_server(&cfg);
+        for path in [
+            "/api/v1/portfolios",
+            "/api/v1/portfolios/some-id",
+            "/api/v1/holdings?portfolio_id=some-id",
+            "/api/v1/knowledge/chunks",
+        ] {
+            let resp = server.get(path).await;
+            assert_eq!(resp.status_code().as_u16(), 502, "GET {path} must proxy");
+        }
+        let resp = server
+            .post("/api/v1/import/csv?portfolio_id=some-id")
+            .json(&serde_json::json!({}))
+            .await;
+        assert_eq!(resp.status_code().as_u16(), 502, "POST import must proxy");
+    }
+
+    /// Phase 3D: the engine's ciphertext (vault) plane answers under
+    /// its new /api/v1/vault/* prefix with unchanged semantics.
+    #[tokio::test]
+    async fn vault_routes_live_under_vault_prefix() {
+        let cfg = AppConfig {
+            ui_dir: None,
+            analytics_base: "http://127.0.0.1:1".to_string(),
+            agent_token: None,
+        };
+        let server = configured_server(&cfg);
+        let created = server
+            .post("/api/v1/vault/portfolios")
+            .json(&serde_json::json!({
+                "name_encrypted_b64": "bmFtZQ==",
+                "name_nonce_b64": "bm9uY2U="
+            }))
+            .await;
+        assert_eq!(created.status_code().as_u16(), 201);
+        let created_body: serde_json::Value = created.json();
+        let portfolio_id = created_body["id"].as_str().expect("created id");
+        let listed = server.get("/api/v1/vault/portfolios").await;
+        assert_eq!(listed.status_code().as_u16(), 200);
+        let holdings = server
+            .get(&format!("/api/v1/vault/holdings?portfolio_id={portfolio_id}"))
+            .await;
+        assert_eq!(holdings.status_code().as_u16(), 200);
     }
 }

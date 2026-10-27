@@ -14,7 +14,12 @@
  * 5. Dashboard refreshes with new data
  */
 
-const API_BASE = 'http://localhost:3002';
+// Same-origin (Phase 3D, W5): the engine serves this dashboard and
+// proxies the analytics data plane, so relative paths work at any
+// configured port pair. Do not hardcode a host:port here again.
+import { selectedPortfolioId } from '../portfolio-selection.js';
+
+const API_BASE = '';
 
 interface ParsedHolding {
   symbol: string;
@@ -58,13 +63,9 @@ class PaeImport extends HTMLElement {
 
   private async loadPortfolioId(): Promise<void> {
     try {
-      const resp = await fetch(`${API_BASE}/api/v1/portfolios`);
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data.portfolios?.length > 0) {
-          this.portfolioId = data.portfolios[0].id;
-        }
-      }
+      // Imports land in the shell's selected portfolio (shown in the
+      // sidebar selector), not silently in portfolios[0].
+      this.portfolioId = await selectedPortfolioId();
     } catch {
       // Will be caught when user tries to import
     }

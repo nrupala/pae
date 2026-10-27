@@ -201,7 +201,7 @@ p { margin: 0.6rem 0; }
 
 .card p { color: var(--muted); font-size: 0.95rem; }
 
-/* ---------- zero-knowledge block ---------- */
+/* ---------- privacy architecture block ---------- */
 
 .zk {
   background: var(--surface);

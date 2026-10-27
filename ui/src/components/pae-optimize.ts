@@ -4,7 +4,7 @@
 /**
  * PAE Optimize View — serves the #optimize route (and #optimizer).
  *
- * Posts to POST /api/v1/analytics/optimize with the first portfolio's id
+ * Posts to POST /api/v1/analytics/optimize with the selected portfolio's id
  * and renders the long-only efficient frontier (scatter chart) with
  * markers for the maximum-Sharpe, minimum-variance, and risk-parity mixes,
  * plus a weights table.
@@ -14,7 +14,12 @@
  * if anything, to do with it.
  */
 
-const API_BASE = 'http://localhost:3002';
+// Same-origin (Phase 3D, W5): the engine serves this dashboard and
+// proxies the analytics data plane, so relative paths work at any
+// configured port pair. Do not hardcode a host:port here again.
+import { selectedPortfolioId } from '../portfolio-selection.js';
+
+const API_BASE = '';
 
 const DISCLOSURE =
   'Educational analytics only. PAE calculates; the user decides. ' +
@@ -71,7 +76,7 @@ class PaeOptimize extends HTMLElement {
   private result: OptimizeResponse | null = null;
   private error: string = '';
   private loading: boolean = true;
-  private riskFreeRate: number = 0.02;
+  private riskFreeRate: number = 0;
 
   constructor() {
     super();
@@ -84,11 +89,9 @@ class PaeOptimize extends HTMLElement {
   }
 
   private async firstPortfolioId(): Promise<string> {
-    const resp = await fetch(`${API_BASE}/api/v1/portfolios`);
-    if (!resp.ok) throw new Error(`portfolios: HTTP ${resp.status}`);
-    const portfolios = (await resp.json()).portfolios || [];
-    if (!portfolios.length) throw new Error('empty');
-    return portfolios[0].id;
+    // The shell's shared selection (portfolio-selection.ts) — before
+    // Phase 3D this returned portfolios[0], the empty Default.
+    return selectedPortfolioId();
   }
 
   private async loadData(): Promise<void> {

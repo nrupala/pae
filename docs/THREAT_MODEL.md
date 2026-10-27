@@ -9,7 +9,14 @@
 
 ## Principles
 
-1. **Zero-knowledge**: Server stores only ciphertext. Operator cannot read user data.
+1. **Zero-knowledge — vault plane**: For vault records (the versioned
+   records, such as the decision journal), the server stores only
+   ciphertext and the operator cannot read them. This principle is
+   scoped to that plane: the analytics working store — the holdings
+   imported for analysis — is a local database file, unencrypted,
+   like any local app's data file (see README, "Security Model"). The
+   local-first posture trusts the user's own machine and files for
+   the analytics store.
 2. **Zero-trust**: Every component assumes breach. No implicit trust between services.
 3. **User-held keys**: Master key derived from user passphrase **client-side**.
    Server never sees passphrase or derived key.
@@ -18,12 +25,19 @@
 
 ### Server Compromise
 - **Threat**: Attacker gains full access to server, database, and filesystem.
-- **Mitigation**: All stored data is AES-256-GCM ciphertext (random 96-bit
+- **Mitigation**: All vault-plane stored data (the versioned records)
+  is AES-256-GCM ciphertext (random 96-bit
   nonce per encryption). Record keys are derived client-side via Argon2id
-  (600K iterations, 64 MiB, 4 lanes, v19, 32-byte output) against the
+  (3 iterations, 64 MiB, 4 lanes, v19, 32-byte output — the RFC 9106
+  second-recommended profile) against the
   per-database salt served by `GET /api/v1/crypto/kdf-params`. The server
   holds no passphrase-derivation code path — there is nothing to coerce or
-  dump for user passphrases. Attacker gets ciphertext only.
+  dump for user passphrases. For the vault plane, an attacker gets
+  ciphertext only. The analytics working store is plaintext SQLite on
+  the user's own machine (see Principle 1): a filesystem compromise
+  exposes the imported holdings in it, as it would any local app's
+  data file — full-disk encryption is the user's control for that
+  plane, and README says so.
 - **Residual**: `/encrypt` and `/decrypt` accept caller-supplied key+data
   (see Residual risks below).
 
@@ -53,10 +67,30 @@
   terminate TLS at a reverse proxy; localhost deployment is loopback-only
   by convention.
 
+### DNS Rebinding / Cross-Site Loopback Requests
+- **Threat**: A web page the user visits reaches the loopback services
+  behind the user's back — by DNS rebinding (an attacker domain whose
+  DNS flips to 127.0.0.1, so requests arrive carrying the attacker's
+  Host header) or by posting cross-site to 127.0.0.1 with the page's
+  own Origin. CORS does not cover either path: it governs which
+  origins may read responses, never which Host a request may carry.
+- **Mitigation**: Both processes run a loopback guard ahead of every
+  route (engine: `loopback_guard` in `engine/src/main.rs`; analytics:
+  `LoopbackGuardMiddleware` in `analytics/pae/server.py`). Any request
+  whose Host is not loopback (127.0.0.0/8, localhost, or ::1, any
+  port) is refused 403, and a state-changing request (POST, PUT,
+  DELETE, PATCH) whose Origin is present and not loopback is refused
+  403. Requests without an Origin — curl, the MCP server, the
+  engine↔analytics proxy — pass unchanged.
+- **Residual**: The guard defends the browser path only. A non-browser
+  local process can still call the unauthenticated surfaces directly
+  (see Residual risks #2); that posture is unchanged.
+
 ### Brute Force on Passphrase
 - **Threat**: Attacker attempts to brute-force the user's passphrase from
   stored material.
-- **Mitigation**: Argon2id with 600K iterations, 64 MiB memory, 4 lanes.
+- **Mitigation**: Argon2id with 3 iterations, 64 MiB memory, 4 lanes
+  (RFC 9106 second-recommended profile).
   The per-database salt is stored in the SQLite `meta` table and served by
   `GET /api/v1/crypto/kdf-params` — it is NOT secret (only stable), so it
   adds no brute-force resistance beyond forcing per-database attacks.
@@ -67,13 +101,13 @@
 | Property | Value |
 |----------|-------|
 | Symmetric cipher | AES-256-GCM |
-| Key derivation | Argon2id, client-side only (600K iterations, 64 MiB, 4 lanes, v19) |
+| Key derivation | Argon2id, client-side only (3 iterations, 64 MiB, 4 lanes, v19 — RFC 9106 second-recommended profile) |
 | KDF salt | Per-database 16-byte salt, SQLite `meta` table, served via `GET /api/v1/crypto/kdf-params` (not secret) |
 | Client KDF | `ui/src/crypto/vault-client.ts`, vendored hash-wasm (no CDN) |
 | Server-side derivation | **REMOVED 2026-10-05** — `POST /api/v1/crypto/derive-key` deleted |
 | Key length | 256 bits |
 | Nonce | 96 bits, random per encryption |
-| DEK wrapping | **Implemented (v2 envelope, 2026-10-05).** Per-vault DEK (random 32-byte) wrapped with the user's KEK via AES-256-GCM, all client-side (`ui/src/crypto/vault-client.ts`: `wrapDEK`/`unwrapDEK`); the versioned envelope (`{v:2, alg, kid, wrapped_dek_b64, dek_nonce_b64}`) is stored opaquely in the engine `meta` table (`dek_envelope_v2`, GET/POST `/api/v1/crypto/dek-envelope`). v1 vaults (records encrypted directly with the KEK-derived key) remain readable via `unlockVault`. Granularity rationale (per-vault, not per-record) is documented in `vault-client.ts`. |
+| DEK wrapping | **Implemented (v2 envelope, 2026-10-05).** Per-vault DEK (random 32-byte) wrapped with the user's KEK via AES-256-GCM, all client-side (`ui/src/crypto/vault-client.ts`: `wrapDEK`/`unwrapDEK`); the versioned envelope (`{v:2, alg, kid, wrapped_dek_b64, dek_nonce_b64}`) is stored opaquely in the engine `meta` table (`dek_envelope_v2`, GET/POST `/api/v1/crypto/dek-envelope`). v1 vaults (records encrypted directly with the KEK-derived key) remain readable via `unlockVault`. Granularity rationale (per-vault, not per-record) is documented in `vault-client.ts`. Replacement of a stored envelope requires the per-install agent token (Phase 3C): the first write is open for vault creation, but an unauthenticated overwrite - which would permanently brick every encrypted record - is refused with 409 and the stored envelope left untouched. |
 | Key recovery | **[NOT IMPLEMENTED]** — Shamir 3-of-5 was spec-only. Lost passphrase = inaccessible data. |
 | No server-side recovery | By design. Lost passphrase = inaccessible data. |
 | CORS | Restrictive: origin from `PAE_CORS_ORIGIN` (default `http://localhost:3000`), methods GET/POST, `Content-Type` header only |
@@ -81,18 +115,30 @@
 
 ## Residual risks (read before any hosted deployment)
 
-1. **`/encrypt` and `/decrypt` are key+data oracles BY DESIGN.** In the
-   local-first deployment (engine on the user's own machine, UI served
-   locally) this is the intended division of labor: the browser derives
-   the key, the engine does AES-GCM as a compute service, and no trust
-   boundary is crossed. In ANY hosted or multi-user deployment these two
-   endpoints let anyone who can reach the server encrypt/decrypt arbitrary
-   data with arbitrary keys — they MUST be disabled (or removed from the
-   router), or encryption must move fully client-side (WebCrypto), before
+1. **`/encrypt` and `/decrypt` are caller-supplied-key helpers BY
+   DESIGN.** In the local-first deployment (engine on the user's own
+   machine, UI served locally) this is the intended division of labor:
+   the browser derives the key, the engine does AES-GCM as a compute
+   service, and no trust boundary is crossed. Since Phase 3C both
+   endpoints additionally require the per-install agent token
+   (`Authorization: Bearer`), so they are no longer open to anything
+   that can reach the port — but the token is a single bearer
+   credential for the whole install, not per-user auth. In ANY hosted
+   or multi-user deployment these two endpoints still let anyone
+   holding the token encrypt/decrypt arbitrary data with arbitrary
+   keys — they MUST be disabled (or removed from the router), or
+   encryption must move fully client-side (WebCrypto), before
    the engine is exposed beyond loopback.
-2. **No authentication on any endpoint.** CORS narrows which web origins
-   can call the API from a browser, but it is not access control —
-   non-browser callers ignore it. Localhost deployment is the current
+2. **Most endpoints have no authentication.** Since Phase 3C the
+   agent/A2A surfaces and the two crypto helpers above require the
+   per-install agent token; everything else (portfolio data, version
+   store, dashboard proxy) is unauthenticated, and analytics' data
+   routes authenticate only when `PAE_API_KEY` is set. CORS narrows
+   which web origins can call the API from a browser, but it is not
+   access control — non-browser callers ignore it. The loopback guard
+   (see "DNS Rebinding / Cross-Site Loopback Requests" above) closes
+   the browser rebinding and cross-site-write paths; the non-browser
+   posture is unchanged. Localhost deployment is the current
    access-control story; a hosted deployment needs real auth first.
 3. **No TLS in the engine.** See Man-in-the-Middle above.
 4. **Single-DEK model.** The vault uses one per-vault DEK wrapped by the KEK

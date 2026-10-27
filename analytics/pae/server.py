@@ -15,6 +15,7 @@ Usage:
     uvicorn pae.server:app --port 3002 --reload
 """
 
+import ipaddress
 import json
 import logging
 import os
@@ -28,14 +29,21 @@ from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from starlette.datastructures import Headers
+from starlette.types import ASGIApp, Receive, Scope, Send
 
-from pae.auth import api_key_or_none, require_api_key
+from pae.auth import (
+    agent_token_path,
+    get_or_create_agent_token,
+    require_agent_token,
+    require_api_key,
+)
 from pae.mcp import TOOL_SPECS, get_tool_manifest, run_agent_tool
-from pae.pke.store import KnowledgeStore, PkeEncryptionError, default_store_path
 from pae.mcp.tools import DISCLOSURE, PAETools
 from pae.models.brinson import attribute as brinson_attribute
 from pae.models.carry import analyze_carry
 from pae.models.optimize import OptimizeError, holdings_to_inputs, optimize
+from pae.pke.store import KnowledgeStore, PkeEncryptionError, default_store_path
 from pae.storage.csv_import import import_csv_string
 from pae.storage.db import (
     Account,
@@ -53,7 +61,10 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = os.environ.get("PAE_DB_PATH", "data/pae.db")
 RUST_ENGINE_URL = os.environ.get("PAE_ENGINE_URL", "http://localhost:3001")
-# PKE knowledge base location (pae.pke.store.default_store_path() shape).
+# PKE knowledge base location. Resolution: PAE_PKE_PATH override,
+# else default_store_path() — $PAE_HOME/data/pke.db when PAE_HOME is
+# set, else ~/.local/share/pae/pke.db (Phase 3D; before this the PKE
+# ignored PAE_HOME and lived outside the documented backup tree).
 PKE_PATH = os.environ.get("PAE_PKE_PATH", str(default_store_path()))
 
 # --- App Lifecycle ---
@@ -67,6 +78,16 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:  # noqa: ARG001
     global db  # noqa: PLW0603
     db = PAEDatabase(DB_PATH)
     db.initialize()
+
+    # Agent surfaces require the per-install bearer token (Phase 3C).
+    # Resolve (creating on first start) so the token file exists and
+    # its location is in the log before any agent connects. The token
+    # VALUE is never logged.
+    get_or_create_agent_token()
+    if os.environ.get("PAE_AGENT_TOKEN", "").strip():
+        logger.info("Agent token: provided via PAE_AGENT_TOKEN")
+    else:
+        logger.info("Agent token file: %s", agent_token_path())
 
     # Create default portfolio if none exists
     portfolios = db.get_portfolios()
@@ -84,7 +105,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:  # noqa: ARG001
 app = FastAPI(
     title="PAE - Personal Analytics Engine",
     version="0.1.0",
-    description="Non-advisory, zero-knowledge financial analytics platform.",
+    description="Non-advisory, local-first financial analytics platform.",
     lifespan=lifespan,
 )
 
@@ -108,6 +129,120 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
+
+
+# --- Loopback guard (release-gate F-01) ---
+#
+# CORS narrows which origins a browser lets READ responses, but it
+# never inspects the Host header: a DNS-rebinding page (an attacker
+# domain whose DNS flips to 127.0.0.1) issues requests whose Host is
+# the attacker's name, and nothing in the CORS layer notices. So, for
+# EVERY request, the Host must be loopback (127.0.0.0/8, localhost, or
+# ::1, any port). Additionally, for state-changing methods
+# (POST/PUT/DELETE/PATCH), an Origin header that is present must
+# itself be loopback: a cross-site page posting to 127.0.0.1 sends its
+# own (non-loopback) Origin, and it is rejected before any route runs.
+# Requests with no Origin — curl, the MCP server, the engine's proxy,
+# tests — are unaffected: they are not web pages, and the threat this
+# guards against is a page in the user's browser reaching loopback
+# behind the user's back. The engine enforces the identical control
+# (``loopback_guard`` in engine/src/main.rs).
+#
+# Registered AFTER CORS, so in Starlette's stack it is the OUTERMOST
+# middleware: a rebound or cross-site request is refused before the
+# CORS layer — including its preflight responses — acts on it.
+
+_MUTATING_METHODS = frozenset({"POST", "PUT", "DELETE", "PATCH"})
+
+
+def _authority_hostname(authority: str) -> str:
+    """Hostname portion of ``host``, ``host:port``, ``[v6]``, ``[v6]:port``."""
+    authority = authority.strip()
+    if authority.startswith("["):
+        return authority[1:].split("]", 1)[0]
+    host, sep, port = authority.rpartition(":")
+    if sep and port.isdigit():
+        return host
+    return authority
+
+
+def _is_loopback_hostname(hostname: str) -> bool:
+    if hostname.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
+
+
+def _is_loopback_authority(authority: str) -> bool:
+    return _is_loopback_hostname(_authority_hostname(authority))
+
+
+def _origin_is_loopback(origin: str) -> bool:
+    """Whether a serialized Origin (``scheme://host[:port]``) is loopback."""
+    _, sep, rest = origin.strip().partition("://")
+    if not sep:
+        return False  # e.g. the literal "null" — never a loopback origin
+    return _is_loopback_authority(rest.split("/", 1)[0])
+
+
+async def _send_guard_rejection(send: Send, code: str, message: str) -> None:
+    body = json.dumps({"error": message, "code": code}).encode()
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 403,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(body)).encode()),
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": body})
+
+
+class LoopbackGuardMiddleware:
+    """ASGI guard: loopback Host allowlist + cross-site Origin rejection."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        headers = Headers(scope=scope)
+        host = headers.get("host")
+        if host is None:
+            # HTTP/1.1 requests always carry Host (uvicorn refuses
+            # those without); fall back to the socket's own address.
+            server = scope.get("server") or ("", 0)
+            host = str(server[0])
+        if not _is_loopback_authority(host):
+            await _send_guard_rejection(
+                send,
+                "NON_LOOPBACK_HOST",
+                "The PAE analytics service only serves loopback hosts "
+                "(127.0.0.1, localhost, [::1]); this request arrived "
+                "with a non-loopback Host header and was rejected.",
+            )
+            return
+        if scope.get("method") in _MUTATING_METHODS:
+            origin = headers.get("origin")
+            if origin is not None and not _origin_is_loopback(origin):
+                await _send_guard_rejection(
+                    send,
+                    "CROSS_SITE_ORIGIN",
+                    "State-changing requests to the PAE analytics service "
+                    "must come from a loopback origin; this request's "
+                    "Origin is cross-site and was rejected.",
+                )
+                return
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(LoopbackGuardMiddleware)
 
 
 def get_db() -> PAEDatabase:
@@ -945,15 +1080,38 @@ def _open_knowledge_store() -> KnowledgeStore:
     return KnowledgeStore(PKE_PATH)
 
 
+def _knowledge_db_exists() -> bool:
+    """Whether a knowledge-base file exists yet.
+
+    A missing DB is the normal first-run state, not an error: the
+    endpoints answer with the empty state instead of opening (which
+    would create) a store — and instead of the 500 a fresh PAE_HOME
+    produced before Phase 3D, when the store's parent directory did
+    not exist and the open failed.
+    """
+    return os.path.exists(PKE_PATH)
+
+
 @app.get("/api/v1/knowledge/chunks", dependencies=[Depends(require_api_key)])
 async def list_knowledge_chunks(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> dict[str, Any]:
-    """List knowledge-base chunks, newest first (metadata + text)."""
+    """List knowledge-base chunks, newest first (metadata + text).
+
+    The response also carries ``cleartext_chunks`` — how many stored
+    chunks are unencrypted — so the dashboard can label a cleartext
+    configuration plainly instead of implying encryption.
+    """
+    if not _knowledge_db_exists():
+        return {"total": 0, "chunks": [], "cleartext_chunks": 0}
     store = _open_knowledge_store()
     try:
-        return {"total": store.count_chunks(), "chunks": store.list_chunks(limit, offset)}
+        return {
+            "total": store.count_chunks(),
+            "chunks": store.list_chunks(limit, offset),
+            "cleartext_chunks": store.count_cleartext_chunks(),
+        }
     finally:
         store.close()
 
@@ -966,6 +1124,8 @@ async def search_knowledge(
     """Keyword-search the knowledge base (the store's deterministic
     token-overlap ranking — the same fallback retrieval uses when no
     embedding index is available)."""
+    if not _knowledge_db_exists():
+        return {"query": q, "results": []}
     store = _open_knowledge_store()
     try:
         try:
@@ -1032,7 +1192,7 @@ AGENT_CARD: dict[str, Any] = {
 PAE_DISCOVERY: dict[str, Any] = {
     "name": "PAE",
     "description": (
-        "PAE (Personal Analytics Engine) — zero-knowledge, institutional-grade "
+        "PAE (Personal Analytics Engine) — local-first, institutional-grade "
         "investment analytics for individuals."
     ),
     "disclosure": DISCLOSURE,
@@ -1051,7 +1211,7 @@ PAE_DISCOVERY: dict[str, Any] = {
 
 
 @app.get("/.well-known/agent.json")
-async def agent_card(_: None = Depends(api_key_or_none)) -> dict[str, Any]:
+async def agent_card(_: None = Depends(require_agent_token)) -> dict[str, Any]:
     """A2A Agent Card: identity, skills, and the message endpoint URL."""
     return AGENT_CARD
 
@@ -1112,7 +1272,7 @@ def _a2a_task_response(
 
 @app.post("/api/v1/a2a/message/send")
 async def a2a_message_send(
-    body: dict[str, Any], _: None = Depends(api_key_or_none)
+    body: dict[str, Any], _: None = Depends(require_agent_token)
 ) -> dict[str, Any]:
     """Minimal A2A-compatible message endpoint.
 
@@ -1143,12 +1303,12 @@ async def a2a_message_send(
 
 
 @app.get("/.well-known/pae.json")
-async def pae_discovery(_: None = Depends(api_key_or_none)) -> dict[str, Any]:
+async def pae_discovery(_: None = Depends(require_agent_token)) -> dict[str, Any]:
     """PAE discovery document: surfaces, disclosure, and link relations."""
     return PAE_DISCOVERY
 
 
 @app.get("/api/v1/tools")
-async def tools_manifest(_: None = Depends(api_key_or_none)) -> dict[str, Any]:
+async def tools_manifest(_: None = Depends(require_agent_token)) -> dict[str, Any]:
     """Machine-readable tool manifest (single source of truth: MCP tools)."""
     return {"tools": await get_tool_manifest(), "count": len(TOOL_SPECS)}

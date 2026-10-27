@@ -7,7 +7,8 @@
 - POST /api/v1/a2a/message/send (A2A-compatible message endpoint)
 - GET /.well-known/pae.json (discovery) + static repo-root copy
 - GET /api/v1/tools (tool manifest, sourced from MCP definitions)
-- pae.auth.api_key_or_none deferred seam
+- pae.auth agent-token enforcement (Phase 3C: the once-deferred seam
+  now requires the per-install bearer token on all agent routes)
 - repo-root llms.txt
 
 All TestClient-based; no live engine needed.
@@ -48,14 +49,33 @@ DISCLOSURE = (
 )
 
 
+TEST_AGENT_TOKEN = "test-agent-token-phase3c"
+
+
 @pytest.fixture(scope="module")
 def client(tmp_path_factory):
     db_path = tmp_path_factory.mktemp("pae") / "pae.db"
     os.environ["PAE_DB_PATH"] = str(db_path)
     os.environ["PAE_ENGINE_URL"] = "http://127.0.0.1:9"  # unreachable, by design
+    os.environ["PAE_AGENT_TOKEN"] = TEST_AGENT_TOKEN
     from pae.server import app
 
-    with TestClient(app) as test_client:
+    headers = {"Authorization": f"Bearer {TEST_AGENT_TOKEN}"}
+    # Loopback base_url: the F-01 loopback guard refuses non-loopback
+    # Hosts, and TestClient's default "testserver" host is not one.
+    with TestClient(
+        app, base_url="http://127.0.0.1:3002", headers=headers
+    ) as test_client:
+        yield test_client
+
+
+@pytest.fixture(scope="module")
+def bare_client(tmp_path_factory):
+    """Same app, no credentials — for the 401 assertions."""
+    os.environ.setdefault("PAE_AGENT_TOKEN", TEST_AGENT_TOKEN)
+    from pae.server import app
+
+    with TestClient(app, base_url="http://127.0.0.1:3002") as test_client:
         yield test_client
 
 
@@ -219,20 +239,66 @@ def test_manifest_schema_spot_check(client: TestClient) -> None:
     assert mc["num_simulations"].get("default", 10000) == 10000
 
 
-# --- Auth seam ---
+# --- Agent-token auth (Phase 3C: the deferred seam now enforces) ---
+
+AGENT_ROUTES_GET = ["/.well-known/agent.json", "/.well-known/pae.json", "/api/v1/tools"]
 
 
-def test_auth_seam_is_noop_passthrough() -> None:
-    from pae.auth import api_key_or_none
+def test_agent_routes_reject_missing_token(bare_client: TestClient) -> None:
+    for route in AGENT_ROUTES_GET:
+        assert bare_client.get(route).status_code == 401, route
+    resp = bare_client.post(
+        "/api/v1/a2a/message/send", json=_a2a_envelope("journal_log", {"action": "x"})
+    )
+    assert resp.status_code == 401
 
-    assert asyncio.run(api_key_or_none()) is None
+
+def test_agent_routes_reject_wrong_token(bare_client: TestClient) -> None:
+    bad = {"Authorization": "Bearer not-the-token"}
+    for route in AGENT_ROUTES_GET:
+        assert bare_client.get(route, headers=bad).status_code == 401, route
+    resp = bare_client.post(
+        "/api/v1/a2a/message/send",
+        json=_a2a_envelope("journal_log", {"action": "x"}),
+        headers=bad,
+    )
+    assert resp.status_code == 401
 
 
-def test_agent_routes_require_no_credentials(client: TestClient) -> None:
-    """Deferred auth = no behavior change: routes work with no credentials."""
-    assert client.get("/.well-known/agent.json").status_code == 200
-    assert client.get("/.well-known/pae.json").status_code == 200
-    assert client.get("/api/v1/tools").status_code == 200
+def test_agent_routes_accept_the_install_token(client: TestClient) -> None:
+    """The module client carries the token: all agent routes answer."""
+    for route in AGENT_ROUTES_GET:
+        assert client.get(route).status_code == 200, route
+
+
+def test_require_agent_token_dependency() -> None:
+    from fastapi import HTTPException
+
+    from pae.auth import require_agent_token
+
+    assert asyncio.run(require_agent_token(f"Bearer {TEST_AGENT_TOKEN}")) is None
+    for bad in (None, "", "Bearer ", "Bearer wrong", TEST_AGENT_TOKEN):
+        with pytest.raises(HTTPException) as excinfo:
+            asyncio.run(require_agent_token(bad))
+        assert excinfo.value.status_code == 401
+
+
+def test_agent_token_file_generated_owner_only(tmp_path, monkeypatch) -> None:
+    """No env token -> a 0600 token file is created once and reused."""
+    import stat
+
+    from pae.auth import get_or_create_agent_token
+
+    monkeypatch.delenv("PAE_AGENT_TOKEN", raising=False)
+    token_file = tmp_path / "agent-token"
+    monkeypatch.setenv("PAE_AGENT_TOKEN_PATH", str(token_file))
+
+    token = get_or_create_agent_token()
+    assert token
+    assert token_file.read_text().strip() == token
+    assert stat.S_IMODE(token_file.stat().st_mode) == 0o600
+    # Second call returns the same token (no regeneration).
+    assert get_or_create_agent_token() == token
 
 
 # --- llms.txt ---
@@ -251,7 +317,10 @@ def test_llms_txt_at_repo_root() -> None:
     assert "python -m pae.mcp" in text
     for tool in EXPECTED_TOOLS:
         assert f"`{tool}`" in text, f"llms.txt missing tool {tool}"
-    assert "deferred" in text.lower()
+    # llms.txt must describe the auth that actually exists (Phase 3C):
+    # the per-install agent token, not the retired deferred seam.
+    assert "agent token" in text.lower()
+    assert "Authorization: Bearer" in text
 
 
 _BRINSON_REST_PAYLOAD = {

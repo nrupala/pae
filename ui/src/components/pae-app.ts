@@ -17,6 +17,12 @@
  *   (unknown)   -> placeholder; no nav item leads here
  */
 
+import {
+  fetchPortfolios,
+  resolveSelectedPortfolioId,
+  storeSelectedPortfolioId,
+} from '../portfolio-selection.js';
+
 const VALID_THEMES = ['light', 'dark'] as const;
 type Theme = typeof VALID_THEMES[number];
 
@@ -32,6 +38,49 @@ class PaeApp extends HTMLElement {
     this.initTheme();
     this.render();
     this.setupRouting();
+    void this.loadPortfolios();
+  }
+
+  private esc(s: string): string {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /**
+   * Populate the shell's portfolio selector (Phase 3D, W1): the ONE
+   * shared selection every data view reads. Defaults to the first
+   * portfolio with holdings (see portfolio-selection.ts), so a
+   * seeded install opens on the populated portfolio, not the empty
+   * auto-created Default.
+   */
+  private async loadPortfolios(): Promise<void> {
+    const sel = this.shadow.querySelector(
+      '#portfolio-select',
+    ) as HTMLSelectElement | null;
+    if (!sel) return;
+    try {
+      const portfolios = await fetchPortfolios();
+      if (!portfolios.length) {
+        sel.innerHTML = '<option value="">No portfolios yet</option>';
+        sel.disabled = true;
+        return;
+      }
+      const selected = resolveSelectedPortfolioId(portfolios);
+      sel.innerHTML = portfolios
+        .map(
+          (p) =>
+            `<option value="${this.esc(p.id)}">${this.esc(p.name || p.id)}</option>`,
+        )
+        .join('');
+      sel.value = selected;
+      sel.disabled = false;
+    } catch {
+      sel.innerHTML = '<option value="">Portfolios unavailable</option>';
+      sel.disabled = true;
+    }
   }
 
   disconnectedCallback(): void {
@@ -135,6 +184,13 @@ class PaeApp extends HTMLElement {
 
         <nav class="pae-sidebar" aria-label="Main navigation">
           <div style="font-size:var(--font-size-xs);font-weight:600;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:var(--space-3)">
+            Portfolio
+          </div>
+          <select id="portfolio-select" aria-label="Active portfolio"
+            style="width:100%;padding:6px 10px;border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border-color);margin-bottom:var(--space-6)">
+            <option value="">Loading…</option>
+          </select>
+          <div style="font-size:var(--font-size-xs);font-weight:600;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:var(--space-3)">
             Analytics
           </div>
           <div class="nav-items" role="list">
@@ -232,6 +288,18 @@ class PaeApp extends HTMLElement {
     const themeBtn = this.shadow.getElementById('theme-btn');
     if (themeBtn) {
       themeBtn.addEventListener('click', () => this.toggleTheme());
+    }
+
+    const portfolioSel = this.shadow.getElementById('portfolio-select');
+    if (portfolioSel) {
+      portfolioSel.addEventListener('change', () => {
+        const value = (portfolioSel as HTMLSelectElement).value;
+        if (value) {
+          storeSelectedPortfolioId(value);
+          // Remount the current view so it reloads on the new selection.
+          this.handleRoute(window.location.hash);
+        }
+      });
     }
   }
 }

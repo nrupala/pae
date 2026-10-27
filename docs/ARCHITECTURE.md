@@ -103,4 +103,4 @@ This is enforced architecturally:
 - No server-side function accepts plaintext financial data
 - All API endpoints operate on encrypted payloads or derived analytics
 - Key material (KEK) exists only in client memory during active sessions — derived client-side, never transmitted (`ui/src/crypto/vault-client.ts`)
-- Argon2id with 600K iterations derives the KEK from the user's passphrase
+- Argon2id (RFC 9106 second-recommended profile: 64 MiB, 3 iterations, 4 lanes) derives the KEK from the user's passphrase

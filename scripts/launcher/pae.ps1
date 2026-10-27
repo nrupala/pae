@@ -103,6 +103,11 @@ function Set-CommonEnv {
     )
     if ($env:PAE_CORS_ORIGINS) { $origins += $env:PAE_CORS_ORIGINS }
     $env:PAE_CORS_ORIGINS = ($origins | Select-Object -Unique) -join ','
+    # One per-install agent token for both processes (Phase 3C): the
+    # engine gates its crypto oracle endpoints with it and analytics
+    # gates the A2A/agent surfaces. Whichever starts first creates
+    # the file; the user reads it here to authorize an agent.
+    $env:PAE_AGENT_TOKEN_PATH = Join-Path $DataDir 'agent-token'
 }
 
 function Start-Engine {

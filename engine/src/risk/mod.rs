@@ -5,3 +5,6 @@ pub mod correlation;
 pub mod metrics;
 pub mod montecarlo;
 pub mod stress;
+
+#[cfg(test)]
+mod known_answers;
