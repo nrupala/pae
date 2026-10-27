@@ -76,7 +76,7 @@ class PaeOptimize extends HTMLElement {
   private result: OptimizeResponse | null = null;
   private error: string = '';
   private loading: boolean = true;
-  private riskFreeRate: number = 0.02;
+  private riskFreeRate: number = 0;
 
   constructor() {
     super();
