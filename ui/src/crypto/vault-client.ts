@@ -11,8 +11,10 @@
  *
  * The engine has NO passphrase-derivation endpoint (POST
  * /api/v1/crypto/derive-key was deleted 2026-10-05). /encrypt and
- * /decrypt remain caller-supplied key+data oracles BY DESIGN for
- * local-first deployment; see docs/THREAT_MODEL.md.
+ * /decrypt remain caller-supplied key+data helpers for local-first
+ * deployment, and since Phase 3C they require the per-install agent
+ * token (Authorization: Bearer — see docs/SELF_HOST.md), so they are
+ * no longer open oracles; see docs/THREAT_MODEL.md.
  *
  * DEPLOY NOTE: ui/vendor must be copied next to the compiled output
  * (dist/vendor). The import below resolves at runtime to
@@ -55,10 +57,18 @@ function bytesToB64(bytes: Uint8Array): string {
   return btoa(bin);
 }
 
-async function postJson<T>(url: string, body: unknown): Promise<T> {
+async function postJson<T>(
+  url: string,
+  body: unknown,
+  agentToken?: string
+): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (agentToken) {
+    headers['Authorization'] = `Bearer ${agentToken}`;
+  }
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -118,28 +128,41 @@ export async function deriveKeyB64(
   return bytesToB64(raw);
 }
 
-/** Encrypt plaintext via the engine (key+data oracle, local-first). */
+/**
+ * Encrypt plaintext via the engine (caller-supplied key helper,
+ * local-first). The endpoint requires the per-install agent token —
+ * pass it as `agentToken` (the user reads it from the token file;
+ * see docs/SELF_HOST.md). Prefer encryptWithDEK below, which never
+ * sends key or plaintext anywhere.
+ */
 export async function encrypt(
   engineUrl: string,
   keyB64: string,
-  plaintext: string
+  plaintext: string,
+  agentToken?: string
 ): Promise<EncryptResult> {
-  return postJson<EncryptResult>(`${engineUrl}/api/v1/crypto/encrypt`, {
-    plaintext,
-    key_b64: keyB64,
-  });
+  return postJson<EncryptResult>(
+    `${engineUrl}/api/v1/crypto/encrypt`,
+    {
+      plaintext,
+      key_b64: keyB64,
+    },
+    agentToken
+  );
 }
 
-/** Decrypt ciphertext via the engine (key+data oracle, local-first). */
+/** Decrypt ciphertext via the engine. See encrypt() re: the token. */
 export async function decrypt(
   engineUrl: string,
   keyB64: string,
   ciphertext_b64: string,
-  nonce_b64: string
+  nonce_b64: string,
+  agentToken?: string
 ): Promise<string> {
   const out = await postJson<{ plaintext: string }>(
     `${engineUrl}/api/v1/crypto/decrypt`,
-    { ciphertext_b64, nonce_b64, key_b64: keyB64 }
+    { ciphertext_b64, nonce_b64, key_b64: keyB64 },
+    agentToken
   );
   return out.plaintext;
 }
