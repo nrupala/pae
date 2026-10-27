@@ -262,7 +262,8 @@ def _stress_client(tmp_path_factory):
     os.environ["PAE_DB_PATH"] = str(db_path)
     from pae.server import app
 
-    with TestClient(app) as test_client:
+    # Loopback base_url: the F-01 guard refuses non-loopback Hosts.
+    with TestClient(app, base_url="http://127.0.0.1:3002") as test_client:
         yield test_client
 
 

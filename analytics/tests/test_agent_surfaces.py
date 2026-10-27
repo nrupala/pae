@@ -61,7 +61,11 @@ def client(tmp_path_factory):
     from pae.server import app
 
     headers = {"Authorization": f"Bearer {TEST_AGENT_TOKEN}"}
-    with TestClient(app, headers=headers) as test_client:
+    # Loopback base_url: the F-01 loopback guard refuses non-loopback
+    # Hosts, and TestClient's default "testserver" host is not one.
+    with TestClient(
+        app, base_url="http://127.0.0.1:3002", headers=headers
+    ) as test_client:
         yield test_client
 
 
@@ -71,7 +75,7 @@ def bare_client(tmp_path_factory):
     os.environ.setdefault("PAE_AGENT_TOKEN", TEST_AGENT_TOKEN)
     from pae.server import app
 
-    with TestClient(app) as test_client:
+    with TestClient(app, base_url="http://127.0.0.1:3002") as test_client:
         yield test_client
 
 

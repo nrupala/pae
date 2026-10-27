@@ -286,7 +286,8 @@ def client(tmp_path_factory: Any) -> Any:
     os.environ["PAE_ENGINE_URL"] = "http://127.0.0.1:9"  # unreachable, by design
     from pae.server import app
 
-    with TestClient(app) as test_client:
+    # Loopback base_url: the F-01 guard refuses non-loopback Hosts.
+    with TestClient(app, base_url="http://127.0.0.1:3002") as test_client:
         yield test_client
 
 

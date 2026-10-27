@@ -15,6 +15,7 @@ Usage:
     uvicorn pae.server:app --port 3002 --reload
 """
 
+import ipaddress
 import json
 import logging
 import os
@@ -28,6 +29,8 @@ from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from starlette.datastructures import Headers
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from pae.auth import (
     agent_token_path,
@@ -126,6 +129,120 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
+
+
+# --- Loopback guard (release-gate F-01) ---
+#
+# CORS narrows which origins a browser lets READ responses, but it
+# never inspects the Host header: a DNS-rebinding page (an attacker
+# domain whose DNS flips to 127.0.0.1) issues requests whose Host is
+# the attacker's name, and nothing in the CORS layer notices. So, for
+# EVERY request, the Host must be loopback (127.0.0.0/8, localhost, or
+# ::1, any port). Additionally, for state-changing methods
+# (POST/PUT/DELETE/PATCH), an Origin header that is present must
+# itself be loopback: a cross-site page posting to 127.0.0.1 sends its
+# own (non-loopback) Origin, and it is rejected before any route runs.
+# Requests with no Origin — curl, the MCP server, the engine's proxy,
+# tests — are unaffected: they are not web pages, and the threat this
+# guards against is a page in the user's browser reaching loopback
+# behind the user's back. The engine enforces the identical control
+# (``loopback_guard`` in engine/src/main.rs).
+#
+# Registered AFTER CORS, so in Starlette's stack it is the OUTERMOST
+# middleware: a rebound or cross-site request is refused before the
+# CORS layer — including its preflight responses — acts on it.
+
+_MUTATING_METHODS = frozenset({"POST", "PUT", "DELETE", "PATCH"})
+
+
+def _authority_hostname(authority: str) -> str:
+    """Hostname portion of ``host``, ``host:port``, ``[v6]``, ``[v6]:port``."""
+    authority = authority.strip()
+    if authority.startswith("["):
+        return authority[1:].split("]", 1)[0]
+    host, sep, port = authority.rpartition(":")
+    if sep and port.isdigit():
+        return host
+    return authority
+
+
+def _is_loopback_hostname(hostname: str) -> bool:
+    if hostname.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
+
+
+def _is_loopback_authority(authority: str) -> bool:
+    return _is_loopback_hostname(_authority_hostname(authority))
+
+
+def _origin_is_loopback(origin: str) -> bool:
+    """Whether a serialized Origin (``scheme://host[:port]``) is loopback."""
+    _, sep, rest = origin.strip().partition("://")
+    if not sep:
+        return False  # e.g. the literal "null" — never a loopback origin
+    return _is_loopback_authority(rest.split("/", 1)[0])
+
+
+async def _send_guard_rejection(send: Send, code: str, message: str) -> None:
+    body = json.dumps({"error": message, "code": code}).encode()
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 403,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(body)).encode()),
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": body})
+
+
+class LoopbackGuardMiddleware:
+    """ASGI guard: loopback Host allowlist + cross-site Origin rejection."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        headers = Headers(scope=scope)
+        host = headers.get("host")
+        if host is None:
+            # HTTP/1.1 requests always carry Host (uvicorn refuses
+            # those without); fall back to the socket's own address.
+            server = scope.get("server") or ("", 0)
+            host = str(server[0])
+        if not _is_loopback_authority(host):
+            await _send_guard_rejection(
+                send,
+                "NON_LOOPBACK_HOST",
+                "The PAE analytics service only serves loopback hosts "
+                "(127.0.0.1, localhost, [::1]); this request arrived "
+                "with a non-loopback Host header and was rejected.",
+            )
+            return
+        if scope.get("method") in _MUTATING_METHODS:
+            origin = headers.get("origin")
+            if origin is not None and not _origin_is_loopback(origin):
+                await _send_guard_rejection(
+                    send,
+                    "CROSS_SITE_ORIGIN",
+                    "State-changing requests to the PAE analytics service "
+                    "must come from a loopback origin; this request's "
+                    "Origin is cross-site and was rejected.",
+                )
+                return
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(LoopbackGuardMiddleware)
 
 
 def get_db() -> PAEDatabase:

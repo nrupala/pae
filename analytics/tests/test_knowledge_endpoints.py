@@ -72,7 +72,8 @@ def client(tmp_path_factory):
     _seed(pke_path)
     old = server.PKE_PATH
     server.PKE_PATH = str(pke_path)
-    with TestClient(app) as test_client:
+    # Loopback base_url: the F-01 guard refuses non-loopback Hosts.
+    with TestClient(app, base_url="http://127.0.0.1:3002") as test_client:
         yield test_client
     server.PKE_PATH = old
 
