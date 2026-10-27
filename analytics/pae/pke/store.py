@@ -417,6 +417,41 @@ class KnowledgeStore:
         row = self._conn.execute("SELECT COUNT(*) AS n FROM pke_chunks_vec").fetchone()
         return int(row["n"])
 
+    def list_chunks(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
+        """List stored chunks, newest first, as display-ready dicts.
+
+        Each dict carries the chunk metadata (``chunk_id``, ``source``,
+        ``author``, ``date``, ``themes``) plus ``text`` and ``encrypted``.
+        When a row is encrypted and this store holds no DEK, its ``text``
+        is ``None`` and ``encrypted`` is True — the metadata stays
+        listable (it is never encrypted; see the module docstring) while
+        the content remains unreadable, loudly, instead of failing the
+        whole listing the way :meth:`get_chunk` does.
+        """
+        if limit < 1:
+            raise ValueError(f"limit must be at least 1, got {limit}")
+        if offset < 0:
+            raise ValueError(f"offset must be at least 0, got {offset}")
+        rows = self._conn.execute(
+            "SELECT chunk_id, source, author, date, themes, text, nonce "
+            "FROM pke_chunks ORDER BY created_at DESC, chunk_id ASC "
+            "LIMIT ? OFFSET ?",
+            (limit, offset),
+        ).fetchall()
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            result = dict(row)
+            nonce = result.pop("nonce")
+            encrypted = nonce is not None
+            if encrypted and self._dek is None:
+                result["text"] = None
+            else:
+                result["text"] = self._maybe_decrypt(result["text"], nonce)
+            result["encrypted"] = encrypted
+            result["themes"] = json.loads(result["themes"])
+            out.append(result)
+        return out
+
     def get_chunk(self, chunk_id: str) -> dict[str, Any] | None:
         """Fetch one chunk as a dict (themes decoded, text decrypted), or None.
 

@@ -82,8 +82,22 @@ fn create_app(store: Arc<storage::Store>) -> Router {
 /// Build the Axum router. Factored out of `main` so the HTTP-layer
 /// integration tests below can construct the app without binding a socket.
 fn build_app(store: Arc<storage::Store>, cfg: &AppConfig) -> Router {
-    // Routes backed by the versioning store
-    let version_store = Arc::new(versioning::store::VersionStore::new());
+    // Routes backed by the versioning store. The store is persistent
+    // (Phase 3B): history is reloaded from the SQLite database and
+    // every append is written through, so the decision journal and
+    // other versioned records survive engine restarts. If the reload
+    // fails the engine still starts — with an empty in-memory store
+    // and a loud error in the log — rather than refusing to serve.
+    let version_store = Arc::new(
+        versioning::store::VersionStore::open_persistent(store.clone()).unwrap_or_else(|e| {
+            tracing::error!(
+                error = %e,
+                "failed to load version records from the database; \
+                 version history is in-memory only for this run"
+            );
+            versioning::store::VersionStore::new()
+        }),
+    );
     let versioned_routes = Router::new()
         .route("/api/v1/version", post(api::versioning_api::append_version))
         .route("/api/v1/version/history", post(api::versioning_api::get_history))

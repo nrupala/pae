@@ -19,11 +19,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
-use chrono::Utc;
+use chrono::{DateTime, SecondsFormat, Utc};
 use rand::RngCore;
 use rusqlite::{Connection, OpenFlags};
 use thiserror::Error;
 use uuid::Uuid;
+
+use crate::versioning::types::{VersionMetadata, VersionedRecord};
 
 /// Default number of pooled connections.
 const DEFAULT_POOL_SIZE: usize = 4;
@@ -348,6 +350,32 @@ impl Store {
                     key   TEXT PRIMARY KEY,
                     value TEXT NOT NULL
                 );
+
+                -- Append-only versioned records: the durable backing
+                -- for versioning::VersionStore (decision journal,
+                -- holdings snapshots, configurations, ...). Rows are
+                -- never updated or deleted; each append inserts one
+                -- row keyed by its content-addressed version hash.
+                -- Content stays client-side ciphertext, exactly as in
+                -- the holdings tables above.
+                CREATE TABLE IF NOT EXISTS version_records (
+                    version_hash       TEXT PRIMARY KEY,
+                    entity_id          TEXT NOT NULL,
+                    entity_type        TEXT NOT NULL,
+                    version            INTEGER NOT NULL,
+                    author             TEXT NOT NULL,
+                    created_at         TEXT NOT NULL,
+                    content_encrypted  BLOB NOT NULL,
+                    nonce              BLOB NOT NULL,
+                    change_summary     TEXT,
+                    content_size_bytes INTEGER NOT NULL,
+                    tags               TEXT NOT NULL,
+                    parent_hash        TEXT,
+                    UNIQUE (entity_id, version)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_version_records_entity
+                    ON version_records(entity_id, version);
                 "#,
             )?;
             Ok(())
@@ -411,6 +439,154 @@ impl Store {
     /// stores it opaquely and serves it back via `get_dek_envelope`.
     pub fn set_dek_envelope(&self, envelope_json: &str) -> Result<(), StorageError> {
         self.with_conn(|conn| Self::meta_set(conn, DEK_ENVELOPE_META_KEY, envelope_json))
+    }
+
+    // --- Versioned records (durable backing for VersionStore) ---
+
+    /// Insert one versioned record. Append-only: a duplicate
+    /// `version_hash` (or duplicate `(entity_id, version)`) is a
+    /// constraint error, never an overwrite.
+    ///
+    /// Called by `versioning::VersionStore` on every append when the
+    /// store is opened persistent, so version history — the decision
+    /// journal included — survives engine restarts.
+    ///
+    /// # Errors
+    /// Returns [`StorageError::Sqlite`] on a database failure, or
+    /// [`StorageError::Validation`] if a field cannot be encoded.
+    pub fn insert_version_record(&self, record: &VersionedRecord) -> Result<(), StorageError> {
+        let entity_type = serde_json::to_string(&record.entity_type).map_err(|e| {
+            StorageError::Validation(format!("version record entity_type encode: {e}"))
+        })?;
+        let author = serde_json::to_string(&record.author).map_err(|e| {
+            StorageError::Validation(format!("version record author encode: {e}"))
+        })?;
+        let tags = serde_json::to_string(&record.metadata.tags).map_err(|e| {
+            StorageError::Validation(format!("version record tags encode: {e}"))
+        })?;
+        let created_at = record
+            .created_at
+            .to_rfc3339_opts(SecondsFormat::Nanos, true);
+
+        self.with_conn(|conn| {
+            conn.execute(
+                "INSERT INTO version_records (
+                    version_hash, entity_id, entity_type, version, author,
+                    created_at, content_encrypted, nonce, change_summary,
+                    content_size_bytes, tags, parent_hash
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                rusqlite::params![
+                    record.version_hash,
+                    record.entity_id,
+                    entity_type,
+                    record.version as i64,
+                    author,
+                    created_at,
+                    record.content_encrypted,
+                    record.nonce,
+                    record.metadata.change_summary,
+                    record.metadata.content_size_bytes as i64,
+                    tags,
+                    record.parent_hash,
+                ],
+            )?;
+            Ok(())
+        })
+    }
+
+    /// Load every persisted versioned record, ordered by
+    /// `(entity_id, version)` so the caller can rebuild per-entity
+    /// version chains directly.
+    ///
+    /// # Errors
+    /// Returns [`StorageError::Sqlite`] on a database failure, or
+    /// [`StorageError::Validation`] if a stored row cannot be decoded
+    /// (corrupt or written by an incompatible build).
+    pub fn load_version_records(&self) -> Result<Vec<VersionedRecord>, StorageError> {
+        /// Raw column tuple, decoded into a `VersionedRecord` below
+        /// (serde/chrono decoding errors are not rusqlite errors).
+        type RawRow = (
+            String,         // version_hash
+            String,         // entity_id
+            String,         // entity_type (JSON)
+            i64,            // version
+            String,         // author (JSON)
+            String,         // created_at (RFC 3339)
+            Vec<u8>,        // content_encrypted
+            Vec<u8>,        // nonce
+            Option<String>, // change_summary
+            i64,            // content_size_bytes
+            String,         // tags (JSON)
+            Option<String>, // parent_hash
+        );
+
+        let raw: Vec<RawRow> = self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT version_hash, entity_id, entity_type, version, author,
+                        created_at, content_encrypted, nonce, change_summary,
+                        content_size_bytes, tags, parent_hash
+                 FROM version_records
+                 ORDER BY entity_id ASC, version ASC",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                    row.get(9)?,
+                    row.get(10)?,
+                    row.get(11)?,
+                ))
+            })?;
+            let mut out = Vec::new();
+            for row in rows {
+                out.push(row?);
+            }
+            Ok(out)
+        })?;
+
+        let mut records = Vec::with_capacity(raw.len());
+        for (hash, entity_id, entity_type, version, author, created_at,
+             content, nonce, change_summary, size, tags, parent_hash) in raw
+        {
+            let bad = |field: &str, e: String| {
+                StorageError::Validation(format!(
+                    "version record {hash} ({entity_id} v{version}): bad {field}: {e}"
+                ))
+            };
+            let entity_type = serde_json::from_str(&entity_type)
+                .map_err(|e| bad("entity_type", e.to_string()))?;
+            let author = serde_json::from_str(&author)
+                .map_err(|e| bad("author", e.to_string()))?;
+            let created_at = DateTime::parse_from_rfc3339(&created_at)
+                .map(|dt| dt.with_timezone(&Utc))
+                .map_err(|e| bad("created_at", e.to_string()))?;
+            let tags = serde_json::from_str(&tags)
+                .map_err(|e| bad("tags", e.to_string()))?;
+            records.push(VersionedRecord {
+                version_hash: hash,
+                entity_id,
+                entity_type,
+                version: version as u64,
+                author,
+                created_at,
+                content_encrypted: content,
+                nonce,
+                metadata: VersionMetadata {
+                    change_summary,
+                    content_size_bytes: size as u64,
+                    tags,
+                },
+                parent_hash,
+            });
+        }
+        Ok(records)
     }
 
     // --- Accounts ---

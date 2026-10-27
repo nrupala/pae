@@ -6,11 +6,15 @@
  * Vanilla Web Component - no framework, no dependencies.
  * Manages layout, theme, and hash-based routing.
  *
- * Routes:
- *   #dashboard  -> <pae-dashboard>
- *   #import     -> <pae-import>
- *   #optimize / #optimizer -> <pae-optimize>
- *   (others)    -> placeholder with coming soon message
+ * Routes (Phase 3B: every nav item is a real view over a real
+ * backend — no placeholder routes):
+ *   #dashboard  -> <pae-dashboard>    #risk       -> <pae-risk>
+ *   #factors    -> <pae-factors>      #montecarlo -> <pae-scenarios>
+ *   #stress     -> <pae-scenarios>    #optimizer  -> <pae-optimize>
+ *   #carry      -> <pae-carry>        #journal    -> <pae-journal>
+ *   #knowledge  -> <pae-knowledge>    #import     -> <pae-import>
+ *   #holdings   -> <pae-holdings>
+ *   (unknown)   -> placeholder; no nav item leads here
  */
 
 const VALID_THEMES = ['light', 'dark'] as const;
@@ -89,6 +93,10 @@ class PaeApp extends HTMLElement {
       'stress': '<pae-scenarios view="stress"></pae-scenarios>',
       'optimize': '<pae-optimize></pae-optimize>',
       'optimizer': '<pae-optimize></pae-optimize>',
+      'carry': '<pae-carry></pae-carry>',
+      'journal': '<pae-journal></pae-journal>',
+      'knowledge': '<pae-knowledge></pae-knowledge>',
+      'holdings': '<pae-holdings></pae-holdings>',
     };
 
     const comingSoon = `
@@ -133,7 +141,6 @@ class PaeApp extends HTMLElement {
             <a class="nav-item active" href="#dashboard" role="listitem">Dashboard</a>
             <a class="nav-item" href="#risk" role="listitem">Risk Metrics</a>
             <a class="nav-item" href="#factors" role="listitem">Factor Decomposition</a>
-            <a class="nav-item" href="#correlation" role="listitem">Correlation</a>
             <a class="nav-item" href="#montecarlo" role="listitem">Monte Carlo</a>
             <a class="nav-item" href="#stress" role="listitem">Stress Testing</a>
             <a class="nav-item" href="#optimizer" role="listitem">Optimizer</a>
@@ -145,8 +152,6 @@ class PaeApp extends HTMLElement {
           </div>
           <div class="nav-items" role="list">
             <a class="nav-item" href="#journal" role="listitem">Decision Journal</a>
-            <a class="nav-item" href="#biases" role="listitem">Bias Detection</a>
-            <a class="nav-item" href="#calibration" role="listitem">Calibration</a>
             <a class="nav-item" href="#knowledge" role="listitem">Knowledge Base</a>
           </div>
 
@@ -156,7 +161,6 @@ class PaeApp extends HTMLElement {
           <div class="nav-items" role="list">
             <a class="nav-item" href="#import" role="listitem">Import</a>
             <a class="nav-item" href="#holdings" role="listitem">Holdings</a>
-            <a class="nav-item" href="#tax" role="listitem">Tax Analyzer</a>
           </div>
         </nav>
 

@@ -18,10 +18,10 @@ use super::types::{EntityType, SnapshotQuery, VersionedRecord};
 ///
 /// Implementation (Phase 2, 2026-10-26): the version store is append-only, so
 /// a snapshot at `as_of` is, per entity, the latest version with
-/// `created_at <= as_of`. The store's in-memory backend answers this
-/// directly; the same semantics map onto the documented SQL shape
-/// (GROUP BY entity_id, MAX(version) WHERE created_at <= as_of) when the
-/// SQLite backend lands.
+/// `created_at <= as_of`. Since Phase 3B the store's in-memory index is
+/// backed by SQLite (the `version_records` table, reloaded on open), so
+/// snapshots and diffs cover history from before the current process
+/// started, not just this run's appends.
 pub struct SnapshotEngine<'a> {
     store: &'a VersionStore,
 }
