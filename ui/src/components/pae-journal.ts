@@ -56,7 +56,10 @@ import {
   type VaultSession,
 } from '../crypto/vault-client.js';
 
-const ENGINE_BASE = 'http://localhost:3001';
+// Same-origin (Phase 3D, W5): the engine serves this dashboard and
+// proxies the vault API, so relative paths work at any
+// configured port pair. Do not hardcode a host:port here again.
+const ENGINE_BASE = '';
 
 interface VersionRecord {
   version_hash: string;

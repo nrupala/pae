@@ -9,7 +9,12 @@
  * - GET  /api/v1/analytics/series?portfolio_id= -> period/cumulative/drawdown
  */
 
-const API_BASE = 'http://localhost:3002';
+// Same-origin (Phase 3D, W5): the engine serves this dashboard and
+// proxies the analytics data plane, so relative paths work at any
+// configured port pair. Do not hardcode a host:port here again.
+import { selectedPortfolioId } from '../portfolio-selection.js';
+
+const API_BASE = '';
 
 interface RiskResponse {
   var_95: number;
@@ -53,12 +58,9 @@ class PaeRisk extends HTMLElement {
   }
 
   private async firstPortfolioId(): Promise<string> {
-    const resp = await fetch(`${API_BASE}/api/v1/portfolios`);
-    if (!resp.ok) throw new Error(`portfolios: HTTP ${resp.status}`);
-    const data = await resp.json();
-    const portfolios = data.portfolios || [];
-    if (!portfolios.length) throw new Error('empty');
-    return portfolios[0].id;
+    // The shell's shared selection (portfolio-selection.ts) — before
+    // Phase 3D this returned portfolios[0], the empty Default.
+    return selectedPortfolioId();
   }
 
   private async loadData(): Promise<void> {

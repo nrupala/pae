@@ -7,7 +7,12 @@
  * fed by POST /api/v1/analytics/factor?portfolio_id=.
  */
 
-const API_BASE = 'http://localhost:3002';
+// Same-origin (Phase 3D, W5): the engine serves this dashboard and
+// proxies the analytics data plane, so relative paths work at any
+// configured port pair. Do not hardcode a host:port here again.
+import { selectedPortfolioId } from '../portfolio-selection.js';
+
+const API_BASE = '';
 
 interface FactorExposure {
   factor_name: string;
@@ -57,12 +62,9 @@ class PaeFactors extends HTMLElement {
     this.error = '';
     this.render();
     try {
-      const pResp = await fetch(`${API_BASE}/api/v1/portfolios`);
-      if (!pResp.ok) throw new Error(`portfolios: HTTP ${pResp.status}`);
-      const portfolios = (await pResp.json()).portfolios || [];
-      if (!portfolios.length) throw new Error('empty');
+      const portfolioId = await selectedPortfolioId();
       const fResp = await fetch(
-        `${API_BASE}/api/v1/analytics/factor?portfolio_id=${encodeURIComponent(portfolios[0].id)}`,
+        `${API_BASE}/api/v1/analytics/factor?portfolio_id=${encodeURIComponent(portfolioId)}`,
         { method: 'POST' },
       );
       if (!fResp.ok) {

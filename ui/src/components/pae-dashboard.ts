@@ -10,11 +10,18 @@
  * - GET /api/v1/dashboard/{portfolio_id} -> summary, allocation, top holdings
  * - GET /api/v1/portfolios -> list of portfolios
  *
- * The Python server (port 3002) handles data persistence and proxies
- * risk calculations to the Rust engine (port 3001).
+ * All calls are same-origin: the engine serves this dashboard and
+ * proxies the analytics data plane. The portfolio shown is the
+ * shell's shared selection (portfolio-selection.ts), never a local
+ * portfolios[0] guess.
  */
 
-const API_BASE = 'http://localhost:3002';
+import { resolveSelectedPortfolioId } from '../portfolio-selection.js';
+
+// Same-origin (Phase 3D, W5): the engine serves this dashboard and
+// proxies the analytics data plane, so relative paths work at any
+// configured port pair. Do not hardcode a host:port here again.
+const API_BASE = '';
 
 interface DashboardData {
   summary: {
@@ -83,8 +90,9 @@ class PaeDashboard extends HTMLElement {
         return;
       }
 
-      // Use the first portfolio (or a selected one)
-      this.portfolioId = portfolios[0].id;
+      // The shell's shared selection (defaults to the first
+      // portfolio WITH holdings — Phase 3D, W1)
+      this.portfolioId = resolveSelectedPortfolioId(portfolios);
 
       // Fetch dashboard data
       const dashResp = await fetch(`${API_BASE}/api/v1/dashboard/${this.portfolioId}`);

@@ -10,7 +10,15 @@
  * happens through Import; this view only shows.
  */
 
-const API_BASE = 'http://localhost:3002';
+// Same-origin (Phase 3D, W5): the engine serves this dashboard and
+// proxies the analytics data plane, so relative paths work at any
+// configured port pair. Do not hardcode a host:port here again.
+import {
+  fetchPortfolios,
+  resolveSelectedPortfolioId,
+} from '../portfolio-selection.js';
+
+const API_BASE = '';
 
 interface HoldingRow {
   id: string;
@@ -62,13 +70,13 @@ class PaeHoldings extends HTMLElement {
     this.error = '';
     this.render();
     try {
-      const pResp = await fetch(`${API_BASE}/api/v1/portfolios`);
-      if (!pResp.ok) throw new Error(`portfolios: HTTP ${pResp.status}`);
-      const portfolios = (await pResp.json()).portfolios || [];
+      const portfolios = await fetchPortfolios();
       if (!portfolios.length) throw new Error('empty');
-      this.portfolioName = portfolios[0].name || '';
+      const selectedId = resolveSelectedPortfolioId(portfolios);
+      const selected = portfolios.find((p) => p.id === selectedId);
+      this.portfolioName = selected?.name || '';
       const resp = await fetch(
-        `${API_BASE}/api/v1/holdings?portfolio_id=${encodeURIComponent(portfolios[0].id)}`,
+        `${API_BASE}/api/v1/holdings?portfolio_id=${encodeURIComponent(selectedId)}`,
       );
       if (!resp.ok) throw new Error(`holdings: HTTP ${resp.status}`);
       this.data = (await resp.json()) as HoldingsResponse;

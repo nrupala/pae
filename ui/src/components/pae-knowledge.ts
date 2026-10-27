@@ -19,7 +19,10 @@
  * never encrypted.
  */
 
-const API_BASE = 'http://localhost:3002';
+// Same-origin (Phase 3D, W5): the engine serves this dashboard and
+// proxies the analytics data plane, so relative paths work at any
+// configured port pair. Do not hardcode a host:port here again.
+const API_BASE = '';
 
 interface KnowledgeChunk {
   chunk_id: string;

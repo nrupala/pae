@@ -13,7 +13,15 @@
  * math; it does not suggest borrowing more or less.
  */
 
-const API_BASE = 'http://localhost:3002';
+// Same-origin (Phase 3D, W5): the engine serves this dashboard and
+// proxies the analytics data plane, so relative paths work at any
+// configured port pair. Do not hardcode a host:port here again.
+import {
+  fetchPortfolios,
+  resolveSelectedPortfolioId,
+} from '../portfolio-selection.js';
+
+const API_BASE = '';
 
 const DISCLOSURE =
   'Educational analytics only. PAE calculates; the user decides. ' +
@@ -72,12 +80,11 @@ class PaeCarry extends HTMLElement {
 
   private async loadPortfolio(): Promise<void> {
     try {
-      const resp = await fetch(`${API_BASE}/api/v1/portfolios`);
-      if (!resp.ok) throw new Error(`portfolios: HTTP ${resp.status}`);
-      const portfolios = (await resp.json()).portfolios || [];
+      const portfolios = await fetchPortfolios();
       if (!portfolios.length) throw new Error('empty');
-      this.portfolioId = portfolios[0].id;
-      this.portfolioName = portfolios[0].name || '';
+      this.portfolioId = resolveSelectedPortfolioId(portfolios);
+      const selected = portfolios.find((p) => p.id === this.portfolioId);
+      this.portfolioName = selected?.name || '';
       this.loading = false;
     } catch (e) {
       this.loading = false;
