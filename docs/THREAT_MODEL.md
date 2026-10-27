@@ -21,7 +21,7 @@
 - **Mitigation**: All stored data is AES-256-GCM ciphertext (random 96-bit
   nonce per encryption). Record keys are derived client-side via Argon2id
   (3 iterations, 64 MiB, 4 lanes, v19, 32-byte output — the RFC 9106
-  first-recommended profile) against the
+  second-recommended profile) against the
   per-database salt served by `GET /api/v1/crypto/kdf-params`. The server
   holds no passphrase-derivation code path — there is nothing to coerce or
   dump for user passphrases. Attacker gets ciphertext only.
@@ -58,7 +58,7 @@
 - **Threat**: Attacker attempts to brute-force the user's passphrase from
   stored material.
 - **Mitigation**: Argon2id with 3 iterations, 64 MiB memory, 4 lanes
-  (RFC 9106 first-recommended profile).
+  (RFC 9106 second-recommended profile).
   The per-database salt is stored in the SQLite `meta` table and served by
   `GET /api/v1/crypto/kdf-params` — it is NOT secret (only stable), so it
   adds no brute-force resistance beyond forcing per-database attacks.
@@ -69,7 +69,7 @@
 | Property | Value |
 |----------|-------|
 | Symmetric cipher | AES-256-GCM |
-| Key derivation | Argon2id, client-side only (3 iterations, 64 MiB, 4 lanes, v19 — RFC 9106 first-recommended profile) |
+| Key derivation | Argon2id, client-side only (3 iterations, 64 MiB, 4 lanes, v19 — RFC 9106 second-recommended profile) |
 | KDF salt | Per-database 16-byte salt, SQLite `meta` table, served via `GET /api/v1/crypto/kdf-params` (not secret) |
 | Client KDF | `ui/src/crypto/vault-client.ts`, vendored hash-wasm (no CDN) |
 | Server-side derivation | **REMOVED 2026-10-05** — `POST /api/v1/crypto/derive-key` deleted |

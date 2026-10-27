@@ -15,7 +15,7 @@ reports within 3 business days.
 ## Design notes
 
 - Vault records and journal entries are encrypted in the browser
-  (AES-256-GCM; key derived with Argon2id, RFC 9106 first-recommended
+  (AES-256-GCM; key derived with Argon2id, RFC 9106 second-recommended
   parameters); the plaintext analytics store is a local file, and the
   knowledge base is encrypted only when content is ingested with a DEK —
   see README.md for the exact split.

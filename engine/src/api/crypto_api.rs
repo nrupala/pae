@@ -16,7 +16,7 @@ use crate::storage::Store;
 /// derivation. These MUST match the production spec served by
 /// `GET /api/v1/crypto/kdf-params` (kept in sync by the kdf-params test).
 ///
-/// The profile is RFC 9106's FIRST RECOMMENDED Argon2id parameter set
+/// The profile is RFC 9106's SECOND RECOMMENDED Argon2id parameter set
 /// (m = 64 MiB, t = 3, p = 4). `KDF_ITERATIONS` was 600_000 until
 /// Phase 3C — a PBKDF2-scale pass count transplanted onto Argon2id,
 /// where the time cost is meant to be single-digit: at 64 MiB per

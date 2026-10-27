@@ -56,7 +56,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full details.
 
 - **AES-256-GCM** encryption for vault records (decision journal and other versioned records), encrypted in the browser before the engine stores them
 - **The analytics store is a local file, unencrypted**: imported holdings live in a SQLite database under your PAE data directory, readable by anyone who can read your files — the posture of any local app's data file. The knowledge base is the same unless its notes were ingested with a data key through the PKE library; the dashboard labels an unencrypted knowledge base plainly. Full-disk encryption is yours to enable.
-- **Argon2id** key derivation (3 iterations, 64MB memory, 4 threads - RFC 9106 first-recommended profile)
+- **Argon2id** key derivation (3 iterations, 64MB memory, 4 threads - RFC 9106 second-recommended profile)
 - Per-vault Data Encryption Keys (DEKs) wrapped with user's Key Encryption Key (KEK) — random 32-byte DEK generated client-side, wrapped with the KEK via AES-256-GCM (WebCrypto); versioned v2 envelope stored opaquely server-side (`ui/src/crypto/vault-client.ts`, `GET/POST /api/v1/crypto/dek-envelope`); v1 vaults (direct-KEK) remain readable. Per-record DEKs remain a documented extension via the envelope's `kid` field.
 - KEK derived client-side from passphrase — **never transmitted** (`ui/src/crypto/vault-client.ts`; `POST /api/v1/crypto/derive-key` was removed 2026-10-05 — no server-side derivation path exists)
 - Optional **Shamir's Secret Sharing** (3-of-5) for key recovery — implemented client-side (`ui/src/crypto/shamir.ts`); the KEK never leaves the browser
