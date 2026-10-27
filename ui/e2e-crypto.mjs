@@ -28,9 +28,10 @@
  *      (or target/release). Wait for it to log "PAE Engine listening".
  *   4. Run:  node ui/e2e-crypto.mjs http://127.0.0.1:3101
  *
- * NOTE: step 2 derives at PRODUCTION params (600K iterations, 64 MiB).
- * In Node/WASM this takes several minutes single-threaded. That cost is
- * why this script stays manual rather than a CI step.
+ * NOTE: step 2 derives at PRODUCTION params (Argon2id: 3 iterations,
+ * 64 MiB, 4 lanes — RFC 9106 first-recommended profile). In Node/WASM
+ * this takes a few seconds. (Before Phase 3C the engine advertised
+ * 600K iterations, which never finished; that is fixed.)
  */
 
 import { getKdfParams, deriveKeyB64, encrypt, decrypt } from './dist/crypto/vault-client.js';

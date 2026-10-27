@@ -15,10 +15,17 @@ use crate::storage::Store;
 /// Argon2id parameters the server expects clients to use for key
 /// derivation. These MUST match the production spec served by
 /// `GET /api/v1/crypto/kdf-params` (kept in sync by the kdf-params test).
+///
+/// The profile is RFC 9106's FIRST RECOMMENDED Argon2id parameter set
+/// (m = 64 MiB, t = 3, p = 4). `KDF_ITERATIONS` was 600_000 until
+/// Phase 3C — a PBKDF2-scale pass count transplanted onto Argon2id,
+/// where the time cost is meant to be single-digit: at 64 MiB per
+/// pass, derivation never completed in practice (>8.6 minutes in the
+/// WASM client, killed), which left the browser vault flow unusable.
 pub const KDF_ALGORITHM: &str = "argon2id";
 pub const KDF_VERSION: u32 = 19;
 pub const KDF_MEMORY_KIB: u32 = 65536;
-pub const KDF_ITERATIONS: u32 = 600_000;
+pub const KDF_ITERATIONS: u32 = 3;
 pub const KDF_PARALLELISM: u32 = 4;
 pub const KDF_OUTPUT_BYTES: u32 = 32;
 

@@ -968,7 +968,7 @@ mod tests {
         assert_eq!(p1["algorithm"], "argon2id");
         assert_eq!(p1["version"], 19);
         assert_eq!(p1["memory_kib"], 65536);
-        assert_eq!(p1["iterations"], 600000);
+        assert_eq!(p1["iterations"], 3);
         assert_eq!(p1["parallelism"], 4);
         assert_eq!(p1["output_bytes"], 32);
         let salt1 = p1["salt_b64"].as_str().expect("salt_b64 is a string");

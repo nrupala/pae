@@ -79,7 +79,7 @@ Error type for all cryptographic operations.
 | **Signature** | `pub async fn kdf_params(State(store): State<Arc<Store>>) -> Json<KdfParamsResponse>` |
 | **Route** | `GET /api/v1/crypto/kdf-params` |
 | **Purpose** | Serve the Argon2id parameters and the per-database salt so clients can derive keys locally. Salt is stable per database (SQLite `meta` table) and is NOT secret. |
-| **Response** | `200 { "algorithm": "argon2id", "version": 19, "memory_kib": 65536, "iterations": 600000, "parallelism": 4, "output_bytes": 32, "salt_b64": string }` |
+| **Response** | `200 { "algorithm": "argon2id", "version": 19, "memory_kib": 65536, "iterations": 3, "parallelism": 4, "output_bytes": 32, "salt_b64": string }` |
 
 ---
 

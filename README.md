@@ -55,7 +55,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full details.
 ## Security Model
 
 - **AES-256-GCM** encryption for all stored data
-- **Argon2id** key derivation (600K iterations, 64MB memory, 4 threads)
+- **Argon2id** key derivation (3 iterations, 64MB memory, 4 threads - RFC 9106 first-recommended profile)
 - Per-vault Data Encryption Keys (DEKs) wrapped with user's Key Encryption Key (KEK) — random 32-byte DEK generated client-side, wrapped with the KEK via AES-256-GCM (WebCrypto); versioned v2 envelope stored opaquely server-side (`ui/src/crypto/vault-client.ts`, `GET/POST /api/v1/crypto/dek-envelope`); v1 vaults (direct-KEK) remain readable. Per-record DEKs remain a documented extension via the envelope's `kid` field.
 - KEK derived client-side from passphrase — **never transmitted** (`ui/src/crypto/vault-client.ts`; `POST /api/v1/crypto/derive-key` was removed 2026-10-05 — no server-side derivation path exists)
 - Optional **Shamir's Secret Sharing** (3-of-5) for key recovery — implemented client-side (`ui/src/crypto/shamir.ts`); the KEK never leaves the browser
