@@ -51,9 +51,12 @@ only — PAE calculates, the user decides, no investment advice.
 
 ## Notes for agents
 
-- Auth is a deferred seam (`analytics/pae/auth.py`): the `api_key_or_none`
-  dependency on agent routes is currently a no-op returning `None`. No
-  credentials are required today; the hook point exists for the paid phase.
+- Agent surfaces require the per-install agent token
+  (`analytics/pae/auth.py`): send `Authorization: Bearer <token>` on the
+  A2A card/message endpoints, the discovery document, and this manifest.
+  The token is generated on first start; the user finds it in the token
+  file (default `~/.pae/agent-token`; see `docs/SELF_HOST.md`) and gives
+  it to the agents they run. Requests without it get HTTP 401.
 - Engine-backed tools (`compute_risk`, `monte_carlo`, `stress_test`) proxy
   the Rust engine at `PAE_ENGINE_URL` (default `http://localhost:3001`).
   All other tools are Python-native.

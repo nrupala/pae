@@ -29,13 +29,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from pae.auth import api_key_or_none, require_api_key
+from pae.auth import (
+    agent_token_path,
+    get_or_create_agent_token,
+    require_agent_token,
+    require_api_key,
+)
 from pae.mcp import TOOL_SPECS, get_tool_manifest, run_agent_tool
-from pae.pke.store import KnowledgeStore, PkeEncryptionError, default_store_path
 from pae.mcp.tools import DISCLOSURE, PAETools
 from pae.models.brinson import attribute as brinson_attribute
 from pae.models.carry import analyze_carry
 from pae.models.optimize import OptimizeError, holdings_to_inputs, optimize
+from pae.pke.store import KnowledgeStore, PkeEncryptionError, default_store_path
 from pae.storage.csv_import import import_csv_string
 from pae.storage.db import (
     Account,
@@ -67,6 +72,16 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:  # noqa: ARG001
     global db  # noqa: PLW0603
     db = PAEDatabase(DB_PATH)
     db.initialize()
+
+    # Agent surfaces require the per-install bearer token (Phase 3C).
+    # Resolve (creating on first start) so the token file exists and
+    # its location is in the log before any agent connects. The token
+    # VALUE is never logged.
+    get_or_create_agent_token()
+    if os.environ.get("PAE_AGENT_TOKEN", "").strip():
+        logger.info("Agent token: provided via PAE_AGENT_TOKEN")
+    else:
+        logger.info("Agent token file: %s", agent_token_path())
 
     # Create default portfolio if none exists
     portfolios = db.get_portfolios()
@@ -1051,7 +1066,7 @@ PAE_DISCOVERY: dict[str, Any] = {
 
 
 @app.get("/.well-known/agent.json")
-async def agent_card(_: None = Depends(api_key_or_none)) -> dict[str, Any]:
+async def agent_card(_: None = Depends(require_agent_token)) -> dict[str, Any]:
     """A2A Agent Card: identity, skills, and the message endpoint URL."""
     return AGENT_CARD
 
@@ -1112,7 +1127,7 @@ def _a2a_task_response(
 
 @app.post("/api/v1/a2a/message/send")
 async def a2a_message_send(
-    body: dict[str, Any], _: None = Depends(api_key_or_none)
+    body: dict[str, Any], _: None = Depends(require_agent_token)
 ) -> dict[str, Any]:
     """Minimal A2A-compatible message endpoint.
 
@@ -1143,12 +1158,12 @@ async def a2a_message_send(
 
 
 @app.get("/.well-known/pae.json")
-async def pae_discovery(_: None = Depends(api_key_or_none)) -> dict[str, Any]:
+async def pae_discovery(_: None = Depends(require_agent_token)) -> dict[str, Any]:
     """PAE discovery document: surfaces, disclosure, and link relations."""
     return PAE_DISCOVERY
 
 
 @app.get("/api/v1/tools")
-async def tools_manifest(_: None = Depends(api_key_or_none)) -> dict[str, Any]:
+async def tools_manifest(_: None = Depends(require_agent_token)) -> dict[str, Any]:
     """Machine-readable tool manifest (single source of truth: MCP tools)."""
     return {"tools": await get_tool_manifest(), "count": len(TOOL_SPECS)}
