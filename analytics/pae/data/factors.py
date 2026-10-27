@@ -17,6 +17,7 @@ import io
 import json
 import logging
 import os
+import re
 import urllib.parse
 import zipfile
 from dataclasses import dataclass, field
@@ -140,6 +141,24 @@ class FactorDataError(Exception):
     """Raised when factor or macro data fetching fails."""
 
 
+_API_KEY_PARAM = re.compile(r"(api_key=)[^&\s\"']+")
+
+
+def _redact_url_and_key(text: str, url: str) -> str:
+    """Strip a request URL — and any api_key in it — from error text.
+
+    Some urllib / http.client exception strings embed the failing URL.
+    For the keyed FRED endpoint the URL carries the api_key, so an
+    unsanitized ``f"...: {e}"`` would put a credential into the raised
+    error and, from there, into logs and reports (release-gate F-04).
+    The EIA adapter avoids the same trap by never formatting its URL
+    into errors; downloads here get the same guarantee by redaction.
+    """
+    if url:
+        text = text.replace(url, "<url>")
+    return _API_KEY_PARAM.sub(r"\1<redacted>", text)
+
+
 def _safe_download(url: str, description: str) -> bytes:
     """Download content from a URL with size limit and timeout.
 
@@ -152,6 +171,12 @@ def _safe_download(url: str, description: str) -> bytes:
 
     Raises:
         FactorDataError: If download fails or exceeds size limit.
+            The message names the description (which names the series)
+            and a sanitized error — never the URL, which for keyed
+            endpoints carries a credential. The original exception is
+            deliberately NOT chained (``from None``): traceback logging
+            prints chained exceptions whole, and their text can embed
+            the request URL.
     """
     try:
         req = Request(url, headers={"User-Agent": "PAE/0.1"})
@@ -162,11 +187,13 @@ def _safe_download(url: str, description: str) -> bytes:
                 raise FactorDataError(msg)
             return data
     except URLError as e:
-        msg = f"Failed to download {description}: {e}"
-        raise FactorDataError(msg) from e
+        detail = _redact_url_and_key(str(e), url)
+        msg = f"Failed to download {description}: {detail}"
+        raise FactorDataError(msg) from None
     except OSError as e:
-        msg = f"Network error downloading {description}: {e}"
-        raise FactorDataError(msg) from e
+        detail = _redact_url_and_key(str(e), url)
+        msg = f"Network error downloading {description}: {detail}"
+        raise FactorDataError(msg) from None
 
 
 FRED_API_BASE = "https://api.stlouisfed.org/fred/series/observations"

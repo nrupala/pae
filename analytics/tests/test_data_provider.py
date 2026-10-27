@@ -12,6 +12,8 @@ All network access is stubbed; these tests run offline.
 from __future__ import annotations
 
 import json
+import logging
+from urllib.error import URLError
 
 import pytest
 
@@ -24,7 +26,7 @@ from pae.data.boc import BocAdapter
 from pae.data.cache import DataCache
 from pae.data.edgar import EdgarAdapter
 from pae.data.eia import EiaAdapter, EiaError, parse_series_payload
-from pae.data.factors import FactorAdapter, FactorDataError
+from pae.data.factors import FactorAdapter, FactorDataError, _safe_download
 from pae.data.registry import SourceStatus, entry_for
 
 # --- Registry -------------------------------------------------------
@@ -200,6 +202,48 @@ def test_fred_keyed_api_path(tmp_path, monkeypatch) -> None:
     assert series.dates == ["2026-10-20", "2026-10-22"]
     assert series.values == [4.10, 4.16]
     assert "TESTKEY-SECRET" not in repr(series)
+
+
+def test_fred_key_never_reaches_errors_or_logs(tmp_path, monkeypatch, caplog) -> None:
+    """Gate F-04: a failed keyed FRED fetch must not leak the key.
+
+    Worst case for urllib: the transport error's own text embeds the
+    full request URL, key included (some http.client / redirect
+    failures do exactly this). The sentinel key must appear in neither
+    the raised FactorDataError nor any captured log record.
+    """
+    sentinel = "SENTINEL-KEY-9f8e7d"
+    monkeypatch.setenv("PAE_FRED_API_KEY", sentinel)
+    adapter = FactorAdapter(cache=DataCache(cache_dir=tmp_path))
+
+    def failing_urlopen(req, timeout=None):  # noqa: ARG001
+        url = getattr(req, "full_url", str(req))
+        raise URLError(f"simulated transport failure opening {url}")
+
+    monkeypatch.setattr("pae.data.factors.urlopen", failing_urlopen)
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(FactorDataError) as excinfo:
+            adapter.get_fred_series("DGS10")
+    assert sentinel not in str(excinfo.value)
+    assert sentinel not in str(excinfo.value.__cause__)
+    assert sentinel not in caplog.text
+    # The sanitized error still names the series and stays useful.
+    assert "DGS10" in str(excinfo.value)
+
+
+def test_safe_download_redacts_url_from_error(monkeypatch) -> None:
+    """_safe_download never formats the request URL into its error."""
+
+    def failing_urlopen(req, timeout=None):  # noqa: ARG001
+        raise URLError("boom https://example.invalid/x?api_key=abc123")
+
+    monkeypatch.setattr("pae.data.factors.urlopen", failing_urlopen)
+    with pytest.raises(FactorDataError) as excinfo:
+        _safe_download("https://example.invalid/x?api_key=abc123", "thing")
+    message = str(excinfo.value)
+    assert "abc123" not in message
+    assert "example.invalid" not in message
+    assert "thing" in message
 
 
 def test_fred_csv_fallback_without_key(tmp_path, monkeypatch) -> None:
