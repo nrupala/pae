@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 2351485 ALBERTA INC.
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 # PAE Personal Knowledge Engine - Content Directory
 
 This directory contains templates and scripts for the Personal Knowledge Engine (PKE).
