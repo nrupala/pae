@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 2351485 ALBERTA INC.
+
+SPDX-License-Identifier: LicenseRef-All-Rights-Reserved
+-->
+
 # PLAN — Wire the Decision Journal end-to-end
 
 **Status: PLAN — awaiting Nrupal's approval. No build until this is approved and merged.**
