@@ -1,0 +1,34 @@
+version = 1
+
+# Product site — all rights reserved per the licensing map in LICENSING.md
+# (site/ is © 2351485 ALBERTA INC., not open-licensed).
+[[annotations]]
+path = "site/**"
+precedence = "override"
+SPDX-FileCopyrightText = "2026 2351485 ALBERTA INC."
+SPDX-License-Identifier = "LicenseRef-All-Rights-Reserved"
+
+# Vendored hash-wasm v4.12.0 (see ui/vendor/README.md for provenance) —
+# keeps its own MIT licence and its author's copyright.
+[[annotations]]
+path = "ui/vendor/hash-wasm/**"
+precedence = "override"
+SPDX-FileCopyrightText = "Dani Biro"
+SPDX-License-Identifier = "MIT"
+
+# Generated lockfiles — produced from ui/package.json and engine/Cargo.toml.
+[[annotations]]
+path = [
+    "ui/package-lock.json",
+    "engine/Cargo.lock",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "2026 2351485 ALBERTA INC."
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+# Spreadsheet tool artifact (binary) shipped with the AGPL tools.
+[[annotations]]
+path = "tools/pae_portfolio_analytics.xlsx"
+precedence = "override"
+SPDX-FileCopyrightText = "2026 2351485 ALBERTA INC."
+SPDX-License-Identifier = "AGPL-3.0-or-later"
