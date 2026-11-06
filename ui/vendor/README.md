@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 2351485 ALBERTA INC.
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 # ui/vendor — vendored third-party JS (no runtime CDN dependencies)
 
 Per the vendor-natively doctrine, browser dependencies ship with the app,
