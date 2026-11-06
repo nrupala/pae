@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 2351485 ALBERTA INC.
+
+SPDX-License-Identifier: LicenseRef-All-Rights-Reserved
+-->
+
 # PAE Licensing
 
 Copyright © 2026 2351485 ALBERTA INC.
@@ -19,7 +25,7 @@ different products.
 | **Product site** — `site/` | © 2351485 ALBERTA INC., all rights reserved | — |
 | **Documentation** — `docs/`, `README.md` | © 2351485 ALBERTA INC., all rights reserved (code samples in docs follow the licence of the component they document) | — |
 
-Full texts: [`LICENSES/AGPL-3.0.txt`](LICENSES/AGPL-3.0.txt),
+Full texts: [`LICENSES/AGPL-3.0-or-later.txt`](LICENSES/AGPL-3.0-or-later.txt),
 [`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt).
 
 ## Boundary rule
