@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 2351485 ALBERTA INC.
+
+SPDX-License-Identifier: LicenseRef-All-Rights-Reserved
+-->
+
 # PAE data sources — the build record behind pae/data/registry.py
 
 # PAE — Data-Source Register under Decision 6
