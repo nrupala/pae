@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 2351485 ALBERTA INC.
+
+SPDX-License-Identifier: LicenseRef-All-Rights-Reserved
+-->
+
 # Product Terms — pae
 
 These Product Terms govern the official packaged or distributed version of **pae** supplied by **2351485 ALBERTA INC.** (the “Company”). They are additive: they do not change, replace, or limit the licence that applies to this repository’s source code or content. If a separate written agreement with the Company applies to a particular supply, that agreement controls to the extent of any conflict.
