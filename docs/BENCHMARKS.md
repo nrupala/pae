@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 2351485 ALBERTA INC.
+
+SPDX-License-Identifier: LicenseRef-All-Rights-Reserved
+-->
+
 # PAE Engine — Measured Benchmarks
 
 Measured 2026-10-26 against the Phase 2 build (v0.2.0), release profile
