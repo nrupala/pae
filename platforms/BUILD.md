@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 2351485 ALBERTA INC.
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 # PAE — Platform / App-Shell Build Notes
 
 The `platforms/` directory holds thin native **shells** around the polished webapp in
