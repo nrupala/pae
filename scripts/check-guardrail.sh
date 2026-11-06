@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2026 2351485 ALBERTA INC.
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 # Non-advisory guardrail gate (CONTRIBUTING rule 5): user-facing surfaces
 # must never label output "optimal" or "recommended". Scans the surfaces a
 # user or agent actually sees: the dashboard source, the MCP tool layer,
