@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 2351485 ALBERTA INC.
+
+SPDX-License-Identifier: LicenseRef-All-Rights-Reserved
+-->
+
 # PAE - Personal Analytics Engine
 
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16401/badge)](https://www.bestpractices.dev/en/projects/16401)
