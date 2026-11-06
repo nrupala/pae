@@ -11,5 +11,13 @@
   "devDependencies": {
     "typescript": "^5.4",
     "live-server": "^1.2"
+  },
+  "overrides": {
+    "chokidar": {
+      "braces": "^3.0.3"
+    },
+    "micromatch": {
+      "braces": "^3.0.3"
+    }
   }
 }
