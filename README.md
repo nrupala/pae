@@ -7,6 +7,8 @@ SPDX-License-Identifier: LicenseRef-All-Rights-Reserved
 # PAE - Personal Analytics Engine
 
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16401/badge)](https://www.bestpractices.dev/en/projects/16401)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/nrupala/pae/badge)](https://scorecard.dev/viewer/?uri=github.com/nrupala/pae)
+[![REUSE status](https://api.reuse.software/badge/github.com/nrupala/pae)](https://api.reuse.software/info/github.com/nrupala/pae)
 
 **Local-first, user-sovereign financial analytics — everything runs on your machine, under your control.**
 
