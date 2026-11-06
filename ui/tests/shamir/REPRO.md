@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 2351485 ALBERTA INC.
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 # Shamir 3-of-5 — test reproduction
 
 Source under test: `ui/src/crypto/shamir.ts` @ branch `wright/pae-p4-shamir` (commit 0483fa0a).
