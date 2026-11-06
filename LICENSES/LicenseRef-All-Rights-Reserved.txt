@@ -1,0 +1,6 @@
+Copyright © 2026 2351485 ALBERTA INC. All rights reserved.
+
+This material (the product site and documentation of PAE, per the licensing
+map in LICENSING.md) is published for reading. No licence is granted to copy,
+modify, or redistribute it, except the code samples in the documentation,
+which follow the licence of the component they document.
