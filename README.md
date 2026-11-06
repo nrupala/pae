@@ -1,5 +1,7 @@
 # PAE - Personal Analytics Engine
 
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16401/badge)](https://www.bestpractices.dev/en/projects/16401)
+
 **Local-first, user-sovereign financial analytics — everything runs on your machine, under your control.**
 
 PAE is an open-source tool that aggregates portfolio data, runs risk analytics, and surfaces decision intelligence on your own computer. There is no PAE cloud and no account: both processes run on loopback and your data lives in files under your data directory. Vault records (the decision journal and other versioned records) are encrypted in your browser before the local engine stores them, so for those the engine holds ciphertext only. The analytics working store — the holdings you import for analysis — is a local database file, unencrypted, like any local app's data file. The Security Model below states exactly what is encrypted and what is not.
