@@ -32,3 +32,15 @@ path = "tools/pae_portfolio_analytics.xlsx"
 precedence = "override"
 SPDX-FileCopyrightText = "2026 2351485 ALBERTA INC."
 SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+# Brand icons — hand-authored house marks created 2026-11-06. Brand assets
+# follow the site/docs pattern in LICENSING.md: © the company, all rights
+# reserved — they are marks, not code.
+[[annotations]]
+path = [
+    "assets/icon.svg",
+    "assets/icon-512.png",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "2026 2351485 ALBERTA INC."
+SPDX-License-Identifier = "LicenseRef-All-Rights-Reserved"
