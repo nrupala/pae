@@ -4,7 +4,7 @@
   "profile_version": "1.0.0",
   "graph_class": "truths",
   "provenance_summary": {
-    "extracted_truth": 15590
+    "extracted_truth": 15888
   },
   "nodes": [
     {
@@ -35,6 +35,18 @@
       "id": "external::\"\".join",
       "kind": "external",
       "label": "\"\".join",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::\"$PYTHON\"",
+      "kind": "external",
+      "label": "\"$PYTHON\"",
       "loc": {
         "file": "",
         "line": 0
@@ -7712,6 +7724,18 @@
       "refs": []
     },
     {
+      "id": "external::cargo",
+      "kind": "external",
+      "label": "cargo",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
       "id": "external::cashflows.as_ptr",
       "kind": "external",
       "label": "cashflows.as_ptr",
@@ -7739,6 +7763,18 @@
       "id": "external::cast",
       "kind": "external",
       "label": "cast",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::cat",
+      "kind": "external",
+      "label": "cat",
       "loc": {
         "file": "",
         "line": 0
@@ -7823,6 +7859,18 @@
       "id": "external::cc::Build::new()\n        .file(\"c/pae_num.c\")\n        .file(\"c/pae_bonds.c\")\n        .include(\"c\")\n        .opt_level(3)\n        .flag_if_supported(\"-std=c11\")\n        .warnings(true)\n        .compile",
       "kind": "external",
       "label": "cc::Build::new()\n        .file(\"c/pae_num.c\")\n        .file(\"c/pae_bonds.c\")\n        .include(\"c\")\n        .opt_level(3)\n        .flag_if_supported(\"-std=c11\")\n        .warnings(true)\n        .compile",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::cd",
+      "kind": "external",
+      "label": "cd",
       "loc": {
         "file": "",
         "line": 0
@@ -7967,6 +8015,18 @@
       "id": "external::chart?.setSeries",
       "kind": "external",
       "label": "chart?.setSeries",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::chmod",
+      "kind": "external",
+      "label": "chmod",
       "loc": {
         "file": "",
         "line": 0
@@ -8360,6 +8420,18 @@
       "refs": []
     },
     {
+      "id": "external::codetopo",
+      "kind": "external",
+      "label": "codetopo",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
       "id": "external::coeffs.set",
       "kind": "external",
       "label": "coeffs.set",
@@ -8627,6 +8699,18 @@
       "id": "external::combine",
       "kind": "external",
       "label": "combine",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::command",
+      "kind": "external",
+      "label": "command",
       "loc": {
         "file": "",
         "line": 0
@@ -9155,6 +9239,18 @@
       "id": "external::covariance_matrix(&refs).unwrap",
       "kind": "external",
       "label": "covariance_matrix(&refs).unwrap",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::cp",
+      "kind": "external",
+      "label": "cp",
       "loc": {
         "file": "",
         "line": 0
@@ -10508,6 +10604,18 @@
       "refs": []
     },
     {
+      "id": "external::dirname",
+      "kind": "external",
+      "label": "dirname",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
       "id": "external::discount_factors.as_ptr",
       "kind": "external",
       "label": "discount_factors.as_ptr",
@@ -10643,6 +10751,18 @@
       "id": "external::dt.with_timezone",
       "kind": "external",
       "label": "dt.with_timezone",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::du",
+      "kind": "external",
+      "label": "du",
       "loc": {
         "file": "",
         "line": 0
@@ -10799,6 +10919,18 @@
       "id": "external::e.to_string",
       "kind": "external",
       "label": "e.to_string",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::echo",
+      "kind": "external",
+      "label": "echo",
       "loc": {
         "file": "",
         "line": 0
@@ -11360,6 +11492,18 @@
       "refs": []
     },
     {
+      "id": "external::exit",
+      "kind": "external",
+      "label": "exit",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
       "id": "external::exp?.setSeries",
       "kind": "external",
       "label": "exp?.setSeries",
@@ -11471,6 +11615,18 @@
       "id": "external::fResp.text",
       "kind": "external",
       "label": "fResp.text",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::fabs",
+      "kind": "external",
+      "label": "fabs",
       "loc": {
         "file": "",
         "line": 0
@@ -12152,6 +12308,18 @@
       "refs": []
     },
     {
+      "id": "external::free",
+      "kind": "external",
+      "label": "free",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
       "id": "external::from.to_rfc3339",
       "kind": "external",
       "label": "from.to_rfc3339",
@@ -12479,6 +12647,18 @@
       "id": "external::globalObject.TextEncoder",
       "kind": "external",
       "label": "globalObject.TextEncoder",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::grep",
+      "kind": "external",
+      "label": "grep",
       "loc": {
         "file": "",
         "line": 0
@@ -12983,6 +13163,18 @@
       "id": "external::hashlib.sha256(word.encode()).hexdigest",
       "kind": "external",
       "label": "hashlib.sha256(word.encode()).hexdigest",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::head",
+      "kind": "external",
+      "label": "head",
       "loc": {
         "file": "",
         "line": 0
@@ -14444,6 +14636,18 @@
       "refs": []
     },
     {
+      "id": "external::isfinite",
+      "kind": "external",
+      "label": "isfinite",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
       "id": "external::isinstance",
       "kind": "external",
       "label": "isinstance",
@@ -15080,6 +15284,18 @@
       "refs": []
     },
     {
+      "id": "external::ln",
+      "kind": "external",
+      "label": "ln",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
       "id": "external::lo.map",
       "kind": "external",
       "label": "lo.map",
@@ -15656,6 +15872,18 @@
       "refs": []
     },
     {
+      "id": "external::malloc",
+      "kind": "external",
+      "label": "malloc",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
       "id": "external::manifest.append",
       "kind": "external",
       "label": "manifest.append",
@@ -16007,6 +16235,30 @@
       "id": "external::mix[\"weights\"].values",
       "kind": "external",
       "label": "mix[\"weights\"].values",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::mkdir",
+      "kind": "external",
+      "label": "mkdir",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::mktemp",
+      "kind": "external",
+      "label": "mktemp",
       "loc": {
         "file": "",
         "line": 0
@@ -17003,6 +17255,18 @@
       "id": "external::np.zeros",
       "kind": "external",
       "label": "np.zeros",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::npm",
+      "kind": "external",
+      "label": "npm",
       "loc": {
         "file": "",
         "line": 0
@@ -18836,6 +19100,18 @@
       "refs": []
     },
     {
+      "id": "external::pow",
+      "kind": "external",
+      "label": "pow",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
       "id": "external::pq.as_str",
       "kind": "external",
       "label": "pq.as_str",
@@ -18911,6 +19187,18 @@
       "id": "external::pts.map((p, k) => `${k === 0 ? 'M' : 'L'}${x(p.i, n).toFixed(1)},${y(p.v).toFixed(1)}`).join",
       "kind": "external",
       "label": "pts.map((p, k) => `${k === 0 ? 'M' : 'L'}${x(p.i, n).toFixed(1)},${y(p.v).toFixed(1)}`).join",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::pwd",
+      "kind": "external",
+      "label": "pwd",
       "loc": {
         "file": "",
         "line": 0
@@ -19091,6 +19379,18 @@
       "id": "external::pytest.raises",
       "kind": "external",
       "label": "pytest.raises",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::python3",
+      "kind": "external",
+      "label": "python3",
       "loc": {
         "file": "",
         "line": 0
@@ -21548,6 +21848,18 @@
       "refs": []
     },
     {
+      "id": "external::rm",
+      "kind": "external",
+      "label": "rm",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
       "id": "external::rng.gauss",
       "kind": "external",
       "label": "rng.gauss",
@@ -22619,6 +22931,18 @@
       "id": "external::secrets.token_urlsafe",
       "kind": "external",
       "label": "secrets.token_urlsafe",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::sed",
+      "kind": "external",
+      "label": "sed",
       "loc": {
         "file": "",
         "line": 0
@@ -24980,6 +25304,18 @@
       "refs": []
     },
     {
+      "id": "external::shift",
+      "kind": "external",
+      "label": "shift",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
       "id": "external::shock.asset_class.trim",
       "kind": "external",
       "label": "shock.asset_class.trim",
@@ -25379,6 +25715,18 @@
       "id": "external::sqlite_vec.load",
       "kind": "external",
       "label": "sqlite_vec.load",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::sqrt",
+      "kind": "external",
+      "label": "sqrt",
       "loc": {
         "file": "",
         "line": 0
@@ -26063,6 +26411,18 @@
       "id": "external::std::time::Duration::from_millis",
       "kind": "external",
       "label": "std::time::Duration::from_millis",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::stdlib",
+      "kind": "external",
+      "label": "stdlib",
       "loc": {
         "file": "",
         "line": 0
@@ -26984,6 +27344,18 @@
       "refs": []
     },
     {
+      "id": "external::string",
+      "kind": "external",
+      "label": "string",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
       "id": "external::stripped.split",
       "kind": "external",
       "label": "stripped.split",
@@ -27299,6 +27671,18 @@
       "id": "external::tail.len",
       "kind": "external",
       "label": "tail.len",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::tar",
+      "kind": "external",
+      "label": "tar",
       "loc": {
         "file": "",
         "line": 0
@@ -29348,6 +29732,18 @@
       "refs": []
     },
     {
+      "id": "external::tr",
+      "kind": "external",
+      "label": "tr",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
       "id": "external::tracing_subscriber",
       "kind": "external",
       "label": "tracing_subscriber",
@@ -29432,6 +29828,18 @@
       "refs": []
     },
     {
+      "id": "external::true",
+      "kind": "external",
+      "label": "true",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
       "id": "external::true_betas.items",
       "kind": "external",
       "label": "true_betas.items",
@@ -29471,6 +29879,18 @@
       "id": "external::uint32View.setInt32",
       "kind": "external",
       "label": "uint32View.setInt32",
+      "loc": {
+        "file": "",
+        "line": 0
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "external::uname",
+      "kind": "external",
+      "label": "uname",
       "loc": {
         "file": "",
         "line": 0
@@ -51721,6 +52141,54 @@
       "refs": []
     },
     {
+      "id": "pae-engine::/c/pae_bonds.c",
+      "kind": "file",
+      "label": "c/pae_bonds.c",
+      "loc": {
+        "file": "c/pae_bonds.c",
+        "line": 1
+      },
+      "tier": "core",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "pae-engine::/c/pae_bonds.h",
+      "kind": "file",
+      "label": "c/pae_bonds.h",
+      "loc": {
+        "file": "c/pae_bonds.h",
+        "line": 1
+      },
+      "tier": "core",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "pae-engine::/c/pae_num.c",
+      "kind": "file",
+      "label": "c/pae_num.c",
+      "loc": {
+        "file": "c/pae_num.c",
+        "line": 1
+      },
+      "tier": "core",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "pae-engine::/c/pae_num.h",
+      "kind": "file",
+      "label": "c/pae_num.h",
+      "loc": {
+        "file": "c/pae_num.h",
+        "line": 1
+      },
+      "tier": "core",
+      "defines": [],
+      "refs": []
+    },
+    {
       "id": "pae-engine::/src/api/bonds.rs",
       "kind": "file",
       "label": "src/api/bonds.rs",
@@ -52918,10 +53386,10 @@
       ],
       "refs": [
         "serde_json",
+        "Value",
         "from_str",
         "e",
         "format",
-        "Value",
         "as_u64",
         "Some",
         "Err",
@@ -53395,9 +53863,9 @@
         "Err",
         "bad_request",
         "storage_error_response",
+        "Vec",
         "HoldingResponse",
         "from",
-        "Vec",
         "Ok",
         "Json",
         "ListHoldingsResponse"
@@ -53423,9 +53891,9 @@
       ],
       "refs": [
         "storage_error_response",
+        "Vec",
         "PortfolioResponse",
         "from",
-        "Vec",
         "Ok",
         "Json",
         "ListPortfoliosResponse"
@@ -54047,9 +54515,9 @@
         "err_response",
         "ImportError",
         "ParseFailed",
-        "normalize_header",
         "Vec",
         "String",
+        "normalize_header",
         "ColumnMap",
         "from_headers",
         "Err",
@@ -54095,8 +54563,8 @@
         "to_ascii_uppercase",
         "as_str",
         "None",
-        "c",
         "String",
+        "c",
         "v"
       ],
       "end_line": 414,
@@ -55217,9 +55685,9 @@
         "VersionQuery",
         "None",
         "internal_error",
-        "to_api_record",
         "Vec",
         "VersionRecord",
+        "to_api_record",
         "Ok",
         "GetHistoryResponse"
       ],
@@ -55262,8 +55730,8 @@
         "SnapshotQuery",
         "SnapshotEngine",
         "internal_error",
-        "to_api_record",
         "VersionRecord",
+        "to_api_record",
         "Ok",
         "SnapshotResponse"
       ],
@@ -55461,6 +55929,646 @@
       "end_line": 53,
       "signature": "fn main()",
       "decisions": 2
+    },
+    {
+      "id": "pae-engine::c::pae_bonds",
+      "kind": "module",
+      "label": "pae-engine::c::pae_bonds",
+      "loc": {
+        "file": "c/pae_bonds.c",
+        "line": 1
+      },
+      "tier": "core",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "pae-engine::c::pae_bonds::df_leg",
+      "kind": "function",
+      "label": "df_leg",
+      "loc": {
+        "file": "c/pae_bonds.c",
+        "line": 16
+      },
+      "tier": "optional",
+      "defines": [
+        "base",
+        "t",
+        "y"
+      ],
+      "refs": [
+        "NAN",
+        "double",
+        "pow"
+      ],
+      "end_line": 20,
+      "signature": "static double df_leg(double y, double t)",
+      "decisions": 2
+    },
+    {
+      "id": "pae-engine::c::pae_bonds::pae_bond_convexity",
+      "kind": "function",
+      "label": "pae_bond_convexity",
+      "loc": {
+        "file": "c/pae_bonds.c",
+        "line": 115
+      },
+      "tier": "optional",
+      "defines": [
+        "base",
+        "cashflows",
+        "n",
+        "npv",
+        "s1",
+        "s2",
+        "times",
+        "y"
+      ],
+      "refs": [
+        "NAN",
+        "double",
+        "int",
+        "isfinite",
+        "valid_legs",
+        "weighted_sums"
+      ],
+      "end_line": 123,
+      "signature": "double pae_bond_convexity(const double *times, const double *cashflows, int n, double y)",
+      "decisions": 3
+    },
+    {
+      "id": "pae-engine::c::pae_bonds::pae_bond_macaulay_duration",
+      "kind": "function",
+      "label": "pae_bond_macaulay_duration",
+      "loc": {
+        "file": "c/pae_bonds.c",
+        "line": 99
+      },
+      "tier": "optional",
+      "defines": [
+        "cashflows",
+        "n",
+        "npv",
+        "s1",
+        "s2",
+        "times",
+        "y"
+      ],
+      "refs": [
+        "NAN",
+        "double",
+        "int",
+        "isfinite",
+        "valid_legs",
+        "weighted_sums"
+      ],
+      "end_line": 106,
+      "signature": "double pae_bond_macaulay_duration(const double *times, const double *cashflows, int n, double y)",
+      "decisions": 3
+    },
+    {
+      "id": "pae-engine::c::pae_bonds::pae_bond_modified_duration",
+      "kind": "function",
+      "label": "pae_bond_modified_duration",
+      "loc": {
+        "file": "c/pae_bonds.c",
+        "line": 108
+      },
+      "tier": "optional",
+      "defines": [
+        "cashflows",
+        "mac",
+        "n",
+        "times",
+        "y"
+      ],
+      "refs": [
+        "NAN",
+        "double",
+        "int",
+        "isfinite",
+        "pae_bond_macaulay_duration"
+      ],
+      "end_line": 113,
+      "signature": "double pae_bond_modified_duration(const double *times, const double *cashflows, int n, double y)",
+      "decisions": 1
+    },
+    {
+      "id": "pae-engine::c::pae_bonds::pae_bond_npv",
+      "kind": "function",
+      "label": "pae_bond_npv",
+      "loc": {
+        "file": "c/pae_bonds.c",
+        "line": 22
+      },
+      "tier": "optional",
+      "defines": [
+        "cashflows",
+        "discount_factors",
+        "i",
+        "n",
+        "npv"
+      ],
+      "refs": [
+        "NAN",
+        "double",
+        "int"
+      ],
+      "end_line": 28,
+      "signature": "double pae_bond_npv(const double *cashflows, const double *discount_factors, int n)",
+      "decisions": 4
+    },
+    {
+      "id": "pae-engine::c::pae_bonds::pae_bond_ytm",
+      "kind": "function",
+      "label": "pae_bond_ytm",
+      "loc": {
+        "file": "c/pae_bonds.c",
+        "line": 36
+      },
+      "tier": "optional",
+      "defines": [
+        "cashflows",
+        "dhi",
+        "dlo",
+        "hi",
+        "i",
+        "iter",
+        "lo",
+        "mid",
+        "n",
+        "npv",
+        "npv_hi",
+        "npv_lo",
+        "price",
+        "times"
+      ],
+      "refs": [
+        "NAN",
+        "df_leg",
+        "double",
+        "fabs",
+        "int",
+        "isfinite"
+      ],
+      "end_line": 71,
+      "signature": "double pae_bond_ytm(const double *times, const double *cashflows, int n, double price)",
+      "decisions": 16
+    },
+    {
+      "id": "pae-engine::c::pae_bonds::pae_flat_discount_factors",
+      "kind": "function",
+      "label": "pae_flat_discount_factors",
+      "loc": {
+        "file": "c/pae_bonds.c",
+        "line": 30
+      },
+      "tier": "optional",
+      "defines": [
+        "df_out",
+        "i",
+        "n",
+        "times",
+        "y"
+      ],
+      "refs": [
+        "df_leg",
+        "double",
+        "int",
+        "void"
+      ],
+      "end_line": 34,
+      "signature": "void pae_flat_discount_factors(double y, const double *times, int n, double *df_out)",
+      "decisions": 4
+    },
+    {
+      "id": "pae-engine::c::pae_bonds::valid_legs",
+      "kind": "function",
+      "label": "valid_legs",
+      "loc": {
+        "file": "c/pae_bonds.c",
+        "line": 90
+      },
+      "tier": "optional",
+      "defines": [
+        "cashflows",
+        "i",
+        "n",
+        "times",
+        "y"
+      ],
+      "refs": [
+        "double",
+        "int",
+        "isfinite"
+      ],
+      "end_line": 97,
+      "signature": "static int valid_legs(const double *times, const double *cashflows, int n, double y)",
+      "decisions": 7
+    },
+    {
+      "id": "pae-engine::c::pae_bonds::weighted_sums",
+      "kind": "function",
+      "label": "weighted_sums",
+      "loc": {
+        "file": "c/pae_bonds.c",
+        "line": 74
+      },
+      "tier": "optional",
+      "defines": [
+        "cashflows",
+        "d",
+        "i",
+        "n",
+        "npv",
+        "pv",
+        "s1",
+        "s2",
+        "times",
+        "w1",
+        "w2",
+        "y"
+      ],
+      "refs": [
+        "NAN",
+        "df_leg",
+        "double",
+        "int",
+        "isfinite"
+      ],
+      "end_line": 88,
+      "signature": "static double weighted_sums(const double *times, const double *cashflows, int n, double y, double *w1, double *w2)",
+      "decisions": 2
+    },
+    {
+      "id": "pae-engine::c::pae_num",
+      "kind": "module",
+      "label": "pae-engine::c::pae_num",
+      "loc": {
+        "file": "c/pae_num.c",
+        "line": 1
+      },
+      "tier": "core",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "pae-engine::c::pae_num::PAE_NUM_EINVAL",
+      "kind": "variable",
+      "label": "PAE_NUM_EINVAL",
+      "loc": {
+        "file": "c/pae_num.h",
+        "line": 28
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [],
+      "end_line": 29
+    },
+    {
+      "id": "pae-engine::c::pae_num::PAE_NUM_OK",
+      "kind": "variable",
+      "label": "PAE_NUM_OK",
+      "loc": {
+        "file": "c/pae_num.h",
+        "line": 27
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [],
+      "end_line": 28
+    },
+    {
+      "id": "pae-engine::c::pae_num::dgemm_",
+      "kind": "function",
+      "label": "dgemm_",
+      "loc": {
+        "file": "c/pae_num.c",
+        "line": 26
+      },
+      "tier": "optional",
+      "defines": [
+        "a",
+        "alpha",
+        "b",
+        "beta",
+        "c",
+        "k",
+        "lda",
+        "ldb",
+        "ldc",
+        "m",
+        "n",
+        "transa",
+        "transb"
+      ],
+      "refs": [
+        "char",
+        "double",
+        "int",
+        "void"
+      ],
+      "end_line": 32,
+      "signature": "extern void dgemm_(char *transa, char *transb, const int *m, const int *n, const int *k, const double *alpha, const double *a, const int *lda, const double *b, const int *ldb, const double *beta, double *c, const int *ldc)"
+    },
+    {
+      "id": "pae-engine::c::pae_num::dgemv_",
+      "kind": "function",
+      "label": "dgemv_",
+      "loc": {
+        "file": "c/pae_num.c",
+        "line": 34
+      },
+      "tier": "optional",
+      "defines": [
+        "a",
+        "alpha",
+        "beta",
+        "incx",
+        "incy",
+        "lda",
+        "m",
+        "n",
+        "trans",
+        "x",
+        "y"
+      ],
+      "refs": [
+        "char",
+        "double",
+        "int",
+        "void"
+      ],
+      "end_line": 40,
+      "signature": "extern void dgemv_(char *trans, const int *m, const int *n, const double *alpha, const double *a, const int *lda, const double *x, const int *incx, const double *beta, double *y, const int *incy)"
+    },
+    {
+      "id": "pae-engine::c::pae_num::dpotrf_",
+      "kind": "function",
+      "label": "dpotrf_",
+      "loc": {
+        "file": "c/pae_num.c",
+        "line": 42
+      },
+      "tier": "optional",
+      "defines": [
+        "a",
+        "info",
+        "lda",
+        "n",
+        "uplo"
+      ],
+      "refs": [
+        "char",
+        "double",
+        "int",
+        "void"
+      ],
+      "end_line": 43,
+      "signature": "extern void dpotrf_(char *uplo, const int *n, double *a, const int *lda, int *info)"
+    },
+    {
+      "id": "pae-engine::c::pae_num::dsyev_",
+      "kind": "function",
+      "label": "dsyev_",
+      "loc": {
+        "file": "c/pae_num.c",
+        "line": 45
+      },
+      "tier": "optional",
+      "defines": [
+        "a",
+        "info",
+        "jobz",
+        "lda",
+        "lwork",
+        "n",
+        "uplo",
+        "w",
+        "work"
+      ],
+      "refs": [
+        "char",
+        "double",
+        "int",
+        "void"
+      ],
+      "end_line": 47,
+      "signature": "extern void dsyev_(char *jobz, char *uplo, const int *n, double *a, const int *lda, double *w, double *work, const int *lwork, int *info)"
+    },
+    {
+      "id": "pae-engine::c::pae_num::pae_cholesky",
+      "kind": "function",
+      "label": "pae_cholesky",
+      "loc": {
+        "file": "c/pae_num.c",
+        "line": 166
+      },
+      "tier": "optional",
+      "defines": [
+        "a",
+        "i",
+        "info",
+        "j",
+        "n",
+        "uplo"
+      ],
+      "refs": [
+        "PAE_NUM_EINVAL",
+        "PAE_NUM_OK",
+        "char",
+        "double",
+        "dpotrf_",
+        "int"
+      ],
+      "end_line": 177,
+      "signature": "int pae_cholesky(double *a, int n)",
+      "decisions": 5
+    },
+    {
+      "id": "pae-engine::c::pae_num::pae_correlation",
+      "kind": "function",
+      "label": "pae_correlation",
+      "loc": {
+        "file": "c/pae_num.c",
+        "line": 120
+      },
+      "tier": "optional",
+      "defines": [
+        "corr",
+        "cov",
+        "denom",
+        "di",
+        "dj",
+        "i",
+        "j",
+        "n",
+        "out",
+        "vi",
+        "vj",
+        "vmax",
+        "vtol"
+      ],
+      "refs": [
+        "PAE_NUM_EINVAL",
+        "PAE_NUM_OK",
+        "double",
+        "int",
+        "isfinite",
+        "sqrt"
+      ],
+      "end_line": 160,
+      "signature": "int pae_correlation(const double *cov, int n, double *corr)",
+      "decisions": 20
+    },
+    {
+      "id": "pae-engine::c::pae_num::pae_covariance",
+      "kind": "function",
+      "label": "pae_covariance",
+      "loc": {
+        "file": "c/pae_num.c",
+        "line": 93
+      },
+      "tier": "optional",
+      "defines": [
+        "ca",
+        "cb",
+        "cov",
+        "i",
+        "j",
+        "m",
+        "mean",
+        "n",
+        "one",
+        "scale",
+        "x",
+        "xc",
+        "zero"
+      ],
+      "refs": [
+        "PAE_NUM_EINVAL",
+        "PAE_NUM_OK",
+        "char",
+        "dgemm_",
+        "double",
+        "free",
+        "int",
+        "malloc"
+      ],
+      "end_line": 118,
+      "signature": "int pae_covariance(const double *x, int m, int n, double *cov)",
+      "decisions": 9
+    },
+    {
+      "id": "pae-engine::c::pae_num::pae_dgemm",
+      "kind": "function",
+      "label": "pae_dgemm",
+      "loc": {
+        "file": "c/pae_num.c",
+        "line": 53
+      },
+      "tier": "optional",
+      "defines": [
+        "a",
+        "alpha",
+        "b",
+        "beta",
+        "c",
+        "ca",
+        "cb",
+        "k",
+        "lda",
+        "ldb",
+        "ldc",
+        "m",
+        "n",
+        "ra",
+        "rb",
+        "ta",
+        "tb"
+      ],
+      "refs": [
+        "PAE_NUM_EINVAL",
+        "PAE_NUM_OK",
+        "char",
+        "dgemm_",
+        "double",
+        "int"
+      ],
+      "end_line": 69,
+      "signature": "int pae_dgemm(int ta, int tb, int m, int n, int k, double alpha, const double *a, int lda, const double *b, int ldb, double beta, double *c, int ldc)",
+      "decisions": 18
+    },
+    {
+      "id": "pae-engine::c::pae_num::pae_dgemv",
+      "kind": "function",
+      "label": "pae_dgemv",
+      "loc": {
+        "file": "c/pae_num.c",
+        "line": 71
+      },
+      "tier": "optional",
+      "defines": [
+        "a",
+        "alpha",
+        "beta",
+        "cols",
+        "ct",
+        "incx",
+        "incy",
+        "lda",
+        "m",
+        "n",
+        "rows",
+        "ta",
+        "x",
+        "y"
+      ],
+      "refs": [
+        "PAE_NUM_EINVAL",
+        "PAE_NUM_OK",
+        "char",
+        "dgemv_",
+        "double",
+        "int"
+      ],
+      "end_line": 87,
+      "signature": "int pae_dgemv(int ta, int m, int n, double alpha, const double *a, int lda, const double *x, int incx, double beta, double *y, int incy)",
+      "decisions": 14
+    },
+    {
+      "id": "pae-engine::c::pae_num::pae_eigen_sym",
+      "kind": "function",
+      "label": "pae_eigen_sym",
+      "loc": {
+        "file": "c/pae_num.c",
+        "line": 179
+      },
+      "tier": "optional",
+      "defines": [
+        "a",
+        "info",
+        "jobz",
+        "lwork",
+        "n",
+        "uplo",
+        "w",
+        "wkopt",
+        "work"
+      ],
+      "refs": [
+        "PAE_NUM_EINVAL",
+        "PAE_NUM_OK",
+        "char",
+        "double",
+        "dsyev_",
+        "free",
+        "int",
+        "malloc"
+      ],
+      "end_line": 199,
+      "signature": "int pae_eigen_sym(double *a, int n, double *w)",
+      "decisions": 7
     },
     {
       "id": "pae-engine::crypto",
@@ -55981,10 +57089,10 @@
         "origin"
       ],
       "refs": [
+        "HeaderValue",
         "std",
         "env",
         "var",
-        "HeaderValue",
         "from_static",
         "CorsLayer",
         "new",
@@ -56833,12 +57941,12 @@
       ],
       "refs": [
         "test_server",
-        "t",
+        "Vec",
         "serde_json",
+        "Value",
+        "t",
         "json",
         "else",
-        "Vec",
-        "Value",
         "assert_eq",
         "status_code",
         "as_u16",
@@ -57869,8 +58977,8 @@
         "NumError",
         "InvalidInput",
         "s",
-        "v",
         "Vec",
+        "v",
         "covariance_matrix",
         "to_col_major",
         "vec",
@@ -58314,8 +59422,8 @@
         "cfs"
       ],
       "refs": [
-        "t",
-        "Vec"
+        "Vec",
+        "t"
       ],
       "end_line": 653,
       "signature": "fn coupon_bond_10y() -> (Vec<f64>, Vec<f64>)",
@@ -58386,8 +59494,8 @@
         "means"
       ],
       "refs": [
-        "s",
         "Vec",
+        "s",
         "i",
         "j",
         "a",
@@ -58599,8 +59707,8 @@
       ],
       "refs": [
         "vec",
-        "s",
         "Vec",
+        "s",
         "correlation_matrix",
         "assert_eq"
       ],
@@ -58625,8 +59733,8 @@
       ],
       "refs": [
         "sample_series",
-        "s",
         "Vec",
+        "s",
         "correlation_matrix",
         "rust_correlation",
         "assert",
@@ -58653,8 +59761,8 @@
       ],
       "refs": [
         "sample_series",
-        "s",
         "Vec",
+        "s",
         "covariance_matrix",
         "rust_covariance",
         "assert",
@@ -58682,8 +59790,8 @@
         "Err",
         "NumError",
         "InvalidInput",
-        "vec",
-        "Vec"
+        "Vec",
+        "vec"
       ],
       "end_line": 637,
       "signature": "fn test_covariance_rejects_bad_input()",
@@ -58715,8 +59823,8 @@
         "assert_eq",
         "matvec",
         "sample_series",
-        "s",
         "Vec",
+        "s",
         "covariance_matrix",
         "assert",
         "iter",
@@ -58820,9 +59928,9 @@
         "symbols"
       ],
       "refs": [
-        "h",
         "Vec",
         "String",
+        "h",
         "CorrelationResponse",
         "vec",
         "Some",
@@ -60017,8 +61125,8 @@
         "downside_dev"
       ],
       "refs": [
-        "r",
-        "Vec"
+        "Vec",
+        "r"
       ],
       "end_line": 110,
       "signature": "pub fn sortino_ratio(returns: &[f64], risk_free_annual: f64) -> f64",
@@ -60534,10 +61642,10 @@
       "refs": [
         "MAX_SIMULATIONS",
         "MAX_HORIZON_MONTHS",
+        "Vec",
         "vec",
         "h",
         "i",
-        "Vec",
         "rand",
         "thread_rng",
         "item",
@@ -60823,11 +61931,11 @@
         "portfolio_impact_pct"
       ],
       "refs": [
+        "Vec",
         "Some",
         "custom",
         "s",
         "get_scenario_shocks",
-        "Vec",
         "std",
         "collections",
         "HashMap",
@@ -61060,11 +62168,11 @@
         "classified",
         "None",
         "run_stress_test",
-        "p",
         "std",
         "collections",
         "HashMap",
         "PositionImpact",
+        "p",
         "assert_eq",
         "impact_pct",
         "impact_value",
@@ -62672,14 +63780,14 @@
         "modified"
       ],
       "refs": [
-        "r",
         "HashMap",
         "VersionedRecord",
-        "id",
+        "r",
         "Vec",
         "String",
-        "new",
+        "id",
         "ModifiedEntity",
+        "new",
         "to_rec",
         "Some",
         "from_rec",
@@ -63169,10 +64277,10 @@
         "VersionStoreError",
         "Persistence",
         "HashMap",
-        "new",
         "String",
         "Vec",
         "VersionedRecord",
+        "new",
         "record",
         "versions",
         "r",
@@ -63206,11 +64314,11 @@
         "VersionStoreError",
         "LockFailed",
         "Ok",
+        "Vec",
+        "VersionedRecord",
         "r",
         "since",
         "until",
-        "Vec",
-        "VersionedRecord",
         "limit"
       ],
       "end_line": 174,
@@ -63238,8 +64346,8 @@
         "VersionStoreError",
         "LockFailed",
         "Vec",
-        "new",
         "VersionedRecord",
+        "new",
         "entity_id",
         "versions",
         "r",
@@ -74384,6 +75492,30 @@
       "refs": []
     },
     {
+      "id": "pae::/docs/codetopo-profile/PROFILE.md",
+      "kind": "file",
+      "label": "docs/codetopo-profile/PROFILE.md",
+      "loc": {
+        "file": "docs/codetopo-profile/PROFILE.md",
+        "line": 1
+      },
+      "tier": "core",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "pae::/docs/codetopo-profile/refresh.sh",
+      "kind": "file",
+      "label": "docs/codetopo-profile/refresh.sh",
+      "loc": {
+        "file": "docs/codetopo-profile/refresh.sh",
+        "line": 1
+      },
+      "tier": "core",
+      "defines": [],
+      "refs": []
+    },
+    {
       "id": "pae::/knowledge/README.md",
       "kind": "file",
       "label": "knowledge/README.md",
@@ -74425,6 +75557,42 @@
       "label": "platforms/capacitor/capacitor.config.ts",
       "loc": {
         "file": "platforms/capacitor/capacitor.config.ts",
+        "line": 1
+      },
+      "tier": "core",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "pae::/scripts/build-bundle.sh",
+      "kind": "file",
+      "label": "scripts/build-bundle.sh",
+      "loc": {
+        "file": "scripts/build-bundle.sh",
+        "line": 1
+      },
+      "tier": "core",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "pae::/scripts/check-guardrail.sh",
+      "kind": "file",
+      "label": "scripts/check-guardrail.sh",
+      "loc": {
+        "file": "scripts/check-guardrail.sh",
+        "line": 1
+      },
+      "tier": "core",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "pae::/scripts/install.sh",
+      "kind": "file",
+      "label": "scripts/install.sh",
+      "loc": {
+        "file": "scripts/install.sh",
         "line": 1
       },
       "tier": "core",
@@ -74840,6 +76008,104 @@
       "refs": []
     },
     {
+      "id": "pae::docs::codetopo-profile::PROFILE",
+      "kind": "module",
+      "label": "pae::docs::codetopo-profile::PROFILE",
+      "loc": {
+        "file": "docs/codetopo-profile/PROFILE.md",
+        "line": 1
+      },
+      "tier": "core",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "pae::docs::codetopo-profile::PROFILE::PROFILE",
+      "kind": "doc",
+      "label": "PROFILE",
+      "loc": {
+        "file": "docs/codetopo-profile/PROFILE.md",
+        "line": 1
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "pae::docs::codetopo-profile::refresh",
+      "kind": "module",
+      "label": "pae::docs::codetopo-profile::refresh",
+      "loc": {
+        "file": "docs/codetopo-profile/refresh.sh",
+        "line": 1
+      },
+      "tier": "core",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "pae::docs::codetopo-profile::refresh::HERE",
+      "kind": "variable",
+      "label": "HERE",
+      "loc": {
+        "file": "docs/codetopo-profile/refresh.sh",
+        "line": 8
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "cd",
+        "dirname",
+        "pwd"
+      ],
+      "end_line": 8,
+      "signature": "HERE"
+    },
+    {
+      "id": "pae::docs::codetopo-profile::refresh::PYTHONPATH",
+      "kind": "variable",
+      "label": "PYTHONPATH",
+      "loc": {
+        "file": "docs/codetopo-profile/refresh.sh",
+        "line": 10
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [],
+      "end_line": 10,
+      "signature": "PYTHONPATH"
+    },
+    {
+      "id": "pae::docs::codetopo-profile::refresh::REF",
+      "kind": "variable",
+      "label": "REF",
+      "loc": {
+        "file": "docs/codetopo-profile/refresh.sh",
+        "line": 7
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [],
+      "end_line": 7,
+      "signature": "REF"
+    },
+    {
+      "id": "pae::docs::codetopo-profile::refresh::WORK",
+      "kind": "variable",
+      "label": "WORK",
+      "loc": {
+        "file": "docs/codetopo-profile/refresh.sh",
+        "line": 9
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "mktemp"
+      ],
+      "end_line": 9,
+      "signature": "WORK"
+    },
+    {
       "id": "pae::knowledge::README",
       "kind": "module",
       "label": "pae::knowledge::README",
@@ -74936,6 +76202,380 @@
       "refs": [],
       "end_line": 46,
       "signature": "config: CapacitorConfig"
+    },
+    {
+      "id": "pae::scripts::build-bundle",
+      "kind": "module",
+      "label": "pae::scripts::build-bundle",
+      "loc": {
+        "file": "scripts/build-bundle.sh",
+        "line": 1
+      },
+      "tier": "core",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "pae::scripts::build-bundle::ARCH",
+      "kind": "variable",
+      "label": "ARCH",
+      "loc": {
+        "file": "scripts/build-bundle.sh",
+        "line": 37
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "uname"
+      ],
+      "end_line": 37,
+      "signature": "ARCH"
+    },
+    {
+      "id": "pae::scripts::build-bundle::CDPATH",
+      "kind": "variable",
+      "label": "CDPATH",
+      "loc": {
+        "file": "scripts/build-bundle.sh",
+        "line": 31
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [],
+      "end_line": 31,
+      "signature": "CDPATH"
+    },
+    {
+      "id": "pae::scripts::build-bundle::EXE",
+      "kind": "variable",
+      "label": "EXE",
+      "loc": {
+        "file": "scripts/build-bundle.sh",
+        "line": 41
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [],
+      "end_line": 41,
+      "signature": "EXE"
+    },
+    {
+      "id": "pae::scripts::build-bundle::NAME",
+      "kind": "variable",
+      "label": "NAME",
+      "loc": {
+        "file": "scripts/build-bundle.sh",
+        "line": 44
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "ARCH",
+        "OS",
+        "VERSION"
+      ],
+      "end_line": 44,
+      "signature": "NAME"
+    },
+    {
+      "id": "pae::scripts::build-bundle::OS",
+      "kind": "variable",
+      "label": "OS",
+      "loc": {
+        "file": "scripts/build-bundle.sh",
+        "line": 36
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "tr",
+        "uname"
+      ],
+      "end_line": 36,
+      "signature": "OS"
+    },
+    {
+      "id": "pae::scripts::build-bundle::OUT",
+      "kind": "variable",
+      "label": "OUT",
+      "loc": {
+        "file": "scripts/build-bundle.sh",
+        "line": 32
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "REPO"
+      ],
+      "end_line": 32,
+      "signature": "OUT"
+    },
+    {
+      "id": "pae::scripts::build-bundle::PYTHON",
+      "kind": "variable",
+      "label": "PYTHON",
+      "loc": {
+        "file": "scripts/build-bundle.sh",
+        "line": 33
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "PAE_BUILD_PYTHON"
+      ],
+      "end_line": 33,
+      "signature": "PYTHON"
+    },
+    {
+      "id": "pae::scripts::build-bundle::PYTHONPATH",
+      "kind": "variable",
+      "label": "PYTHONPATH",
+      "loc": {
+        "file": "scripts/build-bundle.sh",
+        "line": 65
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "REPO"
+      ],
+      "end_line": 65,
+      "signature": "PYTHONPATH"
+    },
+    {
+      "id": "pae::scripts::build-bundle::REPO",
+      "kind": "variable",
+      "label": "REPO",
+      "loc": {
+        "file": "scripts/build-bundle.sh",
+        "line": 31
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "cd",
+        "dirname",
+        "pwd"
+      ],
+      "end_line": 31,
+      "signature": "REPO"
+    },
+    {
+      "id": "pae::scripts::build-bundle::STAGE",
+      "kind": "variable",
+      "label": "STAGE",
+      "loc": {
+        "file": "scripts/build-bundle.sh",
+        "line": 45
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "NAME",
+        "OUT"
+      ],
+      "end_line": 45,
+      "signature": "STAGE"
+    },
+    {
+      "id": "pae::scripts::build-bundle::VERSION",
+      "kind": "variable",
+      "label": "VERSION",
+      "loc": {
+        "file": "scripts/build-bundle.sh",
+        "line": 35
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "REPO",
+        "head",
+        "sed"
+      ],
+      "end_line": 35,
+      "signature": "VERSION"
+    },
+    {
+      "id": "pae::scripts::build-bundle::WORK",
+      "kind": "variable",
+      "label": "WORK",
+      "loc": {
+        "file": "scripts/build-bundle.sh",
+        "line": 46
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "NAME",
+        "OUT"
+      ],
+      "end_line": 46,
+      "signature": "WORK"
+    },
+    {
+      "id": "pae::scripts::check-guardrail",
+      "kind": "module",
+      "label": "pae::scripts::check-guardrail",
+      "loc": {
+        "file": "scripts/check-guardrail.sh",
+        "line": 1
+      },
+      "tier": "core",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "pae::scripts::check-guardrail::hits",
+      "kind": "variable",
+      "label": "hits",
+      "loc": {
+        "file": "scripts/check-guardrail.sh",
+        "line": 13
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "grep",
+        "true"
+      ],
+      "end_line": 14,
+      "signature": "hits"
+    },
+    {
+      "id": "pae::scripts::install",
+      "kind": "module",
+      "label": "pae::scripts::install",
+      "loc": {
+        "file": "scripts/install.sh",
+        "line": 1
+      },
+      "tier": "core",
+      "defines": [],
+      "refs": []
+    },
+    {
+      "id": "pae::scripts::install::AGENTS_DIR",
+      "kind": "variable",
+      "label": "AGENTS_DIR",
+      "loc": {
+        "file": "scripts/install.sh",
+        "line": 94
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "HOME"
+      ],
+      "end_line": 94,
+      "signature": "AGENTS_DIR"
+    },
+    {
+      "id": "pae::scripts::install::BIN_DIR",
+      "kind": "variable",
+      "label": "BIN_DIR",
+      "loc": {
+        "file": "scripts/install.sh",
+        "line": 26
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "HOME"
+      ],
+      "end_line": 26,
+      "signature": "BIN_DIR"
+    },
+    {
+      "id": "pae::scripts::install::CDPATH",
+      "kind": "variable",
+      "label": "CDPATH",
+      "loc": {
+        "file": "scripts/install.sh",
+        "line": 24
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [],
+      "end_line": 24,
+      "signature": "CDPATH"
+    },
+    {
+      "id": "pae::scripts::install::PREFIX",
+      "kind": "variable",
+      "label": "PREFIX",
+      "loc": {
+        "file": "scripts/install.sh",
+        "line": 25
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "HOME"
+      ],
+      "end_line": 25,
+      "signature": "PREFIX"
+    },
+    {
+      "id": "pae::scripts::install::SRC",
+      "kind": "variable",
+      "label": "SRC",
+      "loc": {
+        "file": "scripts/install.sh",
+        "line": 24
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "cd",
+        "dirname",
+        "pwd"
+      ],
+      "end_line": 24,
+      "signature": "SRC"
+    },
+    {
+      "id": "pae::scripts::install::UNIT_DIR",
+      "kind": "variable",
+      "label": "UNIT_DIR",
+      "loc": {
+        "file": "scripts/install.sh",
+        "line": 72
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [
+        "HOME"
+      ],
+      "end_line": 72,
+      "signature": "UNIT_DIR"
+    },
+    {
+      "id": "pae::scripts::install::WANT_LAUNCHD",
+      "kind": "variable",
+      "label": "WANT_LAUNCHD",
+      "loc": {
+        "file": "scripts/install.sh",
+        "line": 28
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [],
+      "end_line": 28,
+      "signature": "WANT_LAUNCHD"
+    },
+    {
+      "id": "pae::scripts::install::WANT_SYSTEMD",
+      "kind": "variable",
+      "label": "WANT_SYSTEMD",
+      "loc": {
+        "file": "scripts/install.sh",
+        "line": 27
+      },
+      "tier": "optional",
+      "defines": [],
+      "refs": [],
+      "end_line": 27,
+      "signature": "WANT_SYSTEMD"
     },
     {
       "id": "pae::scripts::seed_demo",
@@ -76703,6 +78343,18 @@
     },
     {
       "from": "pae",
+      "to": "pae::docs::codetopo-profile::PROFILE",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae",
+      "to": "pae::docs::codetopo-profile::refresh",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae",
       "to": "pae::knowledge::README",
       "kind": "contains",
       "attrs": {}
@@ -76722,6 +78374,24 @@
     {
       "from": "pae",
       "to": "pae::platforms::capacitor::capacitor.config",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae",
+      "to": "pae::scripts::build-bundle",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae",
+      "to": "pae::scripts::check-guardrail",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae",
+      "to": "pae::scripts::install",
       "kind": "contains",
       "attrs": {}
     },
@@ -82278,6 +83948,20 @@
     },
     {
       "from": "pae-analytics::pae::data::adapter::DataAdapter::__init__",
+      "to": "external::cd",
+      "kind": "defines",
+      "line": 134,
+      "attrs": {}
+    },
+    {
+      "from": "pae-analytics::pae::data::adapter::DataAdapter::__init__",
+      "to": "external::cd",
+      "kind": "writes",
+      "line": 134,
+      "attrs": {}
+    },
+    {
+      "from": "pae-analytics::pae::data::adapter::DataAdapter::__init__",
       "to": "external::dict",
       "kind": "reads",
       "line": 134,
@@ -87299,6 +88983,20 @@
       "to": "pae-analytics::pae::data::csv_import::PortfolioImport",
       "kind": "reads",
       "line": 253,
+      "attrs": {}
+    },
+    {
+      "from": "pae-analytics::pae::data::csv_import::detect_format",
+      "to": "external::head",
+      "kind": "defines",
+      "line": 171,
+      "attrs": {}
+    },
+    {
+      "from": "pae-analytics::pae::data::csv_import::detect_format",
+      "to": "external::head",
+      "kind": "writes",
+      "line": 171,
       "attrs": {}
     },
     {
@@ -126592,6 +128290,18 @@
     },
     {
       "from": "pae-engine",
+      "to": "pae-engine::c::pae_bonds",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine",
+      "to": "pae-engine::c::pae_num",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine",
       "to": "pae-engine::crypto",
       "kind": "contains",
       "attrs": {}
@@ -126689,6 +128399,132 @@
     {
       "from": "pae-engine::/build.rs",
       "to": "pae-engine::build::main",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_bonds.c",
+      "to": "pae-engine::c::pae_bonds::df_leg",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_bonds.c",
+      "to": "pae-engine::c::pae_bonds::pae_bond_convexity",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_bonds.c",
+      "to": "pae-engine::c::pae_bonds::pae_bond_macaulay_duration",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_bonds.c",
+      "to": "pae-engine::c::pae_bonds::pae_bond_modified_duration",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_bonds.c",
+      "to": "pae-engine::c::pae_bonds::pae_bond_npv",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_bonds.c",
+      "to": "pae-engine::c::pae_bonds::pae_bond_ytm",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_bonds.c",
+      "to": "pae-engine::c::pae_bonds::pae_flat_discount_factors",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_bonds.c",
+      "to": "pae-engine::c::pae_bonds::valid_legs",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_bonds.c",
+      "to": "pae-engine::c::pae_bonds::weighted_sums",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_num.c",
+      "to": "pae-engine::c::pae_num::dgemm_",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_num.c",
+      "to": "pae-engine::c::pae_num::dgemv_",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_num.c",
+      "to": "pae-engine::c::pae_num::dpotrf_",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_num.c",
+      "to": "pae-engine::c::pae_num::dsyev_",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_num.c",
+      "to": "pae-engine::c::pae_num::pae_cholesky",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_num.c",
+      "to": "pae-engine::c::pae_num::pae_correlation",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_num.c",
+      "to": "pae-engine::c::pae_num::pae_covariance",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_num.c",
+      "to": "pae-engine::c::pae_num::pae_dgemm",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_num.c",
+      "to": "pae-engine::c::pae_num::pae_dgemv",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_num.c",
+      "to": "pae-engine::c::pae_num::pae_eigen_sym",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_num.h",
+      "to": "pae-engine::c::pae_num::PAE_NUM_EINVAL",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::/c/pae_num.h",
+      "to": "pae-engine::c::pae_num::PAE_NUM_OK",
       "kind": "contains",
       "attrs": {}
     },
@@ -137444,6 +139280,1073 @@
       "attrs": {}
     },
     {
+      "from": "pae-engine::c::pae_bonds",
+      "to": "external::math",
+      "kind": "imports",
+      "line": 13,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds",
+      "to": "pae-engine::/c/pae_bonds.c",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds",
+      "to": "pae-engine::/c/pae_bonds.h",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds",
+      "to": "pae-engine::c::pae_bonds",
+      "kind": "imports",
+      "line": 11,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::df_leg",
+      "to": "external::pow",
+      "kind": "calls",
+      "line": 19,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::df_leg",
+      "to": "external::pow",
+      "kind": "reads",
+      "line": 16,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::df_leg",
+      "to": "pae-ui::tests::shamir::kat-oracle.mjs::y",
+      "kind": "defines",
+      "line": 16,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::df_leg",
+      "to": "pae-ui::tests::shamir::shamir.test.mjs::t",
+      "kind": "defines",
+      "line": 16,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_convexity",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 115,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_convexity",
+      "to": "external::isfinite",
+      "kind": "calls",
+      "line": 120,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_convexity",
+      "to": "external::isfinite",
+      "kind": "reads",
+      "line": 115,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_convexity",
+      "to": "pae-engine::c::pae_bonds::valid_legs",
+      "kind": "calls",
+      "line": 117,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_convexity",
+      "to": "pae-engine::c::pae_bonds::valid_legs",
+      "kind": "reads",
+      "line": 115,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_convexity",
+      "to": "pae-engine::c::pae_bonds::weighted_sums",
+      "kind": "calls",
+      "line": 119,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_convexity",
+      "to": "pae-engine::c::pae_bonds::weighted_sums",
+      "kind": "reads",
+      "line": 115,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_convexity",
+      "to": "pae-engine::num_ffi::bonds::npv",
+      "kind": "defines",
+      "line": 115,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_convexity",
+      "to": "pae-engine::num_ffi::bonds::npv",
+      "kind": "writes",
+      "line": 115,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_convexity",
+      "to": "pae-ui::tests::shamir::kat-oracle.mjs::y",
+      "kind": "defines",
+      "line": 115,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_macaulay_duration",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 99,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_macaulay_duration",
+      "to": "external::isfinite",
+      "kind": "calls",
+      "line": 104,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_macaulay_duration",
+      "to": "external::isfinite",
+      "kind": "reads",
+      "line": 99,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_macaulay_duration",
+      "to": "pae-engine::c::pae_bonds::valid_legs",
+      "kind": "calls",
+      "line": 101,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_macaulay_duration",
+      "to": "pae-engine::c::pae_bonds::valid_legs",
+      "kind": "reads",
+      "line": 99,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_macaulay_duration",
+      "to": "pae-engine::c::pae_bonds::weighted_sums",
+      "kind": "calls",
+      "line": 103,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_macaulay_duration",
+      "to": "pae-engine::c::pae_bonds::weighted_sums",
+      "kind": "reads",
+      "line": 99,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_macaulay_duration",
+      "to": "pae-engine::num_ffi::bonds::npv",
+      "kind": "defines",
+      "line": 99,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_macaulay_duration",
+      "to": "pae-engine::num_ffi::bonds::npv",
+      "kind": "writes",
+      "line": 99,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_macaulay_duration",
+      "to": "pae-ui::tests::shamir::kat-oracle.mjs::y",
+      "kind": "defines",
+      "line": 99,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_modified_duration",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 108,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_modified_duration",
+      "to": "external::isfinite",
+      "kind": "calls",
+      "line": 111,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_modified_duration",
+      "to": "external::isfinite",
+      "kind": "reads",
+      "line": 108,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_modified_duration",
+      "to": "pae-engine::c::pae_bonds::pae_bond_macaulay_duration",
+      "kind": "calls",
+      "line": 110,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_modified_duration",
+      "to": "pae-engine::c::pae_bonds::pae_bond_macaulay_duration",
+      "kind": "reads",
+      "line": 108,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_modified_duration",
+      "to": "pae-ui::tests::shamir::kat-oracle.mjs::y",
+      "kind": "defines",
+      "line": 108,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_npv",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 22,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_npv",
+      "to": "pae-engine::num_ffi::bonds::npv",
+      "kind": "defines",
+      "line": 22,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_npv",
+      "to": "pae-engine::num_ffi::bonds::npv",
+      "kind": "writes",
+      "line": 22,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_npv",
+      "to": "pae-ui::src::crypto::shamir::i",
+      "kind": "defines",
+      "line": 22,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_npv",
+      "to": "pae-ui::src::crypto::shamir::i",
+      "kind": "writes",
+      "line": 22,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_ytm",
+      "to": "external::fabs",
+      "kind": "calls",
+      "line": 64,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_ytm",
+      "to": "external::fabs",
+      "kind": "reads",
+      "line": 36,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_ytm",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 36,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_ytm",
+      "to": "external::isfinite",
+      "kind": "calls",
+      "line": 52,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_ytm",
+      "to": "external::isfinite",
+      "kind": "reads",
+      "line": 36,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_ytm",
+      "to": "external::iter",
+      "kind": "defines",
+      "line": 36,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_ytm",
+      "to": "external::iter",
+      "kind": "writes",
+      "line": 36,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_ytm",
+      "to": "pae-engine::c::pae_bonds::df_leg",
+      "kind": "calls",
+      "line": 50,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_ytm",
+      "to": "pae-engine::c::pae_bonds::df_leg",
+      "kind": "reads",
+      "line": 36,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_ytm",
+      "to": "pae-engine::num_ffi::bonds::npv",
+      "kind": "defines",
+      "line": 36,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_ytm",
+      "to": "pae-engine::num_ffi::bonds::npv",
+      "kind": "writes",
+      "line": 36,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_ytm",
+      "to": "pae-ui::src::crypto::shamir::i",
+      "kind": "defines",
+      "line": 36,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_bond_ytm",
+      "to": "pae-ui::src::crypto::shamir::i",
+      "kind": "writes",
+      "line": 36,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_flat_discount_factors",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 30,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_flat_discount_factors",
+      "to": "pae-engine::c::pae_bonds::df_leg",
+      "kind": "calls",
+      "line": 33,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_flat_discount_factors",
+      "to": "pae-engine::c::pae_bonds::df_leg",
+      "kind": "reads",
+      "line": 30,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_flat_discount_factors",
+      "to": "pae-ui::src::crypto::shamir::i",
+      "kind": "defines",
+      "line": 30,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_flat_discount_factors",
+      "to": "pae-ui::src::crypto::shamir::i",
+      "kind": "writes",
+      "line": 30,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::pae_flat_discount_factors",
+      "to": "pae-ui::tests::shamir::kat-oracle.mjs::y",
+      "kind": "defines",
+      "line": 30,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::valid_legs",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 90,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::valid_legs",
+      "to": "external::isfinite",
+      "kind": "calls",
+      "line": 93,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::valid_legs",
+      "to": "external::isfinite",
+      "kind": "reads",
+      "line": 90,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::valid_legs",
+      "to": "pae-ui::src::crypto::shamir::i",
+      "kind": "defines",
+      "line": 90,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::valid_legs",
+      "to": "pae-ui::src::crypto::shamir::i",
+      "kind": "writes",
+      "line": 90,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::valid_legs",
+      "to": "pae-ui::tests::shamir::kat-oracle.mjs::y",
+      "kind": "defines",
+      "line": 90,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::weighted_sums",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 74,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::weighted_sums",
+      "to": "external::isfinite",
+      "kind": "calls",
+      "line": 79,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::weighted_sums",
+      "to": "external::isfinite",
+      "kind": "reads",
+      "line": 74,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::weighted_sums",
+      "to": "pae-engine::c::pae_bonds::df_leg",
+      "kind": "calls",
+      "line": 78,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::weighted_sums",
+      "to": "pae-engine::c::pae_bonds::df_leg",
+      "kind": "reads",
+      "line": 74,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::weighted_sums",
+      "to": "pae-engine::num_ffi::bonds::npv",
+      "kind": "defines",
+      "line": 74,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::weighted_sums",
+      "to": "pae-engine::num_ffi::bonds::npv",
+      "kind": "writes",
+      "line": 74,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::weighted_sums",
+      "to": "pae-ui::src::crypto::shamir::i",
+      "kind": "defines",
+      "line": 74,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::weighted_sums",
+      "to": "pae-ui::src::crypto::shamir::i",
+      "kind": "writes",
+      "line": 74,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::weighted_sums",
+      "to": "pae-ui::tests::shamir::kat-oracle.mjs::y",
+      "kind": "defines",
+      "line": 74,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::weighted_sums",
+      "to": "pae-ui::tests::shamir::shamir.test.mjs::d",
+      "kind": "defines",
+      "line": 74,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_bonds::weighted_sums",
+      "to": "pae-ui::tests::shamir::shamir.test.mjs::d",
+      "kind": "writes",
+      "line": 74,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num",
+      "to": "external::math",
+      "kind": "imports",
+      "line": 18,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num",
+      "to": "external::stdlib",
+      "kind": "imports",
+      "line": 19,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num",
+      "to": "external::string",
+      "kind": "imports",
+      "line": 20,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num",
+      "to": "pae-engine::/c/pae_num.c",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num",
+      "to": "pae-engine::/c/pae_num.h",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num",
+      "to": "pae-engine::c::pae_num",
+      "kind": "imports",
+      "line": 16,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::dgemm_",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 26,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::dgemm_",
+      "to": "pae-ui::tests::shamir::kat-oracle.mjs::c",
+      "kind": "defines",
+      "line": 26,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::dgemm_",
+      "to": "pae-ui::tests::shamir::shamir.test.mjs::a",
+      "kind": "defines",
+      "line": 26,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::dgemm_",
+      "to": "pae-ui::tests::shamir::shamir.test.mjs::b",
+      "kind": "defines",
+      "line": 26,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::dgemm_",
+      "to": "pae-ui::vendor::hash-wasm::hash-wasm.esm::alpha",
+      "kind": "defines",
+      "line": 26,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::dgemv_",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 34,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::dgemv_",
+      "to": "pae-ui::src::crypto::shamir::x",
+      "kind": "defines",
+      "line": 34,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::dgemv_",
+      "to": "pae-ui::tests::shamir::kat-oracle.mjs::y",
+      "kind": "defines",
+      "line": 34,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::dgemv_",
+      "to": "pae-ui::tests::shamir::shamir.test.mjs::a",
+      "kind": "defines",
+      "line": 34,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::dgemv_",
+      "to": "pae-ui::vendor::hash-wasm::hash-wasm.esm::alpha",
+      "kind": "defines",
+      "line": 34,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::dpotrf_",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 42,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::dpotrf_",
+      "to": "pae-ui::tests::shamir::shamir.test.mjs::a",
+      "kind": "defines",
+      "line": 42,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::dsyev_",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 45,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::dsyev_",
+      "to": "pae-ui::tests::shamir::shamir.test.mjs::a",
+      "kind": "defines",
+      "line": 45,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_cholesky",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 166,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_cholesky",
+      "to": "pae-engine::c::pae_num::PAE_NUM_EINVAL",
+      "kind": "reads",
+      "line": 166,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_cholesky",
+      "to": "pae-engine::c::pae_num::PAE_NUM_OK",
+      "kind": "reads",
+      "line": 166,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_cholesky",
+      "to": "pae-engine::c::pae_num::dpotrf_",
+      "kind": "calls",
+      "line": 170,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_cholesky",
+      "to": "pae-engine::c::pae_num::dpotrf_",
+      "kind": "reads",
+      "line": 166,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_cholesky",
+      "to": "pae-ui::src::crypto::shamir::i",
+      "kind": "defines",
+      "line": 166,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_cholesky",
+      "to": "pae-ui::src::crypto::shamir::i",
+      "kind": "writes",
+      "line": 166,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_cholesky",
+      "to": "pae-ui::tests::shamir::shamir.test.mjs::a",
+      "kind": "defines",
+      "line": 166,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_correlation",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 120,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_correlation",
+      "to": "external::isfinite",
+      "kind": "calls",
+      "line": 127,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_correlation",
+      "to": "external::isfinite",
+      "kind": "reads",
+      "line": 120,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_correlation",
+      "to": "external::sqrt",
+      "kind": "calls",
+      "line": 148,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_correlation",
+      "to": "external::sqrt",
+      "kind": "reads",
+      "line": 120,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_correlation",
+      "to": "pae-engine::c::pae_num::PAE_NUM_EINVAL",
+      "kind": "reads",
+      "line": 120,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_correlation",
+      "to": "pae-engine::c::pae_num::PAE_NUM_OK",
+      "kind": "reads",
+      "line": 120,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_correlation",
+      "to": "pae-ui::src::crypto::shamir::i",
+      "kind": "defines",
+      "line": 120,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_correlation",
+      "to": "pae-ui::src::crypto::shamir::i",
+      "kind": "writes",
+      "line": 120,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_covariance",
+      "to": "external::free",
+      "kind": "calls",
+      "line": 116,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_covariance",
+      "to": "external::free",
+      "kind": "reads",
+      "line": 93,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_covariance",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 93,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_covariance",
+      "to": "external::malloc",
+      "kind": "calls",
+      "line": 97,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_covariance",
+      "to": "external::malloc",
+      "kind": "reads",
+      "line": 93,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_covariance",
+      "to": "pae-engine::c::pae_num::PAE_NUM_EINVAL",
+      "kind": "reads",
+      "line": 93,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_covariance",
+      "to": "pae-engine::c::pae_num::PAE_NUM_OK",
+      "kind": "reads",
+      "line": 93,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_covariance",
+      "to": "pae-engine::c::pae_num::dgemm_",
+      "kind": "calls",
+      "line": 111,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_covariance",
+      "to": "pae-engine::c::pae_num::dgemm_",
+      "kind": "reads",
+      "line": 93,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_covariance",
+      "to": "pae-ui::src::crypto::shamir::i",
+      "kind": "defines",
+      "line": 93,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_covariance",
+      "to": "pae-ui::src::crypto::shamir::i",
+      "kind": "writes",
+      "line": 93,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_covariance",
+      "to": "pae-ui::src::crypto::shamir::x",
+      "kind": "defines",
+      "line": 93,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemm",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 53,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemm",
+      "to": "pae-engine::c::pae_num::PAE_NUM_EINVAL",
+      "kind": "reads",
+      "line": 53,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemm",
+      "to": "pae-engine::c::pae_num::PAE_NUM_OK",
+      "kind": "reads",
+      "line": 53,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemm",
+      "to": "pae-engine::c::pae_num::dgemm_",
+      "kind": "calls",
+      "line": 67,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemm",
+      "to": "pae-engine::c::pae_num::dgemm_",
+      "kind": "reads",
+      "line": 53,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemm",
+      "to": "pae-ui::tests::shamir::kat-oracle.mjs::c",
+      "kind": "defines",
+      "line": 53,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemm",
+      "to": "pae-ui::tests::shamir::shamir.test.mjs::a",
+      "kind": "defines",
+      "line": 53,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemm",
+      "to": "pae-ui::tests::shamir::shamir.test.mjs::b",
+      "kind": "defines",
+      "line": 53,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemm",
+      "to": "pae-ui::vendor::hash-wasm::hash-wasm.esm::alpha",
+      "kind": "defines",
+      "line": 53,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemv",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 71,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemv",
+      "to": "pae-engine::c::pae_num::PAE_NUM_EINVAL",
+      "kind": "reads",
+      "line": 71,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemv",
+      "to": "pae-engine::c::pae_num::PAE_NUM_OK",
+      "kind": "reads",
+      "line": 71,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemv",
+      "to": "pae-engine::c::pae_num::dgemv_",
+      "kind": "calls",
+      "line": 85,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemv",
+      "to": "pae-engine::c::pae_num::dgemv_",
+      "kind": "reads",
+      "line": 71,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemv",
+      "to": "pae-ui::src::crypto::shamir::x",
+      "kind": "defines",
+      "line": 71,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemv",
+      "to": "pae-ui::tests::shamir::kat-oracle.mjs::y",
+      "kind": "defines",
+      "line": 71,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemv",
+      "to": "pae-ui::tests::shamir::shamir.test.mjs::a",
+      "kind": "defines",
+      "line": 71,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_dgemv",
+      "to": "pae-ui::vendor::hash-wasm::hash-wasm.esm::alpha",
+      "kind": "defines",
+      "line": 71,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_eigen_sym",
+      "to": "external::free",
+      "kind": "calls",
+      "line": 197,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_eigen_sym",
+      "to": "external::free",
+      "kind": "reads",
+      "line": 179,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_eigen_sym",
+      "to": "external::int",
+      "kind": "reads",
+      "line": 179,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_eigen_sym",
+      "to": "external::malloc",
+      "kind": "calls",
+      "line": 193,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_eigen_sym",
+      "to": "external::malloc",
+      "kind": "reads",
+      "line": 179,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_eigen_sym",
+      "to": "pae-engine::c::pae_num::PAE_NUM_EINVAL",
+      "kind": "reads",
+      "line": 179,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_eigen_sym",
+      "to": "pae-engine::c::pae_num::PAE_NUM_OK",
+      "kind": "reads",
+      "line": 179,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_eigen_sym",
+      "to": "pae-engine::c::pae_num::dsyev_",
+      "kind": "calls",
+      "line": 188,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_eigen_sym",
+      "to": "pae-engine::c::pae_num::dsyev_",
+      "kind": "reads",
+      "line": 179,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::c::pae_num::pae_eigen_sym",
+      "to": "pae-ui::tests::shamir::shamir.test.mjs::a",
+      "kind": "defines",
+      "line": 179,
+      "attrs": {}
+    },
+    {
       "from": "pae-engine::crypto",
       "to": "pae-engine::/src/crypto/mod.rs",
       "kind": "contains",
@@ -142565,6 +145468,13 @@
     },
     {
       "from": "pae-engine::main::tests::analytics_proxy_forwards_and_relays",
+      "to": "external::head",
+      "kind": "defines",
+      "line": 1528,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::main::tests::analytics_proxy_forwards_and_relays",
       "to": "external::head\n                        .lines",
       "kind": "calls",
       "line": 1546,
@@ -147470,6 +150380,13 @@
       "to": "external::s.as_slice",
       "kind": "calls",
       "line": 604,
+      "attrs": {}
+    },
+    {
+      "from": "pae-engine::num_ffi::tests::test_native_kernels_are_not_stubs",
+      "to": "external::sqrt",
+      "kind": "reads",
+      "line": 590,
       "attrs": {}
     },
     {
@@ -180672,6 +183589,36 @@
       "attrs": {}
     },
     {
+      "from": "pae::/docs/codetopo-profile/PROFILE.md",
+      "to": "pae::docs::codetopo-profile::PROFILE::PROFILE",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/docs/codetopo-profile/refresh.sh",
+      "to": "pae::docs::codetopo-profile::refresh::HERE",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/docs/codetopo-profile/refresh.sh",
+      "to": "pae::docs::codetopo-profile::refresh::PYTHONPATH",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/docs/codetopo-profile/refresh.sh",
+      "to": "pae::docs::codetopo-profile::refresh::REF",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/docs/codetopo-profile/refresh.sh",
+      "to": "pae::docs::codetopo-profile::refresh::WORK",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
       "from": "pae::/knowledge/README.md",
       "to": "pae::knowledge::README::README",
       "kind": "contains",
@@ -180692,6 +183639,132 @@
     {
       "from": "pae::/platforms/capacitor/capacitor.config.ts",
       "to": "pae::platforms::capacitor::capacitor.config::config",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/build-bundle.sh",
+      "to": "pae::scripts::build-bundle::ARCH",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/build-bundle.sh",
+      "to": "pae::scripts::build-bundle::CDPATH",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/build-bundle.sh",
+      "to": "pae::scripts::build-bundle::EXE",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/build-bundle.sh",
+      "to": "pae::scripts::build-bundle::NAME",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/build-bundle.sh",
+      "to": "pae::scripts::build-bundle::OS",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/build-bundle.sh",
+      "to": "pae::scripts::build-bundle::OUT",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/build-bundle.sh",
+      "to": "pae::scripts::build-bundle::PYTHON",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/build-bundle.sh",
+      "to": "pae::scripts::build-bundle::PYTHONPATH",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/build-bundle.sh",
+      "to": "pae::scripts::build-bundle::REPO",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/build-bundle.sh",
+      "to": "pae::scripts::build-bundle::STAGE",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/build-bundle.sh",
+      "to": "pae::scripts::build-bundle::VERSION",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/build-bundle.sh",
+      "to": "pae::scripts::build-bundle::WORK",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/check-guardrail.sh",
+      "to": "pae::scripts::check-guardrail::hits",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/install.sh",
+      "to": "pae::scripts::install::AGENTS_DIR",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/install.sh",
+      "to": "pae::scripts::install::BIN_DIR",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/install.sh",
+      "to": "pae::scripts::install::CDPATH",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/install.sh",
+      "to": "pae::scripts::install::PREFIX",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/install.sh",
+      "to": "pae::scripts::install::SRC",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/install.sh",
+      "to": "pae::scripts::install::UNIT_DIR",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/install.sh",
+      "to": "pae::scripts::install::WANT_LAUNCHD",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::/scripts/install.sh",
+      "to": "pae::scripts::install::WANT_SYSTEMD",
       "kind": "contains",
       "attrs": {}
     },
@@ -181176,6 +184249,123 @@
       "attrs": {}
     },
     {
+      "from": "pae::docs::codetopo-profile::PROFILE",
+      "to": "pae::/docs/codetopo-profile/PROFILE.md",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::docs::codetopo-profile::refresh",
+      "to": "external::cd",
+      "kind": "calls",
+      "line": 8,
+      "attrs": {}
+    },
+    {
+      "from": "pae::docs::codetopo-profile::refresh",
+      "to": "external::codetopo",
+      "kind": "calls",
+      "line": 14,
+      "attrs": {}
+    },
+    {
+      "from": "pae::docs::codetopo-profile::refresh",
+      "to": "external::dirname",
+      "kind": "calls",
+      "line": 8,
+      "attrs": {}
+    },
+    {
+      "from": "pae::docs::codetopo-profile::refresh",
+      "to": "external::echo",
+      "kind": "calls",
+      "line": 18,
+      "attrs": {}
+    },
+    {
+      "from": "pae::docs::codetopo-profile::refresh",
+      "to": "external::mkdir",
+      "kind": "calls",
+      "line": 13,
+      "attrs": {}
+    },
+    {
+      "from": "pae::docs::codetopo-profile::refresh",
+      "to": "external::mktemp",
+      "kind": "calls",
+      "line": 9,
+      "attrs": {}
+    },
+    {
+      "from": "pae::docs::codetopo-profile::refresh",
+      "to": "external::pwd",
+      "kind": "calls",
+      "line": 8,
+      "attrs": {}
+    },
+    {
+      "from": "pae::docs::codetopo-profile::refresh",
+      "to": "external::python3",
+      "kind": "calls",
+      "line": 11,
+      "attrs": {}
+    },
+    {
+      "from": "pae::docs::codetopo-profile::refresh",
+      "to": "external::set",
+      "kind": "calls",
+      "line": 6,
+      "attrs": {}
+    },
+    {
+      "from": "pae::docs::codetopo-profile::refresh",
+      "to": "external::tar",
+      "kind": "calls",
+      "line": 13,
+      "attrs": {}
+    },
+    {
+      "from": "pae::docs::codetopo-profile::refresh",
+      "to": "external::true",
+      "kind": "calls",
+      "line": 16,
+      "attrs": {}
+    },
+    {
+      "from": "pae::docs::codetopo-profile::refresh",
+      "to": "pae::/docs/codetopo-profile/refresh.sh",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::docs::codetopo-profile::refresh::HERE",
+      "to": "external::cd",
+      "kind": "reads",
+      "line": 8,
+      "attrs": {}
+    },
+    {
+      "from": "pae::docs::codetopo-profile::refresh::HERE",
+      "to": "external::dirname",
+      "kind": "reads",
+      "line": 8,
+      "attrs": {}
+    },
+    {
+      "from": "pae::docs::codetopo-profile::refresh::HERE",
+      "to": "external::pwd",
+      "kind": "reads",
+      "line": 8,
+      "attrs": {}
+    },
+    {
+      "from": "pae::docs::codetopo-profile::refresh::WORK",
+      "to": "external::mktemp",
+      "kind": "reads",
+      "line": 9,
+      "attrs": {}
+    },
+    {
       "from": "pae::knowledge::README",
       "to": "pae::/knowledge/README.md",
       "kind": "contains",
@@ -181208,6 +184398,479 @@
       "from": "pae::platforms::capacitor::capacitor.config",
       "to": "pae::/platforms/capacitor/capacitor.config.ts",
       "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::\"$PYTHON\"",
+      "kind": "calls",
+      "line": 65,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::cargo",
+      "kind": "calls",
+      "line": 83,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::cd",
+      "kind": "calls",
+      "line": 31,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::chmod",
+      "kind": "calls",
+      "line": 124,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::command",
+      "kind": "calls",
+      "line": 57,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::cp",
+      "kind": "calls",
+      "line": 84,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::dirname",
+      "kind": "calls",
+      "line": 31,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::du",
+      "kind": "calls",
+      "line": 139,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::echo",
+      "kind": "calls",
+      "line": 48,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::exit",
+      "kind": "calls",
+      "line": 59,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::head",
+      "kind": "calls",
+      "line": 35,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::mkdir",
+      "kind": "calls",
+      "line": 79,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::npm",
+      "kind": "calls",
+      "line": 88,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::pwd",
+      "kind": "calls",
+      "line": 31,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::rm",
+      "kind": "calls",
+      "line": 78,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::sed",
+      "kind": "calls",
+      "line": 35,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::set",
+      "kind": "calls",
+      "line": 29,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::tar",
+      "kind": "calls",
+      "line": 132,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::tr",
+      "kind": "calls",
+      "line": 36,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::true",
+      "kind": "calls",
+      "line": 126,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "external::uname",
+      "kind": "calls",
+      "line": 36,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle",
+      "to": "pae::/scripts/build-bundle.sh",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::ARCH",
+      "to": "external::uname",
+      "kind": "reads",
+      "line": 37,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::NAME",
+      "to": "pae::scripts::build-bundle::ARCH",
+      "kind": "reads",
+      "line": 44,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::NAME",
+      "to": "pae::scripts::build-bundle::OS",
+      "kind": "reads",
+      "line": 44,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::NAME",
+      "to": "pae::scripts::build-bundle::VERSION",
+      "kind": "reads",
+      "line": 44,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::OS",
+      "to": "external::tr",
+      "kind": "reads",
+      "line": 36,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::OS",
+      "to": "external::uname",
+      "kind": "reads",
+      "line": 36,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::OUT",
+      "to": "pae::scripts::build-bundle::REPO",
+      "kind": "reads",
+      "line": 32,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::PYTHONPATH",
+      "to": "pae::scripts::build-bundle::REPO",
+      "kind": "reads",
+      "line": 65,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::REPO",
+      "to": "external::cd",
+      "kind": "reads",
+      "line": 31,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::REPO",
+      "to": "external::dirname",
+      "kind": "reads",
+      "line": 31,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::REPO",
+      "to": "external::pwd",
+      "kind": "reads",
+      "line": 31,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::STAGE",
+      "to": "pae::scripts::build-bundle::NAME",
+      "kind": "reads",
+      "line": 45,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::STAGE",
+      "to": "pae::scripts::build-bundle::OUT",
+      "kind": "reads",
+      "line": 45,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::VERSION",
+      "to": "external::head",
+      "kind": "reads",
+      "line": 35,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::VERSION",
+      "to": "external::sed",
+      "kind": "reads",
+      "line": 35,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::VERSION",
+      "to": "pae::scripts::build-bundle::REPO",
+      "kind": "reads",
+      "line": 35,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::WORK",
+      "to": "pae::scripts::build-bundle::NAME",
+      "kind": "reads",
+      "line": 46,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::build-bundle::WORK",
+      "to": "pae::scripts::build-bundle::OUT",
+      "kind": "reads",
+      "line": 46,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::check-guardrail",
+      "to": "external::cd",
+      "kind": "calls",
+      "line": 12,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::check-guardrail",
+      "to": "external::dirname",
+      "kind": "calls",
+      "line": 12,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::check-guardrail",
+      "to": "external::echo",
+      "kind": "calls",
+      "line": 16,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::check-guardrail",
+      "to": "external::exit",
+      "kind": "calls",
+      "line": 18,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::check-guardrail",
+      "to": "external::grep",
+      "kind": "calls",
+      "line": 13,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::check-guardrail",
+      "to": "external::set",
+      "kind": "calls",
+      "line": 11,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::check-guardrail",
+      "to": "external::true",
+      "kind": "calls",
+      "line": 14,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::check-guardrail",
+      "to": "pae::/scripts/check-guardrail.sh",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::check-guardrail::hits",
+      "to": "external::grep",
+      "kind": "reads",
+      "line": 13,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::check-guardrail::hits",
+      "to": "external::true",
+      "kind": "reads",
+      "line": 13,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install",
+      "to": "external::cat",
+      "kind": "calls",
+      "line": 54,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install",
+      "to": "external::cd",
+      "kind": "calls",
+      "line": 24,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install",
+      "to": "external::chmod",
+      "kind": "calls",
+      "line": 62,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install",
+      "to": "external::cp",
+      "kind": "calls",
+      "line": 58,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install",
+      "to": "external::dirname",
+      "kind": "calls",
+      "line": 24,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install",
+      "to": "external::echo",
+      "kind": "calls",
+      "line": 36,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install",
+      "to": "external::exit",
+      "kind": "calls",
+      "line": 36,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install",
+      "to": "external::ln",
+      "kind": "calls",
+      "line": 67,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install",
+      "to": "external::mkdir",
+      "kind": "calls",
+      "line": 55,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install",
+      "to": "external::pwd",
+      "kind": "calls",
+      "line": 24,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install",
+      "to": "external::set",
+      "kind": "calls",
+      "line": 22,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install",
+      "to": "external::shift",
+      "kind": "calls",
+      "line": 32,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install",
+      "to": "external::true",
+      "kind": "calls",
+      "line": 63,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install",
+      "to": "pae-analytics::pae::data::csv_import::_build_column_map::find",
+      "kind": "calls",
+      "line": 57,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install",
+      "to": "pae::/scripts/install.sh",
+      "kind": "contains",
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install::SRC",
+      "to": "external::cd",
+      "kind": "reads",
+      "line": 24,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install::SRC",
+      "to": "external::dirname",
+      "kind": "reads",
+      "line": 24,
+      "attrs": {}
+    },
+    {
+      "from": "pae::scripts::install::SRC",
+      "to": "external::pwd",
+      "kind": "reads",
+      "line": 24,
       "attrs": {}
     },
     {
@@ -185675,34 +189338,319 @@
       "attrs": {}
     }
   ],
-  "audit_head": "93a23c52c5c3468879af7ca3941e38a33f545e052d96f3ba072974bfdaf3df32",
+  "audit_head": "5b03f1a1a45e1bb57f5bbe75cbb5d0f2ed0d288ea798a57f5ca40725a97e952e",
   "audit_log": [
     {
       "seq": 0,
-      "ts": "1795021929",
+      "ts": "1795135062",
       "op": "genesis",
       "payload": "{}",
       "prev_hash": "GENESIS",
-      "hash": "5627363c155940b90d74c5be0632e77c087d0743b4526c1c493e2441d640c36a"
+      "hash": "dcbb8af0ac6f071accae60815c47a77f95ba7c7583c76465419776f1551baa57"
     },
     {
       "seq": 1,
-      "ts": "1795021929",
+      "ts": "1795135062",
       "op": "index_started",
-      "payload": "{\"package\":\"pae\",\"repo\":\"/home/hatch/workspace/codetopo-work/PROFILES-GM-GATE-2026-11-18/work/pae\"}",
-      "prev_hash": "5627363c155940b90d74c5be0632e77c087d0743b4526c1c493e2441d640c36a",
-      "hash": "2203707d7d9884082387fdf810f4ba7507b22e815a90ed247016b0295146f70d"
+      "payload": "{\"package\":\"pae\",\"repo\":\"/home/hatch/workspace/codetopo-work/EXTRACTOR-PROGRAM-2026-11-19/reprofile/work/pae\"}",
+      "prev_hash": "dcbb8af0ac6f071accae60815c47a77f95ba7c7583c76465419776f1551baa57",
+      "hash": "0e5c088228148282b482dca4c0b06f9d2ae673f34a8b7d1cf4cdc0d9ce2b54c5"
     },
     {
       "seq": 2,
-      "ts": "1795021929",
+      "ts": "1795135062",
       "op": "index_finished",
-      "payload": "{\"diagnostics\":2626,\"edges\":15590,\"files_failed\":0,\"files_indexed\":124,\"nodes\":4715}",
-      "prev_hash": "2203707d7d9884082387fdf810f4ba7507b22e815a90ed247016b0295146f70d",
-      "hash": "93a23c52c5c3468879af7ca3941e38a33f545e052d96f3ba072974bfdaf3df32"
+      "payload": "{\"diagnostics\":2680,\"edges\":15888,\"files_failed\":0,\"files_indexed\":133,\"nodes\":4813}",
+      "prev_hash": "0e5c088228148282b482dca4c0b06f9d2ae673f34a8b7d1cf4cdc0d9ce2b54c5",
+      "hash": "5b03f1a1a45e1bb57f5bbe75cbb5d0f2ed0d288ea798a57f5ca40725a97e952e"
     }
   ],
   "diagnostics": [
+    {
+      "MultiDefinition": {
+        "symbol": "pae-engine::c::pae_bonds::pae_bond_npv",
+        "locations": [
+          {
+            "file": "c/pae_bonds.c",
+            "line": 22
+          },
+          {
+            "file": "c/pae_bonds.h",
+            "line": 37
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae-engine::c::pae_bonds::pae_flat_discount_factors",
+        "locations": [
+          {
+            "file": "c/pae_bonds.c",
+            "line": 30
+          },
+          {
+            "file": "c/pae_bonds.h",
+            "line": 41
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae-engine::c::pae_bonds::pae_bond_ytm",
+        "locations": [
+          {
+            "file": "c/pae_bonds.c",
+            "line": 36
+          },
+          {
+            "file": "c/pae_bonds.h",
+            "line": 51
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae-engine::c::pae_bonds::pae_bond_macaulay_duration",
+        "locations": [
+          {
+            "file": "c/pae_bonds.c",
+            "line": 99
+          },
+          {
+            "file": "c/pae_bonds.h",
+            "line": 55
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae-engine::c::pae_bonds::pae_bond_modified_duration",
+        "locations": [
+          {
+            "file": "c/pae_bonds.c",
+            "line": 108
+          },
+          {
+            "file": "c/pae_bonds.h",
+            "line": 59
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae-engine::c::pae_bonds::pae_bond_convexity",
+        "locations": [
+          {
+            "file": "c/pae_bonds.c",
+            "line": 115
+          },
+          {
+            "file": "c/pae_bonds.h",
+            "line": 63
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae-engine::c::pae_num::pae_dgemm",
+        "locations": [
+          {
+            "file": "c/pae_num.c",
+            "line": 53
+          },
+          {
+            "file": "c/pae_num.h",
+            "line": 40
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae-engine::c::pae_num::pae_dgemv",
+        "locations": [
+          {
+            "file": "c/pae_num.c",
+            "line": 71
+          },
+          {
+            "file": "c/pae_num.h",
+            "line": 50
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae-engine::c::pae_num::pae_covariance",
+        "locations": [
+          {
+            "file": "c/pae_num.c",
+            "line": 93
+          },
+          {
+            "file": "c/pae_num.h",
+            "line": 67
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae-engine::c::pae_num::pae_correlation",
+        "locations": [
+          {
+            "file": "c/pae_num.c",
+            "line": 120
+          },
+          {
+            "file": "c/pae_num.h",
+            "line": 80
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae-engine::c::pae_num::pae_cholesky",
+        "locations": [
+          {
+            "file": "c/pae_num.c",
+            "line": 166
+          },
+          {
+            "file": "c/pae_num.h",
+            "line": 93
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae-engine::c::pae_num::pae_eigen_sym",
+        "locations": [
+          {
+            "file": "c/pae_num.c",
+            "line": 179
+          },
+          {
+            "file": "c/pae_num.h",
+            "line": 101
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae::scripts::build-bundle::OS",
+        "locations": [
+          {
+            "file": "scripts/build-bundle.sh",
+            "line": 36
+          },
+          {
+            "file": "scripts/build-bundle.sh",
+            "line": 39
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae::scripts::build-bundle::EXE",
+        "locations": [
+          {
+            "file": "scripts/build-bundle.sh",
+            "line": 41
+          },
+          {
+            "file": "scripts/build-bundle.sh",
+            "line": 42
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae::scripts::build-bundle::PYTHONPATH",
+        "locations": [
+          {
+            "file": "scripts/build-bundle.sh",
+            "line": 65
+          },
+          {
+            "file": "scripts/build-bundle.sh",
+            "line": 96
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae::scripts::install::PREFIX",
+        "locations": [
+          {
+            "file": "scripts/install.sh",
+            "line": 25
+          },
+          {
+            "file": "scripts/install.sh",
+            "line": 32
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae::scripts::install::BIN_DIR",
+        "locations": [
+          {
+            "file": "scripts/install.sh",
+            "line": 26
+          },
+          {
+            "file": "scripts/install.sh",
+            "line": 33
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae::scripts::install::WANT_SYSTEMD",
+        "locations": [
+          {
+            "file": "scripts/install.sh",
+            "line": 27
+          },
+          {
+            "file": "scripts/install.sh",
+            "line": 34
+          }
+        ]
+      }
+    },
+    {
+      "MultiDefinition": {
+        "symbol": "pae::scripts::install::WANT_LAUNCHD",
+        "locations": [
+          {
+            "file": "scripts/install.sh",
+            "line": 28
+          },
+          {
+            "file": "scripts/install.sh",
+            "line": 35
+          }
+        ]
+      }
+    },
     {
       "MultiDefinition": {
         "symbol": "pae-ui::src::components::pae-factors::PaeFactors::drawCharts::setSeries",
@@ -192894,6 +196842,48 @@
         "from": "pae-engine::build::main",
         "target": "std::path::Path::new(&target).exists",
         "line": 29
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae-engine::c::pae_bonds::df_leg",
+        "target": "pow",
+        "line": 19
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae-engine::c::pae_bonds::pae_bond_ytm",
+        "target": "fabs",
+        "line": 64
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae-engine::c::pae_bonds::pae_bond_ytm",
+        "target": "isfinite",
+        "line": 52
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae-engine::c::pae_num::pae_correlation",
+        "target": "sqrt",
+        "line": 148
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae-engine::c::pae_num::pae_covariance",
+        "target": "free",
+        "line": 116
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae-engine::c::pae_num::pae_covariance",
+        "target": "malloc",
+        "line": 97
       }
     },
     {
@@ -203797,6 +207787,195 @@
     },
     {
       "UnresolvedCall": {
+        "from": "pae::docs::codetopo-profile::refresh",
+        "target": "cd",
+        "line": 8
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::docs::codetopo-profile::refresh",
+        "target": "codetopo",
+        "line": 14
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::docs::codetopo-profile::refresh",
+        "target": "dirname",
+        "line": 8
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::docs::codetopo-profile::refresh",
+        "target": "echo",
+        "line": 18
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::docs::codetopo-profile::refresh",
+        "target": "mkdir",
+        "line": 13
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::docs::codetopo-profile::refresh",
+        "target": "mktemp",
+        "line": 9
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::docs::codetopo-profile::refresh",
+        "target": "pwd",
+        "line": 8
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::docs::codetopo-profile::refresh",
+        "target": "python3",
+        "line": 11
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::docs::codetopo-profile::refresh",
+        "target": "tar",
+        "line": 13
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::docs::codetopo-profile::refresh",
+        "target": "true",
+        "line": 16
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::scripts::build-bundle",
+        "target": "\"$PYTHON\"",
+        "line": 65
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::scripts::build-bundle",
+        "target": "cargo",
+        "line": 83
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::scripts::build-bundle",
+        "target": "chmod",
+        "line": 124
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::scripts::build-bundle",
+        "target": "command",
+        "line": 57
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::scripts::build-bundle",
+        "target": "cp",
+        "line": 84
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::scripts::build-bundle",
+        "target": "du",
+        "line": 139
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::scripts::build-bundle",
+        "target": "exit",
+        "line": 59
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::scripts::build-bundle",
+        "target": "head",
+        "line": 35
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::scripts::build-bundle",
+        "target": "npm",
+        "line": 88
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::scripts::build-bundle",
+        "target": "rm",
+        "line": 78
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::scripts::build-bundle",
+        "target": "sed",
+        "line": 35
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::scripts::build-bundle",
+        "target": "tr",
+        "line": 36
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::scripts::build-bundle",
+        "target": "uname",
+        "line": 36
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::scripts::check-guardrail",
+        "target": "grep",
+        "line": 13
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::scripts::install",
+        "target": "cat",
+        "line": 54
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::scripts::install",
+        "target": "ln",
+        "line": 67
+      }
+    },
+    {
+      "UnresolvedCall": {
+        "from": "pae::scripts::install",
+        "target": "shift",
+        "line": 32
+      }
+    },
+    {
+      "UnresolvedCall": {
         "from": "pae::scripts::seed_demo",
         "target": "base64.b64encode(b\"\\x00\" * 12).decode",
         "line": 53
@@ -204234,6 +208413,22 @@
           "pae-engine::risk::metrics",
           "pae-engine::risk::montecarlo",
           "pae-engine::risk::stress"
+        ]
+      }
+    },
+    {
+      "Cycle": {
+        "edge_kind": "imports",
+        "cycle": [
+          "pae-engine::c::pae_bonds"
+        ]
+      }
+    },
+    {
+      "Cycle": {
+        "edge_kind": "imports",
+        "cycle": [
+          "pae-engine::c::pae_num"
         ]
       }
     },

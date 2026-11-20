@@ -6,21 +6,17 @@ surface — with the graph snapshot beside it (`snapshot.json`,
 `stats.json`) as the measured evidence.
 
 - **Repo:** nrupala/pae (public)
-- **Commit profiled:** `d73cb8109322b19be12e198b9124c12f4e4b28c8` (main)
-- **Engine:** codetopo 0.9.1 · index run 2026-11-18
-- **Graph:** 124 files walked · 4,715 nodes · 15,590 edges · audit chain valid
-- **Nodes by kind:** function 842 · method 341 · class 182 · interface 40 · variable 374 · module 124 · file 124 · doc 21 · external 2,663 · package 4
-- **Edges by kind:** calls 6,504 · reads 5,341 · contains 2,048 · defines 1,028 · imports 422 · writes 242 · implements 1 · inherits 4
+- **Commit profiled:** `92f8a09ffd4d00a4d4133616c2ec82813ec90dac` (main)
+- **Engine:** codetopo 0.9.1 + full-language program (engine built from codetopo main `d71509d1` — all sixteen program extractors merged) · index run 2026-11-19
+- **Graph:** 133 files walked · 0 failed · 4,813 nodes · 15,888 edges · audit chain valid (3 entries, head `5b03f1a1…952e`)
+- **Nodes by kind:** external 2,698 · function 861 · variable 401 · method 341 · class 182 · file 133 · module 131 · interface 40 · doc 22 · package 4
+- **Edges by kind:** calls 6,584 · reads 5,426 · contains 2,111 · defines 1,075 · imports 428 · writes 259 · inherits 4 · implements 1
 
 ## Coverage honesty
 
-Extracted at symbol level: Python (54 `.py`), Rust (25 `.rs`) and
-TypeScript (18 `.ts`) — the engine's three implementation languages —
-plus Markdown as Doc nodes. Not parsed: C sources (~19 KB by GitHub's
-count), CSS/SVG assets, TOML/shell. Symbol coverage is complete for
-the three extracted languages; the small C residual is named here as
-the gap (a C extractor is a Stage-3 program item).
+**Re-profiled 2026-11-19** with the full-language engine (Codetopo extractor program, 2026-11-18 ruling): every language this repo is written in is now extracted at symbol level. First profile: 2026-11-18 (Codetopo 0.9.1).
 
+Extracted at symbol level: Python (54 `.py`), Rust (25 `.rs`) and TypeScript (18 `.ts`) as before, and now the C residual named in the first profile — the C sources and headers are in the graph (C extractor, program PR #155). The engine now covers every language of the full-language program. Not parsed: CSS/SVG assets and TOML configuration (data, not code). Shell scripts, if any, are extracted by the Shell extractor. Symbol coverage of the codebase is complete.
 ## Topology
 
 PAE — the Personal Analytics Engine (OpenSSF project description):
